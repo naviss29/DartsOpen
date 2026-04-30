@@ -14,6 +14,7 @@ const TournamentSchema = z.object({
   entry_fee: z.coerce.number().int().min(0, "Le montant ne peut pas être négatif."),
   nb_pools: z.coerce.number().int().min(1, "Minimum 1 poule.").max(64, "Maximum 64 poules."),
   nb_boards: z.coerce.number().int().min(1, "Minimum 1 cible.").max(32, "Maximum 32 cibles."),
+  advancement_per_pool: z.coerce.number().int().min(1, "Minimum 1 qualifié par poule.").max(8, "Maximum 8 qualifiés par poule."),
 });
 
 const RoundSchema = z.object({

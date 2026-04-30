@@ -44,6 +44,35 @@ export function assignBoards(
 }
 
 /**
+ * Génère les paires du bracket à partir d'une liste de joueurs ordonnés (meilleur en premier).
+ * Padde jusqu'à la prochaine puissance de 2 avec des byes (null).
+ * Appariement : tête de série 1 vs dernière place, 2 vs avant-dernière, etc.
+ * Les têtes de série les plus hautes reçoivent les byes en cas de nombre impair.
+ */
+export function seedBracket(
+  playerIds: string[]
+): Array<{ player1_id: string | null; player2_id: string | null; bracket_position: number }> {
+  const n = playerIds.length;
+  if (n < 2) return [];
+
+  let size = 1;
+  while (size < n) size *= 2;
+
+  const seeded: (string | null)[] = [...playerIds, ...Array(size - n).fill(null)];
+  const pairs: Array<{ player1_id: string | null; player2_id: string | null; bracket_position: number }> = [];
+
+  for (let i = 0; i < size / 2; i++) {
+    pairs.push({
+      player1_id: seeded[i],
+      player2_id: seeded[size - 1 - i],
+      bracket_position: i,
+    });
+  }
+
+  return pairs;
+}
+
+/**
  * Détermine le gagnant d'un match à partir des sets gagnés.
  * En cas d'égalité retourne null (à gérer par l'organisateur).
  */

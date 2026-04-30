@@ -62,6 +62,13 @@ export function TournamentForm() {
           </Field>
         </div>
 
+        <Field label="Qualifiés par poule (phases finales)" error={state?.errors?.advancement_per_pool?.[0]}>
+          <input name="advancement_per_pool" type="number" min="1" max="8" defaultValue="1" required className={inputCn} />
+          <p className="mt-1 text-xs text-gray-400">
+            Ex : 8 poules × 2 qualifiés = 16 finalistes
+          </p>
+        </Field>
+
         <p className="text-xs text-gray-500">
           Les manches (type de jeu, entrée, sortie) seront configurées après la création du tournoi.
         </p>

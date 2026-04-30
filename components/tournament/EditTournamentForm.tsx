@@ -13,6 +13,7 @@ interface Props {
     entry_fee: number;
     nb_pools: number;
     nb_boards: number;
+    advancement_per_pool: number;
   };
 }
 
@@ -119,6 +120,20 @@ export function EditTournamentForm({ tournament }: Props) {
             className={inputCn}
           />
           {state?.errors?.nb_boards && <p className="mt-1 text-xs text-red-600">{state.errors.nb_boards[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Qualifiés par poule</label>
+          <input
+            name="advancement_per_pool"
+            type="number"
+            min="1"
+            max="8"
+            required
+            defaultValue={tournament.advancement_per_pool}
+            className={inputCn}
+          />
+          {state?.errors?.advancement_per_pool && <p className="mt-1 text-xs text-red-600">{state.errors.advancement_per_pool[0]}</p>}
         </div>
       </div>
 

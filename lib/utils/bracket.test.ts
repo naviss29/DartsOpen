@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateRoundRobin, assignBoards, computeMatchWinner } from "./bracket";
+import { generateRoundRobin, assignBoards, computeMatchWinner, seedBracket } from "./bracket";
 
 describe("generateRoundRobin", () => {
   it("génère 6 matchs pour 4 joueurs (4×3/2 = 6)", () => {
@@ -58,6 +58,53 @@ describe("assignBoards", () => {
     expect(result[0].board_number).toBe(1);
     expect(result[1].board_number).toBe(2);
     expect(result[2].board_number).toBe(1);
+  });
+});
+
+describe("seedBracket", () => {
+  it("génère 2 paires pour 4 joueurs sans bye", () => {
+    const pairs = seedBracket(["p1", "p2", "p3", "p4"]);
+    expect(pairs).toHaveLength(2);
+    expect(pairs.every(p => p.player2_id !== null)).toBe(true);
+  });
+
+  it("génère 4 paires pour 8 joueurs sans bye", () => {
+    const pairs = seedBracket(["p1","p2","p3","p4","p5","p6","p7","p8"]);
+    expect(pairs).toHaveLength(4);
+    expect(pairs.every(p => p.player2_id !== null)).toBe(true);
+  });
+
+  it("padde avec des byes pour 6 joueurs → 4 paires, 2 byes", () => {
+    const pairs = seedBracket(["p1","p2","p3","p4","p5","p6"]);
+    expect(pairs).toHaveLength(4);
+    const byePairs = pairs.filter(p => p.player2_id === null);
+    expect(byePairs).toHaveLength(2);
+  });
+
+  it("les têtes de série les plus hautes reçoivent les byes", () => {
+    const pairs = seedBracket(["p1","p2","p3","p4","p5","p6"]);
+    const byePairs = pairs.filter(p => p.player2_id === null);
+    const byePlayers = byePairs.map(p => p.player1_id);
+    expect(byePlayers).toContain("p1");
+    expect(byePlayers).toContain("p2");
+  });
+
+  it("apparie tête de série 1 vs dernière place", () => {
+    const pairs = seedBracket(["p1","p2","p3","p4"]);
+    const first = pairs.find(p => p.bracket_position === 0);
+    expect(first?.player1_id).toBe("p1");
+    expect(first?.player2_id).toBe("p4");
+  });
+
+  it("retourne vide pour moins de 2 joueurs", () => {
+    expect(seedBracket([])).toHaveLength(0);
+    expect(seedBracket(["p1"])).toHaveLength(0);
+  });
+
+  it("les positions bracket sont continues à partir de 0", () => {
+    const pairs = seedBracket(["p1","p2","p3","p4"]);
+    const positions = pairs.map(p => p.bracket_position).sort((a, b) => a - b);
+    expect(positions).toEqual([0, 1]);
   });
 });
 
