@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.2
+> Version : 0.3
 > Auteur : Alan
 > Date : Avril 2026
-> Statut : **Phase 1 — Auth + Gestion tournoi**
+> Statut : **Phase 2 — Scores temps réel**
 
 ---
 
@@ -13,6 +13,7 @@
 |---|---|---|
 | 0.1 | Avril 2026 | Document initial — socle technique |
 | 0.2 | Avril 2026 | Phase 1 — Auth Supabase, CRUD tournois + manches, middleware, SQL schema |
+| 0.3 | Avril 2026 | Phase 2 — Joueurs, poules round-robin, matchs, scores temps réel, Supabase Realtime, NextMatchAlert |
 
 ---
 
@@ -277,6 +278,12 @@ Mesures :
 | 5 | Avril 2026 | Auth Supabase SSR | Middleware route guard, login/register avec useActionState, callback OAuth |
 | 6 | Avril 2026 | CRUD Tournoi | Création, détail, gestion statut (DRAFT→OPEN→IN_PROGRESS→FINISHED), manches |
 | 7 | Avril 2026 | Tests Phase 1 | 26 tests passants (auth schemas + tournament schemas + pools) |
+| 8 | Avril 2026 | SQL migration 002 | registrations, pools, pool_players, matches, match_sets avec RLS |
+| 9 | Avril 2026 | Algorithme round-robin | Rotation de Berger, assignation des cibles, calcul du gagnant |
+| 10 | Avril 2026 | Supabase Realtime | MatchBoard + ScoreBoard abonnés aux tables matches + match_sets |
+| 11 | Avril 2026 | NextMatchAlert | Détection dernière manche + overlay plein écran animé |
+| 12 | Avril 2026 | ScoreForm mobile | Saisie par side (joueur 1/2), proposition + confirmation + contestation |
+| 13 | Avril 2026 | Tests Phase 2 | 44 tests passants (+18 : bracket, score flow, détection dernière manche) |
 
 ---
 

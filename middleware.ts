@@ -32,6 +32,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/auth");
   const isDashboardRoute = pathname.startsWith("/dashboard") || pathname.startsWith("/tournaments");
+  // /t/* = pages publiques (live board + saisie score) — accessibles sans auth
 
   if (!user && isDashboardRoute) {
     const url = request.nextUrl.clone();

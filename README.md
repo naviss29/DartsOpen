@@ -2,13 +2,13 @@
 
 > Plateforme SaaS de gestion de tournois de fléchettes — inscriptions en ligne, scores en temps réel, tableaux de bord sur smartphone.
 
-![Status](https://img.shields.io/badge/status-Phase%201%20--%20Auth%20%2B%20Tournois-blue)
+![Status](https://img.shields.io/badge/status-Phase%202%20--%20Scores%20temps%20réel-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20%2B%20Realtime-3ECF8E)
 ![Stripe](https://img.shields.io/badge/Stripe-Connect-635BFF)
-![Tests](https://img.shields.io/badge/tests-26%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-44%20passing-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
 
 ---
@@ -168,6 +168,7 @@ npm run test:coverage # Couverture de code
 
 - [x] Phase 0 — Socle technique (Next.js, Supabase, Docker, git, CI)
 - [x] Phase 1 — Auth + Gestion tournoi (Supabase Auth, CRUD tournois, manches, middleware)
+- [x] Phase 2 — Scores temps réel (joueurs, poules round-robin, matchs, Supabase Realtime, ScoreForm mobile)
 - [ ] Phase 1 — Auth + Gestion tournoi (CRUD, configuration, poules, matchs)
 - [ ] Phase 2 — Scores temps réel (QR code, saisie mobile, Supabase Realtime)
 - [ ] Phase 3 — Tableaux de bord (matchs en cours/à venir, scores, annonce prochain match)
