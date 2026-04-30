@@ -18,6 +18,8 @@ const LoginSchema = z.object({
 export type AuthState = {
   error?: string;
   errors?: Record<string, string[]>;
+  success?: boolean;
+  email?: string;
 } | undefined;
 
 export async function register(prevState: AuthState, formData: FormData): Promise<AuthState> {
@@ -33,7 +35,7 @@ export async function register(prevState: AuthState, formData: FormData): Promis
 
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -43,6 +45,11 @@ export async function register(prevState: AuthState, formData: FormData): Promis
 
   if (error) {
     return { error: error.message };
+  }
+
+  // Session nulle = confirmation email requise par Supabase
+  if (!data.session) {
+    return { success: true, email: parsed.data.email };
   }
 
   redirect("/dashboard");

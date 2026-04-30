@@ -7,6 +7,31 @@ import Link from "next/link";
 export function RegisterForm() {
   const [state, action, isPending] = useActionState(register, undefined);
 
+  if (state?.success) {
+    return (
+      <div className="text-center space-y-4">
+        <div className="text-5xl">📬</div>
+        <h3 className="text-lg font-semibold text-gray-900">Vérifiez votre boîte mail</h3>
+        <p className="text-sm text-gray-600">
+          Un lien de confirmation a été envoyé à{" "}
+          <span className="font-medium text-gray-900">{state.email}</span>.
+        </p>
+        <p className="text-sm text-gray-500">
+          Cliquez sur ce lien pour activer votre compte, puis revenez vous connecter.
+        </p>
+        <div className="rounded-lg bg-yellow-50 border border-yellow-200 p-3 text-xs text-yellow-800">
+          Vous ne trouvez pas l&apos;email ? Vérifiez vos spams.
+        </div>
+        <Link
+          href="/login"
+          className="inline-block mt-2 text-sm font-medium text-green-600 hover:text-green-700"
+        >
+          Retour à la connexion →
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <form action={action} className="space-y-5">
       {state?.error && (

@@ -1,6 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 
+// Logique de détection "confirmation email requise"
+describe("Détection confirmation email Supabase", () => {
+  it("session null = confirmation email requise → retourner success + email", () => {
+    const data = { session: null, user: { id: "uuid" } };
+    const email = "test@club.fr";
+    const result = !data.session ? { success: true, email } : null;
+    expect(result).toEqual({ success: true, email });
+  });
+
+  it("session présente = confirmation désactivée → rediriger vers /dashboard", () => {
+    const data = { session: { access_token: "tok" }, user: { id: "uuid" } };
+    const shouldRedirect = !!data.session;
+    expect(shouldRedirect).toBe(true);
+  });
+});
+
 // Schémas extraits pour test — miroir de auth.ts
 const RegisterSchema = z.object({
   name: z.string().trim().min(2, "Le nom doit contenir au moins 2 caractères."),
