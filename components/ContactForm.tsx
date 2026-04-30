@@ -14,7 +14,7 @@ const inputCn =
   "w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 
 // TODO: remplacer par l'email réel de contact DartsOpen / Stêr Eo
-const CONTACT_EMAIL = "contact@dartsopen.fr";
+const CONTACT_EMAIL = "prod.ster.eo@gmail.com";
 
 export function ContactForm() {
   const [sent, setSent] = useState(false);
