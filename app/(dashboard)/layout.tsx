@@ -66,8 +66,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </button>
           </form>
           <div className="pt-3 text-center">
-            <p className="text-xs text-gray-400">Développé par</p>
-            <p className="text-xs font-semibold text-gray-500">Stêr Eo Production</p>
+            <p className="text-xs text-gray-400 mb-1">Développé par</p>
+            <img
+              src="/logoSEP.svg"
+              alt="Stêr Eo Production"
+              className="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity"
+            />
           </div>
         </div>
       </aside>
