@@ -51,6 +51,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
           >
             <span>✉️</span> Contact
           </Link>
+          <Link
+            href="/dons"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <span>💛</span> Soutenir le projet
+          </Link>
           <form action={logout}>
             <button
               type="submit"

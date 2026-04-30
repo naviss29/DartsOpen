@@ -289,15 +289,16 @@ Mesures :
 | 16 | Avril 2026 | Correctifs UX | Couleur texte/placeholder inputs, blocage démarrage sans joueurs, édition tournoi en brouillon, masquage tournois passés non clôturés |
 | 17 | Avril 2026 | Phase 4 — Inscriptions + Stripe Connect | Page publique `/t/[id]/register`, Stripe Checkout, webhook `checkout.session.completed` → PAID, onboarding Stripe Connect association, client admin Supabase pour webhooks |
 | 18 | Avril 2026 | Phase 5 — Bracket phases finales | Migration 003 (advancement_per_pool, bracket_position), seedBracket (puissance de 2, byes pour têtes de série), generateBracket, advanceToNextRound, BracketView, page /bracket, navigation mise à jour, 53 tests |
+| 19 | Avril 2026 | Recette & correctifs | Fix NaN création tournoi (advancement_per_pool absent du formData), popup Stripe (frais, reversement, lien settings), page /contact (formulaire mailto par sujet), page /dons (PayPal SEProduct), logo Stêr Eo Production en sidebar |
 
 ---
 
 ## 9. Roadmap
 
-- [ ] Phase 0 — Socle technique (Next.js, Supabase, Docker, git, CI)
-- [ ] Phase 1 — Auth + Gestion tournoi (CRUD, configuration, poules, matchs)
-- [ ] Phase 2 — Scores temps réel (QR code, saisie mobile, Supabase Realtime)
-- [ ] Phase 3 — Tableaux de bord (matchs en cours/à venir, scores, annonce prochain match)
-- [ ] Phase 4 — Inscriptions + paiement Stripe Connect
-- [ ] Phase 5 — Phases finales (bracket)
+- [x] Phase 0 — Socle technique (Next.js, Supabase, Docker, git, CI)
+- [x] Phase 1 — Auth + Gestion tournoi (CRUD, configuration, poules, matchs)
+- [x] Phase 2 — Scores temps réel (QR code, saisie mobile, Supabase Realtime)
+- [x] Phase 3 — Navigation dashboard + QR codes cibles et spectateurs
+- [x] Phase 4 — Inscriptions en ligne par équipe + paiement Stripe Connect
+- [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement)
 - [ ] Phase 6 — Pipeline de recette (staging Coolify, CI GitHub Actions)

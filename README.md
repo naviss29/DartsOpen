@@ -25,16 +25,17 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 
 | Fonctionnalité | Statut |
 |---|---|
-| Création de tournoi (poules, manches, type de jeu) | 🔲 |
-| Inscription joueur en ligne + paiement Stripe | 🔲 |
-| QR Code par match pour saisie mobile du score | 🔲 |
-| Double validation du score (les deux joueurs confirment) | 🔲 |
-| Tableau matchs en cours / à venir (temps réel) | 🔲 |
-| Annonce visuelle du prochain match sur la cible | 🔲 |
-| Tableau récapitulatif des scores par poule | 🔲 |
-| Phases finales (bracket) | 🔲 |
-| Accès spectateur (QR code salle) | 🔲 |
-| Reversement automatique à l'association organisatrice | 🔲 |
+| Création de tournoi (poules, manches, type de jeu) | ✅ |
+| Inscription équipe en ligne + paiement Stripe | ✅ |
+| QR Code par cible pour saisie mobile du score | ✅ |
+| Double validation du score (les deux joueurs confirment) | ✅ |
+| Tableau matchs en cours / à venir (temps réel) | ✅ |
+| Annonce visuelle du prochain match sur la cible | ✅ |
+| Tableau récapitulatif des scores par poule | ✅ |
+| Phases finales (bracket single-élimination, byes) | ✅ |
+| Accès spectateur (QR code salle) | ✅ |
+| Reversement automatique à l'association organisatrice | ✅ |
+| Page contact + page dons | ✅ |
 | Conformité RGPD | 🔲 |
 
 ---
