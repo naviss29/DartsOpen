@@ -46,6 +46,7 @@ export async function createTournament(prevState: TournamentState, formData: For
     entry_fee: formData.get("entry_fee"),
     nb_pools: formData.get("nb_pools"),
     nb_boards: formData.get("nb_boards"),
+    advancement_per_pool: formData.get("advancement_per_pool"),
   });
 
   if (!parsed.success) {
@@ -107,6 +108,7 @@ export async function updateTournament(prevState: TournamentState, formData: For
     entry_fee: formData.get("entry_fee"),
     nb_pools: formData.get("nb_pools"),
     nb_boards: formData.get("nb_boards"),
+    advancement_per_pool: formData.get("advancement_per_pool"),
   });
 
   if (!parsed.success) {
