@@ -57,10 +57,34 @@ export default async function PoolsPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 text-sm text-gray-500">
-        <Link href={`/tournaments/${id}`} className="hover:text-gray-900">
+      {/* Breadcrumb + onglets */}
+      <div className="space-y-3">
+        <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
         </Link>
+        <nav className="flex items-center gap-2">
+          <Link
+            href={`/tournaments/${id}/players`}
+            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
+          >
+            👥 Joueurs
+          </Link>
+          <Link
+            href={`/tournaments/${id}/pools`}
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white"
+          >
+            🏆 Poules & Matchs
+          </Link>
+          {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
+            <Link
+              href={`/t/${id}/live`}
+              target="_blank"
+              className="rounded-lg border border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+            >
+              🎯 Vue Live ↗
+            </Link>
+          )}
+        </nav>
       </div>
 
       <div className="flex items-center justify-between">
@@ -80,16 +104,6 @@ export default async function PoolsPage({ params }: Props) {
               {hasPools ? "Regénérer les poules" : "Générer les poules"}
             </button>
           </form>
-        )}
-
-        {tournament.status === "IN_PROGRESS" && (
-          <Link
-            href={`/t/${id}/live`}
-            target="_blank"
-            className="rounded-lg border border-green-600 text-green-700 px-4 py-2 text-sm font-semibold hover:bg-green-50 transition-colors"
-          >
-            🎯 Vue Live →
-          </Link>
         )}
       </div>
 

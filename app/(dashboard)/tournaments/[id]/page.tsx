@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { RoundForm } from "@/components/tournament/RoundForm";
 import { DeleteRoundButton } from "@/components/tournament/DeleteRoundButton";
 import { TournamentStatusButton } from "@/components/tournament/TournamentStatusButton";
+import Link from "next/link";
 import type { Metadata } from "next";
 
 interface Props {
@@ -29,6 +30,17 @@ export default async function TournamentDetailPage({ params }: Props) {
     .single();
 
   if (!tournament) notFound();
+
+  const { count: playerCount } = await supabase
+    .from("registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", id)
+    .eq("status", "PAID");
+
+  const { count: poolCount } = await supabase
+    .from("pools")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", id);
 
   const rounds = (tournament.rounds ?? []).sort(
     (a: { order: number }, b: { order: number }) => a.order - b.order
@@ -88,6 +100,42 @@ export default async function TournamentDetailPage({ params }: Props) {
           </div>
         ))}
       </div>
+
+      {/* Navigation */}
+      <nav className="flex items-center gap-3 flex-wrap">
+        <Link
+          href={`/tournaments/${id}/players`}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
+        >
+          👥 Joueurs
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+            {playerCount ?? 0}/{tournament.max_players}
+          </span>
+        </Link>
+
+        <Link
+          href={`/tournaments/${id}/pools`}
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
+        >
+          🏆 Poules & Matchs
+          {(poolCount ?? 0) > 0 && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+              {poolCount}
+            </span>
+          )}
+        </Link>
+
+        {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
+          <Link
+            href={`/t/${id}/live`}
+            target="_blank"
+            className="flex items-center gap-2 rounded-lg border border-green-500 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+          >
+            🎯 Vue Live
+            <span className="text-xs opacity-70">↗</span>
+          </Link>
+        )}
+      </nav>
 
       {/* Manches */}
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">

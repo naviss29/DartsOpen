@@ -284,6 +284,8 @@ Mesures :
 | 11 | Avril 2026 | NextMatchAlert | Détection dernière manche + overlay plein écran animé |
 | 12 | Avril 2026 | ScoreForm mobile | Saisie par side (joueur 1/2), proposition + confirmation + contestation |
 | 13 | Avril 2026 | Tests Phase 2 | 44 tests passants (+18 : bracket, score flow, détection dernière manche) |
+| 14 | Avril 2026 | Navigation Phase 3 | Onglets Joueurs / Poules & Matchs / Vue Live sur la page détail tournoi et les sous-pages |
+| 15 | Avril 2026 | QR codes vue live | Génération serveur (qrcode npm) : un QR par cible → `/t/[id]/score?board=N`, plus QR spectateurs → `/t/[id]/live` |
 
 ---
 

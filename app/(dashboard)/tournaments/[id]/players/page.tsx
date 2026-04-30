@@ -35,10 +35,25 @@ export default async function PlayersPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 text-sm text-gray-500">
-        <Link href={`/tournaments/${id}`} className="hover:text-gray-900">
+      {/* Breadcrumb + onglets */}
+      <div className="space-y-3">
+        <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
         </Link>
+        <nav className="flex items-center gap-2">
+          <Link
+            href={`/tournaments/${id}/players`}
+            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white"
+          >
+            👥 Joueurs
+          </Link>
+          <Link
+            href={`/tournaments/${id}/pools`}
+            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
+          >
+            🏆 Poules & Matchs
+          </Link>
+        </nav>
       </div>
 
       <div className="flex items-center justify-between">
