@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.1
+> Version : 0.2
 > Auteur : Alan
 > Date : Avril 2026
-> Statut : **Phase 0 — Socle technique**
+> Statut : **Phase 1 — Auth + Gestion tournoi**
 
 ---
 
@@ -12,6 +12,7 @@
 | Version | Date | Modifications |
 |---|---|---|
 | 0.1 | Avril 2026 | Document initial — socle technique |
+| 0.2 | Avril 2026 | Phase 1 — Auth Supabase, CRUD tournois + manches, middleware, SQL schema |
 
 ---
 
@@ -259,7 +260,7 @@ Mesures :
 
 | # | Contexte | Erreur | Solution |
 |---|---|---|---|
-| — | — | — | — |
+| 1 | Zod 4 + validation email | `.string().email().trim()` valide l'email AVEC les espaces (email invalide), puis coupe — résultat : espaces autour de l'email font échouer la validation | Inverser l'ordre : **`.string().trim().email()`** — trim d'abord, puis validate. Idem pour `.trim().min(N)` |
 
 ---
 
@@ -272,6 +273,10 @@ Mesures :
 | 1 | Avril 2026 | Initialisation projet | Next.js 16.2.4, React 19, TypeScript, Tailwind CSS 4 |
 | 2 | Avril 2026 | Structure répertoires | app/, components/, lib/, types/, docs/ |
 | 3 | Avril 2026 | Git init | Branches main + develop |
+| 4 | Avril 2026 | SQL schema Supabase | associations, tournaments, rounds avec RLS policies + trigger auto-création profil |
+| 5 | Avril 2026 | Auth Supabase SSR | Middleware route guard, login/register avec useActionState, callback OAuth |
+| 6 | Avril 2026 | CRUD Tournoi | Création, détail, gestion statut (DRAFT→OPEN→IN_PROGRESS→FINISHED), manches |
+| 7 | Avril 2026 | Tests Phase 1 | 26 tests passants (auth schemas + tournament schemas + pools) |
 
 ---
 
