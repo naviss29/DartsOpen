@@ -1,0 +1,139 @@
+"use client";
+
+import { useActionState } from "react";
+import { updateTournament } from "@/lib/actions/tournament";
+
+interface Props {
+  tournament: {
+    id: string;
+    name: string;
+    date: string;
+    location: string;
+    max_players: number;
+    entry_fee: number;
+    nb_pools: number;
+    nb_boards: number;
+  };
+}
+
+export function EditTournamentForm({ tournament }: Props) {
+  const [state, action, isPending] = useActionState(updateTournament, undefined);
+
+  return (
+    <form action={action} className="space-y-4">
+      <input type="hidden" name="tournament_id" value={tournament.id} />
+
+      {state?.error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nom du tournoi</label>
+          <input
+            name="name"
+            type="text"
+            required
+            defaultValue={tournament.name}
+            className={inputCn}
+          />
+          {state?.errors?.name && <p className="mt-1 text-xs text-red-600">{state.errors.name[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+          <input
+            name="date"
+            type="date"
+            required
+            defaultValue={tournament.date.split("T")[0]}
+            className={inputCn}
+          />
+          {state?.errors?.date && <p className="mt-1 text-xs text-red-600">{state.errors.date[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Lieu</label>
+          <input
+            name="location"
+            type="text"
+            required
+            defaultValue={tournament.location}
+            className={inputCn}
+          />
+          {state?.errors?.location && <p className="mt-1 text-xs text-red-600">{state.errors.location[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Joueurs max</label>
+          <input
+            name="max_players"
+            type="number"
+            min="2"
+            max="512"
+            required
+            defaultValue={tournament.max_players}
+            className={inputCn}
+          />
+          {state?.errors?.max_players && <p className="mt-1 text-xs text-red-600">{state.errors.max_players[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€)</label>
+          <input
+            name="entry_fee"
+            type="number"
+            min="0"
+            required
+            defaultValue={tournament.entry_fee}
+            className={inputCn}
+          />
+          {state?.errors?.entry_fee && <p className="mt-1 text-xs text-red-600">{state.errors.entry_fee[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de poules</label>
+          <input
+            name="nb_pools"
+            type="number"
+            min="1"
+            max="64"
+            required
+            defaultValue={tournament.nb_pools}
+            className={inputCn}
+          />
+          {state?.errors?.nb_pools && <p className="mt-1 text-xs text-red-600">{state.errors.nb_pools[0]}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de cibles</label>
+          <input
+            name="nb_boards"
+            type="number"
+            min="1"
+            max="32"
+            required
+            defaultValue={tournament.nb_boards}
+            className={inputCn}
+          />
+          {state?.errors?.nb_boards && <p className="mt-1 text-xs text-red-600">{state.errors.nb_boards[0]}</p>}
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        >
+          {isPending ? "Enregistrement…" : "Enregistrer les modifications"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const inputCn =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";

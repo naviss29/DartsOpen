@@ -8,10 +8,13 @@ export default async function TournamentsPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  const today = new Date().toISOString().split("T")[0];
+
   const { data: tournaments } = await supabase
     .from("tournaments")
     .select("id, name, date, location, status, max_players, nb_pools, nb_boards, entry_fee")
     .eq("association_id", user!.id)
+    .or(`date.gte.${today},status.in.(IN_PROGRESS,FINISHED)`)
     .order("date", { ascending: false });
 
   return (

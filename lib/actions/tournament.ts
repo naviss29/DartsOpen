@@ -67,15 +67,59 @@ export async function createTournament(prevState: TournamentState, formData: For
   redirect(`/tournaments/${data.id}`);
 }
 
-export async function updateTournamentStatus(tournamentId: string, status: TournamentStatus) {
+export async function updateTournamentStatus(
+  tournamentId: string,
+  status: TournamentStatus
+): Promise<{ error?: string } | void> {
   const { supabase } = await getAuthenticatedUser();
+
+  if (status === "IN_PROGRESS") {
+    const { count } = await supabase
+      .from("registrations")
+      .select("id", { count: "exact", head: true })
+      .eq("tournament_id", tournamentId)
+      .eq("status", "PAID");
+
+    if (!count || count < 2) {
+      return { error: "Il faut au moins 2 joueurs inscrits pour démarrer le tournoi." };
+    }
+  }
 
   const { error } = await supabase
     .from("tournaments")
     .update({ status })
     .eq("id", tournamentId);
 
-  if (error) throw new Error("Impossible de mettre à jour le statut.");
+  if (error) return { error: "Impossible de mettre à jour le statut." };
+
+  revalidatePath(`/tournaments/${tournamentId}`);
+}
+
+export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
+  const tournamentId = formData.get("tournament_id") as string;
+
+  const parsed = TournamentSchema.safeParse({
+    name: formData.get("name"),
+    date: formData.get("date"),
+    location: formData.get("location"),
+    max_players: formData.get("max_players"),
+    entry_fee: formData.get("entry_fee"),
+    nb_pools: formData.get("nb_pools"),
+    nb_boards: formData.get("nb_boards"),
+  });
+
+  if (!parsed.success) {
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+  }
+
+  const { supabase } = await getAuthenticatedUser();
+
+  const { error } = await supabase
+    .from("tournaments")
+    .update(parsed.data)
+    .eq("id", tournamentId);
+
+  if (error) return { error: "Erreur lors de la modification du tournoi." };
 
   revalidatePath(`/tournaments/${tournamentId}`);
 }

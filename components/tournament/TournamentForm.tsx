@@ -87,7 +87,7 @@ export function TournamentForm() {
 }
 
 const inputCn =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
