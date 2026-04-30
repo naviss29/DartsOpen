@@ -287,6 +287,7 @@ Mesures :
 | 14 | Avril 2026 | Navigation Phase 3 | Onglets Joueurs / Poules & Matchs / Vue Live sur la page détail tournoi et les sous-pages |
 | 15 | Avril 2026 | QR codes vue live | Génération serveur (qrcode npm) : un QR par cible → `/t/[id]/score?board=N`, plus QR spectateurs → `/t/[id]/live` |
 | 16 | Avril 2026 | Correctifs UX | Couleur texte/placeholder inputs, blocage démarrage sans joueurs, édition tournoi en brouillon, masquage tournois passés non clôturés |
+| 17 | Avril 2026 | Phase 4 — Inscriptions + Stripe Connect | Page publique `/t/[id]/register`, Stripe Checkout, webhook `checkout.session.completed` → PAID, onboarding Stripe Connect association, client admin Supabase pour webhooks |
 
 ---
 

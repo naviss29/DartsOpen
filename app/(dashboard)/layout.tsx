@@ -36,6 +36,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
           >
             <span>🏆</span> Mes tournois
           </Link>
+          <Link
+            href="/settings"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <span>⚙️</span> Paramètres
+          </Link>
         </nav>
 
         <div className="p-4 border-t border-gray-200">

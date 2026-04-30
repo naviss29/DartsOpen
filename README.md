@@ -2,7 +2,7 @@
 
 > Plateforme SaaS de gestion de tournois de fléchettes — inscriptions en ligne, scores en temps réel, tableaux de bord sur smartphone.
 
-![Status](https://img.shields.io/badge/status-Phase%203%20--%20Navigation%20%26%20QR%20Codes-blue)
+![Status](https://img.shields.io/badge/status-Phase%204%20--%20Stripe%20Connect-blue)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
@@ -170,7 +170,7 @@ npm run test:coverage # Couverture de code
 - [x] Phase 1 — Auth + Gestion tournoi (Supabase Auth, CRUD tournois, manches, middleware)
 - [x] Phase 2 — Scores temps réel (joueurs, poules round-robin, matchs, Supabase Realtime, ScoreForm mobile)
 - [x] Phase 3 — Navigation dashboard + QR codes cibles et spectateurs
-- [ ] Phase 4 — Inscriptions + paiement Stripe Connect
+- [x] Phase 4 — Inscriptions en ligne par équipe + paiement Stripe Connect
 - [ ] Phase 5 — Phases finales (bracket)
 - [ ] Phase 6 — Pipeline de recette (staging Coolify, CI GitHub Actions)
 

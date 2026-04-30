@@ -126,6 +126,17 @@ export default async function TournamentDetailPage({ params }: Props) {
           )}
         </Link>
 
+        {tournament.status === "OPEN" && (
+          <Link
+            href={`/t/${id}/register`}
+            target="_blank"
+            className="flex items-center gap-2 rounded-lg border border-blue-500 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+          >
+            📝 Page d&apos;inscription
+            <span className="text-xs opacity-70">↗</span>
+          </Link>
+        )}
+
         {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
           <Link
             href={`/t/${id}/live`}
