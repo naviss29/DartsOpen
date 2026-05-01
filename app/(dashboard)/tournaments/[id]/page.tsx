@@ -134,7 +134,7 @@ export default async function TournamentDetailPage({ params }: Props) {
           🥇 Phases finales
         </Link>
 
-        {tournament.status === "OPEN" && (
+        {tournament.status === "OPEN" && tournament.registration_mode === "ONLINE" && (
           <Link
             href={`/t/${id}/register`}
             target="_blank"
@@ -143,6 +143,11 @@ export default async function TournamentDetailPage({ params }: Props) {
             📝 Page d&apos;inscription
             <span className="text-xs opacity-70">↗</span>
           </Link>
+        )}
+        {tournament.status === "OPEN" && tournament.registration_mode === "ONSITE" && (
+          <p className="text-sm text-gray-500 italic">
+            📍 Inscriptions sur place — ajoutez les équipes via <Link href={`/tournaments/${id}/players`} className="text-green-700 font-medium underline underline-offset-2">Joueurs</Link>
+          </p>
         )}
 
         {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
