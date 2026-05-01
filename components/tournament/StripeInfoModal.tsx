@@ -41,35 +41,8 @@ export function StripeInfoModal({ stripeConnected }: Props) {
             <p className="font-semibold text-green-800">Ce que reçoit votre association</p>
             <p>
               Les droits d'inscription payés par les équipes sont versés <strong>directement sur votre compte Stripe</strong>,
-              déduction faite des frais ci-dessous.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="font-semibold text-gray-800">Frais déduits par inscription :</p>
-            <ul className="space-y-1.5 pl-2">
-              <li className="flex items-start gap-2">
-                <span className="text-gray-400 mt-0.5">—</span>
-                <span>
-                  <strong>Frais Stripe</strong> : environ 1,5 % + 0,25 € par transaction
-                  (variable selon le pays de la carte)
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-gray-400 mt-0.5">—</span>
-                <span>
-                  <strong>Frais plateforme DartsOpen</strong> : <strong>0,10 € par équipe inscrite</strong>,
-                  pour financer l'hébergement et le développement de l'application
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 space-y-1">
-            <p className="font-semibold text-blue-800">Reversement en clôture d'open</p>
-            <p>
-              Le virement vers votre compte bancaire est déclenché <strong>automatiquement à la clôture du tournoi</strong>
-              (statut "Terminé"). Il apparaît sous 2 à 7 jours ouvrés selon votre banque.
+              déduction faite des frais Stripe (~1,5 % + 0,25 € par transaction).
+              Le virement est déclenché <strong>automatiquement à la clôture du tournoi</strong> et apparaît sous 2 à 7 jours ouvrés.
             </p>
           </div>
 
