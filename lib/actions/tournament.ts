@@ -5,16 +5,19 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { TournamentStatus } from "@/types";
+import { stripe } from "@/lib/stripe";
 
 const TournamentSchema = z.object({
   name: z.string().min(3, "Le nom doit contenir au moins 3 caractères.").trim(),
   date: z.string().min(1, "La date est requise."),
   location: z.string().min(2, "Le lieu est requis.").trim(),
   max_players: z.coerce.number().int().min(2, "Minimum 2 joueurs.").max(512, "Maximum 512 joueurs."),
-  entry_fee: z.coerce.number().int().min(0, "Le montant ne peut pas être négatif."),
+  entry_fee: z.coerce.number().min(0, "Le montant ne peut pas être négatif.").transform(v => Math.round(v * 100)),
   nb_pools: z.coerce.number().int().min(1, "Minimum 1 poule.").max(64, "Maximum 64 poules."),
   nb_boards: z.coerce.number().int().min(1, "Minimum 1 cible.").max(32, "Maximum 32 cibles."),
   advancement_per_pool: z.coerce.number().int().min(1, "Minimum 1 qualifié par poule.").max(8, "Maximum 8 qualifiés par poule."),
+  players_per_team: z.coerce.number().int().min(1, "Minimum 1 joueur par équipe.").max(10, "Maximum 10 joueurs par équipe."),
+  registration_mode: z.enum(["ONLINE", "ONSITE"]).default("ONLINE"),
 });
 
 const RoundSchema = z.object({
@@ -47,6 +50,8 @@ export async function createTournament(prevState: TournamentState, formData: For
     nb_pools: formData.get("nb_pools"),
     nb_boards: formData.get("nb_boards"),
     advancement_per_pool: formData.get("advancement_per_pool"),
+    players_per_team: formData.get("players_per_team"),
+    registration_mode: formData.get("registration_mode") ?? "ONLINE",
   });
 
   if (!parsed.success) {
@@ -66,7 +71,7 @@ export async function createTournament(prevState: TournamentState, formData: For
   }
 
   revalidatePath("/tournaments");
-  redirect(`/tournaments/${data.id}`);
+  redirect(`/tournaments/${data.id}/activate`);
 }
 
 export async function updateTournamentStatus(
@@ -94,6 +99,53 @@ export async function updateTournamentStatus(
 
   if (error) return { error: "Impossible de mettre à jour le statut." };
 
+  // À la clôture : prélever les frais plateforme non collectés (inscriptions manuelles / gratuites)
+  if (status === "FINISHED") {
+    const { data: unpaid } = await supabase
+      .from("registrations")
+      .select("platform_fee_cents")
+      .eq("tournament_id", tournamentId)
+      .eq("status", "PAID")
+      .eq("fee_collected", false);
+
+    const totalOwed = (unpaid ?? []).reduce((sum, r) => sum + (r.platform_fee_cents ?? 0), 0);
+
+    if (totalOwed > 0) {
+      const { data: tournament } = await supabase
+        .from("tournaments")
+        .select("association_id")
+        .eq("id", tournamentId)
+        .single();
+
+      const { data: association } = await supabase
+        .from("associations")
+        .select("stripe_account_id")
+        .eq("id", tournament?.association_id)
+        .single();
+
+      if (association?.stripe_account_id) {
+        try {
+          await stripe.paymentIntents.create({
+            amount: totalOwed,
+            currency: "eur",
+            payment_method_types: ["card"],
+            transfer_data: { destination: association.stripe_account_id },
+            description: `Frais plateforme DartsOpen — tournoi ${tournamentId}`,
+            metadata: { tournament_id: tournamentId, type: "platform_fee" },
+          });
+
+          await supabase
+            .from("registrations")
+            .update({ fee_collected: true })
+            .eq("tournament_id", tournamentId)
+            .eq("fee_collected", false);
+        } catch (e) {
+          console.error("[clôture] Erreur prélèvement frais plateforme:", e);
+        }
+      }
+    }
+  }
+
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
@@ -109,6 +161,8 @@ export async function updateTournament(prevState: TournamentState, formData: For
     nb_pools: formData.get("nb_pools"),
     nb_boards: formData.get("nb_boards"),
     advancement_per_pool: formData.get("advancement_per_pool"),
+    players_per_team: formData.get("players_per_team"),
+    registration_mode: formData.get("registration_mode") ?? "ONLINE",
   });
 
   if (!parsed.success) {

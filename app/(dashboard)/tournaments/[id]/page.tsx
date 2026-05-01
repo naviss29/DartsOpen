@@ -88,9 +88,10 @@ export default async function TournamentDetailPage({ params }: Props) {
       </div>
 
       {/* Résumé config */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Joueurs max", value: tournament.max_players },
+          { label: "Joueurs / équipe", value: tournament.players_per_team },
           { label: "Poules", value: tournament.nb_pools },
           { label: "Cibles", value: tournament.nb_boards },
           { label: "Inscription", value: `${(tournament.entry_fee / 100).toFixed(2)} €` },
@@ -110,7 +111,7 @@ export default async function TournamentDetailPage({ params }: Props) {
         >
           👥 Joueurs
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-            {playerCount ?? 0}/{tournament.max_players}
+            {(playerCount ?? 0) * tournament.players_per_team}/{tournament.max_players}
           </span>
         </Link>
 
@@ -158,8 +159,7 @@ export default async function TournamentDetailPage({ params }: Props) {
 
       {/* Édition en brouillon */}
       {tournament.status === "DRAFT" && (
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900">Modifier le tournoi</h2>
+        <section className="bg-white rounded-xl border border-gray-200 p-6">
           <EditTournamentForm tournament={tournament} />
         </section>
       )}

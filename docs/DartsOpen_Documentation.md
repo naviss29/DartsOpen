@@ -262,6 +262,9 @@ Mesures :
 | # | Contexte | Erreur | Solution |
 |---|---|---|---|
 | 1 | Zod 4 + validation email | `.string().email().trim()` valide l'email AVEC les espaces (email invalide), puis coupe — résultat : espaces autour de l'email font échouer la validation | Inverser l'ordre : **`.string().trim().email()`** — trim d'abord, puis validate. Idem pour `.trim().min(N)` |
+| 2 | Next.js 16 — middleware | `middleware.ts` / export `middleware()` génère un warning de dépréciation | Renommer en `proxy.ts` et exporter `proxy()` — Next.js 16 a renommé le concept |
+| 3 | entry_fee en centimes | Le formulaire affichait `defaultValue="10"` (centimes) au lieu de euros, Stripe recevait 10 cts | Zod `.transform(v => Math.round(v * 100))` sur entry_fee, `defaultValue={tournament.entry_fee / 100}` dans EditTournamentForm |
+| 4 | npm run start sans build | `Error: Could not find a production build in the '.next' directory` | Utiliser `npm run dev` pour les tests locaux, `npm run build && npm run start` pour la prod |
 
 ---
 
@@ -290,6 +293,7 @@ Mesures :
 | 17 | Avril 2026 | Phase 4 — Inscriptions + Stripe Connect | Page publique `/t/[id]/register`, Stripe Checkout, webhook `checkout.session.completed` → PAID, onboarding Stripe Connect association, client admin Supabase pour webhooks |
 | 18 | Avril 2026 | Phase 5 — Bracket phases finales | Migration 003 (advancement_per_pool, bracket_position), seedBracket (puissance de 2, byes pour têtes de série), generateBracket, advanceToNextRound, BracketView, page /bracket, navigation mise à jour, 53 tests |
 | 19 | Avril 2026 | Recette & correctifs | Fix NaN création tournoi (advancement_per_pool absent du formData), popup Stripe (frais, reversement, lien settings), page /contact (formulaire mailto par sujet), page /dons (PayPal SEProduct), logo Stêr Eo Production en sidebar |
+| 20 | Mai 2026 | Recette Phase 6 — correctifs | proxy.ts (Next.js 16), entry_fee en euros→centimes (Zod transform), players_per_team, registration_mode ONLINE/ONSITE, player_names[], platform_fee_cents, fee_collected, page /activate (PayPal upfront), formulaire manche pré-rempli par type de jeu, section édition rétractable |
 
 ---
 

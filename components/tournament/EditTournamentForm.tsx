@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useEffect, useRef } from "react";
 import { updateTournament } from "@/lib/actions/tournament";
 
 interface Props {
@@ -14,13 +14,35 @@ interface Props {
     nb_pools: number;
     nb_boards: number;
     advancement_per_pool: number;
+    players_per_team: number;
+    registration_mode: string;
   };
 }
 
 export function EditTournamentForm({ tournament }: Props) {
   const [state, action, isPending] = useActionState(updateTournament, undefined);
+  const [isOpen, setIsOpen] = useState(false);
+  const prevPending = useRef(false);
+
+  useEffect(() => {
+    if (prevPending.current && !isPending && state === undefined) {
+      setIsOpen(false);
+    }
+    prevPending.current = isPending;
+  }, [isPending, state]);
 
   return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={() => setIsOpen(v => !v)}
+        className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+      >
+        <span className={`transition-transform duration-200 ${isOpen ? "rotate-90" : ""}`}>▶</span>
+        {isOpen ? "Masquer les modifications" : "Modifier le tournoi"}
+      </button>
+
+      {isOpen && (
     <form action={action} className="space-y-4">
       <input type="hidden" name="tournament_id" value={tournament.id} />
 
@@ -82,13 +104,13 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€ / joueur)</label>
           <input
             name="entry_fee"
             type="number"
             min="0"
             required
-            defaultValue={tournament.entry_fee}
+            defaultValue={tournament.entry_fee / 100}
             className={inputCn}
           />
           {state?.errors?.entry_fee && <p className="mt-1 text-xs text-red-600">{state.errors.entry_fee[0]}</p>}
@@ -135,6 +157,38 @@ export function EditTournamentForm({ tournament }: Props) {
           />
           {state?.errors?.advancement_per_pool && <p className="mt-1 text-xs text-red-600">{state.errors.advancement_per_pool[0]}</p>}
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Joueurs par équipe</label>
+          <input
+            name="players_per_team"
+            type="number"
+            min="1"
+            max="10"
+            required
+            defaultValue={tournament.players_per_team}
+            className={inputCn}
+          />
+          {state?.errors?.players_per_team && <p className="mt-1 text-xs text-red-600">{state.errors.players_per_team[0]}</p>}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 p-4 space-y-2">
+        <p className="text-sm font-medium text-gray-700">Mode d&apos;inscription</p>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="radio" name="registration_mode" value="ONLINE" defaultChecked={tournament.registration_mode === "ONLINE"} className="mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">En ligne</p>
+            <p className="text-xs text-gray-500">Les joueurs s&apos;inscrivent depuis la page publique.</p>
+          </div>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="radio" name="registration_mode" value="ONSITE" defaultChecked={tournament.registration_mode === "ONSITE"} className="mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">Sur place uniquement</p>
+            <p className="text-xs text-gray-500">Pas d&apos;inscription en ligne. Gestion manuelle uniquement.</p>
+          </div>
+        </label>
       </div>
 
       <div className="flex justify-end">
@@ -147,6 +201,8 @@ export function EditTournamentForm({ tournament }: Props) {
         </button>
       </div>
     </form>
+      )}
+    </div>
   );
 }
 

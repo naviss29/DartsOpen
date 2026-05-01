@@ -1,14 +1,25 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { addRound } from "@/lib/actions/tournament";
 
 interface RoundFormProps {
   tournamentId: string;
 }
 
+const DEFAULTS: Record<string, { entry: string; finish: string }> = {
+  "501":    { entry: "SINGLE", finish: "DOUBLE" },
+  "701":    { entry: "SINGLE", finish: "DOUBLE" },
+  "901":    { entry: "SINGLE", finish: "DOUBLE" },
+  "1001":   { entry: "SINGLE", finish: "DOUBLE" },
+  "CRICKET":{ entry: "SINGLE", finish: "SINGLE" },
+};
+
 export function RoundForm({ tournamentId }: RoundFormProps) {
   const [state, action, isPending] = useActionState(addRound, undefined);
+  const [gameType, setGameType] = useState("501");
+
+  const defaults = DEFAULTS[gameType];
 
   return (
     <form action={action} className="grid grid-cols-3 gap-3 items-end">
@@ -22,7 +33,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
 
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Type de jeu</label>
-        <select name="game_type" required className={selectCn}>
+        <select name="game_type" required value={gameType} onChange={e => setGameType(e.target.value)} className={selectCn}>
           <option value="501">501</option>
           <option value="701">701</option>
           <option value="901">901</option>
@@ -33,7 +44,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
 
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Entrée</label>
-        <select name="entry_type" required className={selectCn}>
+        <select name="entry_type" required key={`entry-${gameType}`} defaultValue={defaults.entry} className={selectCn}>
           <option value="SINGLE">Simple</option>
           <option value="DOUBLE">Double</option>
           <option value="TRIPLE">Triple</option>
@@ -42,7 +53,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
 
       <div>
         <label className="block text-xs font-medium text-gray-600 mb-1">Sortie</label>
-        <select name="finish_type" required className={selectCn}>
+        <select name="finish_type" required key={`finish-${gameType}`} defaultValue={defaults.finish} className={selectCn}>
           <option value="MASTER">Master</option>
           <option value="DOUBLE">Double</option>
           <option value="SINGLE">Simple</option>
@@ -64,4 +75,4 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
 }
 
 const selectCn =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";

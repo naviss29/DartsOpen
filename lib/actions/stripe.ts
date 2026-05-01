@@ -49,13 +49,14 @@ export async function createRegistration(
   tournamentId: string,
   teamName: string,
   contactEmail: string,
-  phone: string | null
+  phone: string | null,
+  playerNames: string[]
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id, name, entry_fee, status, max_players, association_id")
+    .select("id, name, entry_fee, players_per_team, status, max_players, association_id")
     .eq("id", tournamentId)
     .eq("status", "OPEN")
     .single();
@@ -68,7 +69,7 @@ export async function createRegistration(
     .eq("tournament_id", tournamentId)
     .eq("status", "PAID");
 
-  if ((count ?? 0) >= tournament.max_players) {
+  if ((count ?? 0) * tournament.players_per_team >= tournament.max_players) {
     return { error: "Ce tournoi est complet." };
   }
 
@@ -88,6 +89,7 @@ export async function createRegistration(
       player_name: teamName,
       player_email: contactEmail,
       player_phone: phone,
+      player_names: playerNames,
       status: "PENDING",
     })
     .select("id, qr_code_token")
@@ -95,15 +97,21 @@ export async function createRegistration(
 
   if (insertError || !registration) return { error: "Erreur lors de l'inscription." };
 
-  // Si l'inscription est gratuite, passe directement à PAID
+  // Si l'inscription est gratuite, passe directement à PAID (frais non collectés)
   if (tournament.entry_fee === 0) {
     await supabase
       .from("registrations")
-      .update({ status: "PAID" })
+      .update({
+        status: "PAID",
+        platform_fee_cents: PLATFORM_FEE_CENTS * tournament.players_per_team,
+        fee_collected: false,
+      })
       .eq("id", registration.id);
 
     redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`);
   }
+
+  const platformFeeCents = PLATFORM_FEE_CENTS * tournament.players_per_team;
 
   // Crée une session Stripe Checkout
   const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
@@ -114,9 +122,12 @@ export async function createRegistration(
         price_data: {
           currency: "eur",
           unit_amount: tournament.entry_fee,
-          product_data: { name: `Inscription — ${tournament.name}`, description: `Équipe : ${teamName}` },
+          product_data: {
+            name: `Inscription — ${tournament.name}`,
+            description: `Équipe : ${teamName} (${tournament.players_per_team} joueur${tournament.players_per_team > 1 ? "s" : ""})`,
+          },
         },
-        quantity: 1,
+        quantity: tournament.players_per_team,
       },
     ],
     metadata: { registration_id: registration.id, tournament_id: tournamentId },
@@ -127,7 +138,7 @@ export async function createRegistration(
   // Si l'association a un compte Stripe Connect, on l'utilise avec les frais plateforme
   if (association?.stripe_account_id) {
     sessionParams.payment_intent_data = {
-      application_fee_amount: PLATFORM_FEE_CENTS,
+      application_fee_amount: platformFeeCents,
       transfer_data: { destination: association.stripe_account_id },
     };
   }

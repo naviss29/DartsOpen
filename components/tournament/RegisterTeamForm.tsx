@@ -9,23 +9,35 @@ const inputCn =
 interface Props {
   tournamentId: string;
   isFree: boolean;
+  playersPerTeam: number;
 }
 
-export function RegisterTeamForm({ tournamentId, isFree }: Props) {
+export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const isTeam = playersPerTeam > 1;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
 
+    const playerNames = Array.from({ length: playersPerTeam }, (_, i) =>
+      (fd.get(`player_${i}`) as string).trim()
+    );
+
+    const teamName = isTeam
+      ? (fd.get("team_name") as string)
+      : playerNames[0];
+
     startTransition(async () => {
       const result = await createRegistration(
         tournamentId,
-        fd.get("team_name") as string,
+        teamName,
         fd.get("contact_email") as string,
-        (fd.get("phone") as string) || null
+        (fd.get("phone") as string) || null,
+        playerNames
       );
       if (result?.error) setError(result.error);
     });
@@ -39,18 +51,37 @@ export function RegisterTeamForm({ tournamentId, isFree }: Props) {
         </div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">
-          Nom de l&apos;équipe *
-        </label>
-        <input
-          name="team_name"
-          type="text"
-          required
-          minLength={2}
-          placeholder="Les Flèches d'Or"
-          className={inputCn}
-        />
+      {isTeam && (
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">
+            Nom de l&apos;équipe *
+          </label>
+          <input
+            name="team_name"
+            type="text"
+            required
+            minLength={2}
+            placeholder="Les Flèches d'Or"
+            className={inputCn}
+          />
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <p className="text-sm font-medium text-gray-300">
+          {isTeam ? "Pseudos des joueurs *" : "Votre pseudo *"}
+        </p>
+        {Array.from({ length: playersPerTeam }, (_, i) => (
+          <input
+            key={i}
+            name={`player_${i}`}
+            type="text"
+            required
+            minLength={2}
+            placeholder={isTeam ? `Joueur ${i + 1}` : "Votre pseudo"}
+            className={inputCn}
+          />
+        ))}
       </div>
 
       <div>

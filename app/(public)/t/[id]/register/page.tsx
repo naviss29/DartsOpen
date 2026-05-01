@@ -14,7 +14,7 @@ export default async function RegisterPage({ params, searchParams }: Props) {
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id, name, date, location, entry_fee, max_players, status")
+    .select("id, name, date, location, entry_fee, max_players, players_per_team, registration_mode, status")
     .eq("id", id)
     .eq("status", "OPEN")
     .single();
@@ -27,7 +27,7 @@ export default async function RegisterPage({ params, searchParams }: Props) {
     .eq("tournament_id", id)
     .eq("status", "PAID");
 
-  const isFull = (count ?? 0) >= tournament.max_players;
+  const isFull = (count ?? 0) * tournament.players_per_team >= tournament.max_players;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
@@ -41,7 +41,10 @@ export default async function RegisterPage({ params, searchParams }: Props) {
             📍 {tournament.location}
           </p>
           <p className="text-gray-300 text-sm">
-            {count ?? 0} / {tournament.max_players} équipes inscrites
+            {(count ?? 0) * tournament.players_per_team} / {tournament.max_players} joueurs inscrits
+          </p>
+          <p className="text-gray-400 text-sm">
+            👥 {tournament.players_per_team} joueur{tournament.players_per_team > 1 ? "s" : ""} par équipe
           </p>
         </div>
 
@@ -51,7 +54,20 @@ export default async function RegisterPage({ params, searchParams }: Props) {
           </div>
         )}
 
-        {isFull ? (
+        {tournament.registration_mode === "ONSITE" ? (
+          <div className="rounded-xl bg-white/5 border border-white/10 p-8 text-center space-y-3">
+            <p className="text-3xl">📍</p>
+            <p className="font-semibold text-white">Inscriptions sur place uniquement</p>
+            <p className="text-sm text-gray-400">
+              Les inscriptions pour cet open se font directement le jour de l&apos;événement.
+              Rendez-vous à l&apos;accueil le{" "}
+              <strong className="text-gray-300">
+                {new Date(tournament.date).toLocaleDateString("fr-FR")}
+              </strong>{" "}
+              à <strong className="text-gray-300">{tournament.location}</strong>.
+            </p>
+          </div>
+        ) : isFull ? (
           <div className="rounded-xl bg-white/5 border border-white/10 p-8 text-center space-y-2">
             <p className="text-2xl">😔</p>
             <p className="font-semibold text-white">Tournoi complet</p>
@@ -63,11 +79,14 @@ export default async function RegisterPage({ params, searchParams }: Props) {
               <h2 className="font-semibold text-white">Inscription de votre équipe</h2>
               {tournament.entry_fee > 0 && (
                 <p className="text-green-400 font-medium mt-1">
-                  {(tournament.entry_fee / 100).toFixed(2)} € par équipe
+                  {(tournament.entry_fee / 100).toFixed(2)} € / joueur &nbsp;·&nbsp;{" "}
+                  <span className="font-bold">
+                    {((tournament.entry_fee * tournament.players_per_team) / 100).toFixed(2)} € / équipe
+                  </span>
                 </p>
               )}
             </div>
-            <RegisterTeamForm tournamentId={id} isFree={tournament.entry_fee === 0} />
+            <RegisterTeamForm tournamentId={id} isFree={tournament.entry_fee === 0} playersPerTeam={tournament.players_per_team} />
           </div>
         )}
       </div>

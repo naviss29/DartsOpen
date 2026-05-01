@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
     const { error } = await supabase
       .from("registrations")
-      .update({ status: "PAID" })
+      .update({ status: "PAID", fee_collected: true })
       .eq("id", registrationId)
       .eq("status", "PENDING");
 

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
 
 const PlayerSchema = z.object({
   tournament_id: z.string().uuid(),
@@ -31,9 +32,19 @@ async function getAuthenticatedAssociation(tournamentId: string) {
 }
 
 export async function addPlayer(prevState: PlayerState, formData: FormData): Promise<PlayerState> {
+  const playersPerTeam = Number(formData.get("players_per_team") ?? 1);
+
+  const playerNames = Array.from({ length: playersPerTeam }, (_, i) =>
+    (formData.get(`player_pseudo_${i}`) as string | null)?.trim() ?? ""
+  ).filter(Boolean);
+
+  const teamName = playersPerTeam > 1
+    ? formData.get("player_name") as string
+    : playerNames[0] ?? "";
+
   const parsed = PlayerSchema.safeParse({
     tournament_id: formData.get("tournament_id"),
-    player_name: formData.get("player_name"),
+    player_name: teamName,
     player_email: formData.get("player_email"),
     player_phone: formData.get("player_phone") || undefined,
   });
@@ -53,11 +64,14 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     player_name: parsed.data.player_name,
     player_email: parsed.data.player_email,
     player_phone: parsed.data.player_phone ?? null,
+    player_names: playerNames,
+    platform_fee_cents: PLATFORM_FEE_CENTS * playersPerTeam,
+    fee_collected: false,
     status: "PAID",
   });
 
   if (error) {
-    return { error: "Erreur lors de l'inscription du joueur." };
+    return { error: "Erreur lors de l'inscription." };
   }
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);

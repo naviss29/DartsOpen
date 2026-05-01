@@ -2,7 +2,7 @@
 
 > Plateforme SaaS de gestion de tournois de fléchettes — inscriptions en ligne, scores en temps réel, tableaux de bord sur smartphone.
 
-![Status](https://img.shields.io/badge/status-Phase%205%20--%20Bracket-blue)
+![Status](https://img.shields.io/badge/status-Recette-orange)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
@@ -25,8 +25,13 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 
 | Fonctionnalité | Statut |
 |---|---|
+| Fonctionnalité | Statut |
+|---|---|
 | Création de tournoi (poules, manches, type de jeu) | ✅ |
-| Inscription équipe en ligne + paiement Stripe | ✅ |
+| Inscriptions par équipe (solo / doublette / triplette…) | ✅ |
+| Inscription en ligne + paiement Stripe | ✅ |
+| Mode inscriptions sur place uniquement | ✅ |
+| Frais plateforme 0,10 € / joueur (PayPal upfront + Stripe) | ✅ |
 | QR Code par cible pour saisie mobile du score | ✅ |
 | Double validation du score (les deux joueurs confirment) | ✅ |
 | Tableau matchs en cours / à venir (temps réel) | ✅ |
@@ -159,9 +164,11 @@ npm run test:coverage # Couverture de code
 
 ## Modèle économique
 
-- Les joueurs paient leur inscription en ligne via Stripe
-- **0,10 € par participant** est retenu par la plateforme DartsOpen (frais de service)
-- Le solde est reversé automatiquement à l'association organisatrice en fin de tournoi
+- **0,10 € par joueur** retenu par DartsOpen (frais de service)
+- À la création du tournoi : l'association règle `max_joueurs × 0,10 €` via PayPal (montant libre possible)
+- Inscriptions en ligne via Stripe : frais prélevés automatiquement via `application_fee_amount`
+- Inscriptions sur place (mode ONSITE) : frais couverts par le paiement PayPal initial
+- Le solde Stripe est reversé automatiquement à l'association organisatrice en fin de tournoi
 
 ---
 
