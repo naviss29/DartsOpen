@@ -127,6 +127,85 @@ export async function confirmWinner(
 }
 
 /**
+ * Mode traditionnel : valide directement le gagnant d'un set sans confirmation adverse.
+ */
+export async function markWinnerDirect(
+  matchSetId: string,
+  winnerId: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  const { data: set } = await supabase
+    .from("match_sets")
+    .select("*, matches(id, tournament_id, player1_id, player2_id, status, board_number)")
+    .eq("id", matchSetId)
+    .single();
+
+  if (!set) return { error: "Set introuvable." };
+  if (set.matches.status === "FINISHED") return { error: "Ce match est déjà terminé." };
+
+  await supabase
+    .from("match_sets")
+    .update({ winner_id: winnerId, validated_p1: true, validated_p2: true })
+    .eq("id", matchSetId);
+
+  const { data: allSets } = await supabase
+    .from("match_sets")
+    .select("winner_id, validated_p1, validated_p2")
+    .eq("match_id", set.match_id);
+
+  const allComplete = allSets?.every((s) => s.validated_p1 && s.validated_p2) ?? false;
+
+  if (allComplete && allSets) {
+    const match = set.matches;
+    const matchWinnerId = computeMatchWinner(
+      allSets.map((s) => ({ winner_id: s.winner_id })),
+      match.player1_id,
+      match.player2_id
+    );
+
+    await supabase
+      .from("matches")
+      .update({ status: "FINISHED", winner_id: matchWinnerId })
+      .eq("id", match.id);
+
+    const { data: nextMatch } = await supabase
+      .from("matches")
+      .select("id")
+      .eq("tournament_id", match.tournament_id)
+      .eq("status", "PENDING")
+      .eq("board_number", match.board_number)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .single();
+
+    if (nextMatch) {
+      const { data: rounds } = await supabase
+        .from("rounds")
+        .select("order")
+        .eq("tournament_id", match.tournament_id)
+        .order("order");
+
+      await supabase
+        .from("matches")
+        .update({ status: "IN_PROGRESS" })
+        .eq("id", nextMatch.id);
+
+      if (rounds && rounds.length > 0) {
+        await supabase.from("match_sets").upsert(
+          rounds.map((r) => ({ match_id: nextMatch.id, round_order: r.order })),
+          { onConflict: "match_id,round_order" }
+        );
+      }
+    }
+  }
+
+  revalidatePath(`/t/${set.matches.tournament_id}/score`);
+  revalidatePath(`/t/${set.matches.tournament_id}/live`);
+  return {};
+}
+
+/**
  * Conteste le résultat proposé — remet les deux validations à false.
  */
 export async function disputeResult(matchSetId: string): Promise<{ error?: string }> {

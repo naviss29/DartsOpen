@@ -24,7 +24,11 @@ async function getAuthenticatedTournament(tournamentId: string) {
   return { supabase, user, tournament };
 }
 
-export async function generatePools(tournamentId: string): Promise<{ error?: string }> {
+export async function generatePools(
+  tournamentId: string,
+  _prevState: { error?: string } | null,
+  _formData: FormData
+): Promise<{ error?: string }> {
   const { supabase, tournament } = await getAuthenticatedTournament(tournamentId);
 
   if (tournament.status !== "OPEN") {
@@ -38,19 +42,18 @@ export async function generatePools(tournamentId: string): Promise<{ error?: str
     .eq("status", "PAID");
 
   if (!players || players.length < 2) {
-    return { error: "Il faut au moins 2 joueurs inscrits pour générer les poules." };
+    return { error: "Il faut au moins 2 équipes inscrites pour générer les poules." };
   }
 
-  if (players.length < tournament.nb_pools * 2) {
-    return { error: `Pas assez de joueurs pour ${tournament.nb_pools} poules (minimum 2 par poule).` };
-  }
+  // Calcule le nombre effectif de poules réalisables (minimum 2 équipes par poule)
+  const effectivePools = Math.min(tournament.nb_pools, Math.floor(players.length / 2));
 
   // Supprimer les poules existantes (cascade sur pool_players et matches)
   await supabase.from("pools").delete().eq("tournament_id", tournamentId);
 
   // Distribution serpentine dans les poules
   const shuffled = [...players].sort(() => Math.random() - 0.5);
-  const poolGroups = distributePlayersIntoPools(shuffled as { id: string }[], tournament.nb_pools);
+  const poolGroups = distributePlayersIntoPools(shuffled as { id: string }[], effectivePools);
 
   const rounds = (tournament.rounds as Array<{ id: string; order: number }>)
     .sort((a, b) => a.order - b.order);

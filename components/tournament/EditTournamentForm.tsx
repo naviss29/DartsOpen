@@ -16,6 +16,7 @@ interface Props {
     advancement_per_pool: number;
     players_per_team: number;
     registration_mode: string;
+    scoring_mode: string;
   };
 }
 
@@ -187,6 +188,24 @@ export function EditTournamentForm({ tournament }: Props) {
           <div>
             <p className="text-sm font-medium text-gray-900">Sur place uniquement</p>
             <p className="text-xs text-gray-500">Pas d&apos;inscription en ligne. Gestion manuelle uniquement.</p>
+          </div>
+        </label>
+      </div>
+
+      <div className="rounded-lg border border-gray-200 p-4 space-y-2">
+        <p className="text-sm font-medium text-gray-700">Mode de saisie des scores</p>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked={tournament.scoring_mode !== "TRADITIONAL"} className="mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">Électronique</p>
+            <p className="text-xs text-gray-500">Chaque équipe désigne le gagnant depuis son téléphone, l&apos;adversaire confirme.</p>
+          </div>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="radio" name="scoring_mode" value="TRADITIONAL" defaultChecked={tournament.scoring_mode === "TRADITIONAL"} className="mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-gray-900">Traditionnel</p>
+            <p className="text-xs text-gray-500">Un marqueur saisit les scores volée par volée. Compte à rebours automatique.</p>
           </div>
         </label>
       </div>

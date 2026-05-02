@@ -19,7 +19,7 @@ export default async function ScorePage({ params, searchParams }: Props) {
 
   const { data: tournament } = await supabase
     .from("tournaments")
-    .select("id, name, status")
+    .select("id, name, status, scoring_mode")
     .eq("id", id)
     .single();
 
@@ -68,6 +68,7 @@ export default async function ScorePage({ params, searchParams }: Props) {
           <ScoreForm
             match={match as Parameters<typeof ScoreForm>[0]["match"]}
             rounds={rounds ?? []}
+            scoringMode={tournament.scoring_mode === "TRADITIONAL" ? "TRADITIONAL" : "ELECTRONIC"}
           />
         )}
       </div>

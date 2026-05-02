@@ -18,6 +18,7 @@ const TournamentSchema = z.object({
   advancement_per_pool: z.coerce.number().int().min(1, "Minimum 1 qualifié par poule.").max(8, "Maximum 8 qualifiés par poule."),
   players_per_team: z.coerce.number().int().min(1, "Minimum 1 joueur par équipe.").max(10, "Maximum 10 joueurs par équipe."),
   registration_mode: z.enum(["ONLINE", "ONSITE"]).default("ONLINE"),
+  scoring_mode: z.enum(["ELECTRONIC", "TRADITIONAL"]).default("ELECTRONIC"),
 });
 
 const RoundSchema = z.object({
@@ -52,6 +53,7 @@ export async function createTournament(prevState: TournamentState, formData: For
     advancement_per_pool: formData.get("advancement_per_pool"),
     players_per_team: formData.get("players_per_team"),
     registration_mode: formData.get("registration_mode") ?? "ONLINE",
+    scoring_mode: formData.get("scoring_mode") ?? "ELECTRONIC",
   });
 
   if (!parsed.success) {
@@ -163,6 +165,7 @@ export async function updateTournament(prevState: TournamentState, formData: For
     advancement_per_pool: formData.get("advancement_per_pool"),
     players_per_team: formData.get("players_per_team"),
     registration_mode: formData.get("registration_mode") ?? "ONLINE",
+    scoring_mode: formData.get("scoring_mode") ?? "ELECTRONIC",
   });
 
   if (!parsed.success) {

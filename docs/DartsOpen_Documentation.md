@@ -306,3 +306,33 @@ Mesures :
 - [x] Phase 4 — Inscriptions en ligne par équipe + paiement Stripe Connect
 - [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement)
 - [ ] Phase 6 — Pipeline de recette (staging Coolify, CI GitHub Actions)
+
+---
+
+## 10. Développements futurs (backlog)
+
+> Idées validées à implémenter dans les prochaines phases. Pas d'ordre de priorité établi.
+
+### Découverte & recherche
+- **Annuaire des tournois publics** : page de recherche accessible sans compte
+  - Filtres : sport, département (code INSEE), date, niveau (débutant / confirmé / open)
+  - Référencement SEO par ville/département pour attirer les joueurs locaux
+  - Ex : "Tournois de fléchettes dans le Finistère (29)"
+
+### Multi-sport
+- **Abstraction du type de sport** : permettre de gérer des tournois de pétanque, de pal, ou tout autre sport à format poules + phases finales
+- La configuration des manches (501, Cricket…) devient optionnelle si le sport ne l'utilise pas
+
+### Communication joueurs
+- **Notifications / SMS** : prévenir le capitaine d'équipe lorsque son match approche (match précédent sur la même cible terminé)
+- Canal : email (Resend), SMS (Twilio), ou notification push PWA
+
+### Internationalisation (i18n)
+- Support multilingue : français, anglais, breton (🙂)
+- `next-intl` ou solution équivalente
+
+### UX & fonctionnel
+- **Score traditionnel avancé** : suivi Cricket case par case (15–20, bull) en mode traditionnel
+- **Bracket double-élimination** : perdants repartent dans un tableau secondaire
+- **Export PDF** : résultats complets du tournoi imprimables (poules + bracket + podium)
+- **Tableau des scores en salle** : affichage grand écran (TV/vidéoprojecteur) de la vue Live en plein écran sans navigation

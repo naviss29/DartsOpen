@@ -92,6 +92,24 @@ export function TournamentForm() {
           </label>
         </div>
 
+        <div className="rounded-lg border border-gray-200 p-4 space-y-2">
+          <p className="text-sm font-medium text-gray-700">Mode de saisie des scores</p>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked className="mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-gray-900">Électronique</p>
+              <p className="text-xs text-gray-500">Chaque équipe scanne le QR code et désigne le gagnant de la manche. L&apos;adversaire confirme.</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="radio" name="scoring_mode" value="TRADITIONAL" className="mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-gray-900">Traditionnel</p>
+              <p className="text-xs text-gray-500">Un marqueur saisit les scores volée par volée sur un seul appareil. Le compte à rebours est géré automatiquement.</p>
+            </div>
+          </label>
+        </div>
+
         <p className="text-xs text-gray-500">
           Les manches (type de jeu, entrée, sortie) seront configurées après la création du tournoi.
         </p>
