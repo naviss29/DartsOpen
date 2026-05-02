@@ -24,6 +24,11 @@ export interface PoolStanding {
   sets_lost: number;
 }
 
+/**
+ * Trie les joueurs d'une poule par classement.
+ * Critère 1 : nombre de victoires (descendant).
+ * Critère 2 (départage) : différentiel sets gagnés/perdus (descendant).
+ */
 export function computePoolStandings(
   players: PoolStanding[]
 ): PoolStanding[] {

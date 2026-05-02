@@ -7,9 +7,13 @@ const TournamentSchema = z.object({
   date: z.string().min(1, "La date est requise."),
   location: z.string().min(2, "Le lieu est requis.").trim(),
   max_players: z.coerce.number().int().min(2).max(512),
-  entry_fee: z.coerce.number().int().min(0),
+  entry_fee: z.coerce.number().min(0).transform((v) => Math.round(v * 100)),
   nb_pools: z.coerce.number().int().min(1).max(64),
   nb_boards: z.coerce.number().int().min(1).max(32),
+  advancement_per_pool: z.coerce.number().int().min(1).max(8),
+  players_per_team: z.coerce.number().int().min(1).max(10),
+  registration_mode: z.enum(["ONLINE", "ONSITE"]).default("ONLINE"),
+  scoring_mode: z.enum(["ELECTRONIC", "TRADITIONAL"]).default("ELECTRONIC"),
 });
 
 const RoundSchema = z.object({
@@ -26,9 +30,13 @@ describe("TournamentSchema", () => {
     date: "2026-06-15",
     location: "Salle des fêtes",
     max_players: "32",
-    entry_fee: "1000",
+    entry_fee: "10",
     nb_pools: "8",
     nb_boards: "4",
+    advancement_per_pool: "1",
+    players_per_team: "2",
+    registration_mode: "ONLINE",
+    scoring_mode: "ELECTRONIC",
   };
 
   it("accepte des données valides", () => {
@@ -36,8 +44,50 @@ describe("TournamentSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.max_players).toBe(32);
-      expect(result.data.entry_fee).toBe(1000);
+      expect(result.data.players_per_team).toBe(2);
     }
+  });
+
+  it("transforme entry_fee en centimes (×100)", () => {
+    const result = TournamentSchema.safeParse({ ...validData, entry_fee: "10" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.entry_fee).toBe(1000);
+  });
+
+  it("arrondit entry_fee pour éviter les flottants (9.99 → 999)", () => {
+    const result = TournamentSchema.safeParse({ ...validData, entry_fee: "9.99" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.entry_fee).toBe(999);
+  });
+
+  it("accepte scoring_mode ELECTRONIC", () => {
+    const result = TournamentSchema.safeParse({ ...validData, scoring_mode: "ELECTRONIC" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepte scoring_mode TRADITIONAL", () => {
+    const result = TournamentSchema.safeParse({ ...validData, scoring_mode: "TRADITIONAL" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejette un scoring_mode invalide", () => {
+    const result = TournamentSchema.safeParse({ ...validData, scoring_mode: "MANUAL" });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepte registration_mode ONSITE", () => {
+    const result = TournamentSchema.safeParse({ ...validData, registration_mode: "ONSITE" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejette players_per_team à 0", () => {
+    const result = TournamentSchema.safeParse({ ...validData, players_per_team: "0" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejette players_per_team supérieur à 10", () => {
+    const result = TournamentSchema.safeParse({ ...validData, players_per_team: "11" });
+    expect(result.success).toBe(false);
   });
 
   it("rejette un nom trop court", () => {

@@ -8,6 +8,10 @@ import { generateRoundRobin, assignBoards } from "@/lib/utils/bracket";
 
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
+/**
+ * Récupère le tournoi et l'utilisateur authentifié.
+ * Redirige vers /login si non authentifié, lève une erreur si tournoi introuvable.
+ */
 async function getAuthenticatedTournament(tournamentId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -24,6 +28,13 @@ async function getAuthenticatedTournament(tournamentId: string) {
   return { supabase, user, tournament };
 }
 
+/**
+ * Génère les poules, les matchs round-robin et les sets pour un tournoi ouvert.
+ * - Supprime les poules existantes (cascade sur pool_players et matches)
+ * - Réduit automatiquement le nombre de poules si les équipes sont insuffisantes
+ * - Insère poules et joueurs en batch (2 requêtes au lieu de N×2)
+ * - Passe le tournoi en IN_PROGRESS
+ */
 export async function generatePools(
   tournamentId: string,
   _prevState: { error?: string } | null,
@@ -58,41 +69,37 @@ export async function generatePools(
   const rounds = (tournament.rounds as Array<{ id: string; order: number }>)
     .sort((a, b) => a.order - b.order);
 
-  let matchesToInsert: Array<{
+  // Batch insert des poules (1 requête au lieu de N)
+  const { data: createdPools, error: poolError } = await supabase
+    .from("pools")
+    .insert(poolGroups.map((_, i) => ({ tournament_id: tournamentId, name: `Poule ${POOL_NAMES[i]}` })))
+    .select("id, name");
+
+  if (poolError || !createdPools) return { error: "Erreur lors de la création des poules." };
+
+  // Tri par nom pour retrouver l'ordre d'insertion (Poule A, B, C…)
+  const sortedPools = [...createdPools].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Batch insert des joueurs dans les poules (1 requête au lieu de N)
+  const allPoolPlayers = sortedPools.flatMap((pool, i) =>
+    poolGroups[i].map((p) => ({ pool_id: pool.id, registration_id: p.id }))
+  );
+  await supabase.from("pool_players").insert(allPoolPlayers);
+
+  // Générer les matchs round-robin pour chaque poule (en mémoire, pas de requête)
+  const matchesToInsert: Array<{
     tournament_id: string;
     pool_id: string;
     board_number: number;
     status: "IN_PROGRESS" | "PENDING";
     player1_id: string;
     player2_id: string;
-  }> = [];
-
-  for (let i = 0; i < poolGroups.length; i++) {
-    const group = poolGroups[i];
-    const playerIds = group.map((p) => p.id);
-
-    // Créer la poule
-    const { data: pool, error: poolError } = await supabase
-      .from("pools")
-      .insert({ tournament_id: tournamentId, name: `Poule ${POOL_NAMES[i]}` })
-      .select("id")
-      .single();
-
-    if (poolError || !pool) return { error: "Erreur lors de la création des poules." };
-
-    // Insérer les joueurs dans la poule
-    await supabase.from("pool_players").insert(
-      playerIds.map((pid) => ({ pool_id: pool.id, registration_id: pid }))
-    );
-
-    // Générer les matchs round-robin
+  }> = sortedPools.flatMap((pool, i) => {
+    const playerIds = poolGroups[i].map((p) => p.id);
     const pairings = generateRoundRobin(playerIds);
     const assigned = assignBoards(pairings, tournament.nb_boards);
-
-    matchesToInsert = matchesToInsert.concat(
-      assigned.map((m) => ({ ...m, tournament_id: tournamentId, pool_id: pool.id }))
-    );
-  }
+    return assigned.map((m) => ({ ...m, tournament_id: tournamentId, pool_id: pool.id }));
+  });
 
   if (matchesToInsert.length === 0) return { error: "Aucun match généré." };
 

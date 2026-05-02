@@ -128,6 +128,8 @@ export async function confirmWinner(
 
 /**
  * Mode traditionnel : valide directement le gagnant d'un set sans confirmation adverse.
+ * Contrairement à proposeWinner+confirmWinner, les deux validated_p1/p2 sont mis à true
+ * en une seule opération. Déclenche la même logique de fin de match (activation match suivant).
  */
 export async function markWinnerDirect(
   matchSetId: string,

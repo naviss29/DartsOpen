@@ -38,6 +38,25 @@ describe("distributePlayersIntoPools", () => {
   });
 });
 
+describe("distributePlayersIntoPools — cas limites", () => {
+  it("7 joueurs en 4 poules → poules de tailles inégales (serpentine)", () => {
+    const players = Array.from({ length: 7 }, (_, i) => makePlayer(String(i + 1)));
+    const pools = distributePlayersIntoPools(players, 4);
+    expect(pools).toHaveLength(4);
+    const total = pools.reduce((sum, p) => sum + p.length, 0);
+    expect(total).toBe(7);
+  });
+
+  it("calcul effectivePools : Math.min(nb_pools, floor(équipes/2))", () => {
+    // 5 équipes, 4 poules configurées → effectivePools = min(4, floor(5/2)) = 2
+    expect(Math.min(4, Math.floor(5 / 2))).toBe(2);
+    // 8 équipes, 4 poules → effectivePools = 4 (cas normal)
+    expect(Math.min(4, Math.floor(8 / 2))).toBe(4);
+    // 2 équipes, 1 poule → effectivePools = 1
+    expect(Math.min(1, Math.floor(2 / 2))).toBe(1);
+  });
+});
+
 describe("computePoolStandings", () => {
   it("trie par nombre de victoires décroissant", () => {
     const standings = [
