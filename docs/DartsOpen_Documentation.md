@@ -336,3 +336,9 @@ Mesures :
 - **Bracket double-élimination** : perdants repartent dans un tableau secondaire
 - **Export PDF** : résultats complets du tournoi imprimables (poules + bracket + podium)
 - **Tableau des scores en salle** : affichage grand écran (TV/vidéoprojecteur) de la vue Live en plein écran sans navigation
+
+### Qualité & tests
+- **Tests d'intégration server actions** : couvrir `proposeWinner`, `confirmWinner`, `markWinnerDirect`, `generatePools` avec une vraie base de données (Supabase local via `supabase start` ou PostgreSQL Docker)
+  - Scénarios prioritaires : flux complet d'un match (propose → confirm → match FINISHED → activation match suivant), génération de poules avec différentes configurations
+- **Tests d'intégration actions tournoi** : `updateTournamentStatus` (passage OPEN → IN_PROGRESS, clôture avec frais plateforme), `addPlayer`, `removePlayer`
+- **Seuil de couverture CI** : ajouter `@vitest/coverage-v8` et imposer un minimum (ex. 80 %) dans le workflow GitHub Actions pour bloquer les PR en cas de régression
