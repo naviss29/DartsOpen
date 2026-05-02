@@ -8,7 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20%2B%20Realtime-3ECF8E)
 ![Stripe](https://img.shields.io/badge/Stripe-Connect-635BFF)
-![Tests](https://img.shields.io/badge/tests-53%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-63%20passing-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
 
 ---
@@ -25,15 +25,14 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 
 | Fonctionnalité | Statut |
 |---|---|
-| Fonctionnalité | Statut |
-|---|---|
 | Création de tournoi (poules, manches, type de jeu) | ✅ |
 | Inscriptions par équipe (solo / doublette / triplette…) | ✅ |
 | Inscription en ligne + paiement Stripe | ✅ |
 | Mode inscriptions sur place uniquement | ✅ |
 | Frais plateforme 0,10 € / joueur (PayPal upfront + Stripe) | ✅ |
-| QR Code par cible pour saisie mobile du score | ✅ |
-| Double validation du score (les deux joueurs confirment) | ✅ |
+| QR Code pré-tournoi par cible (à scotcher sur les machines avant l'événement) | ✅ |
+| Mode scoring électronique (clic sur le vainqueur — double validation) | ✅ |
+| Mode scoring traditionnel (saisie des scores par volée avec tableau de bord) | ✅ |
 | Tableau matchs en cours / à venir (temps réel) | ✅ |
 | Annonce visuelle du prochain match sur la cible | ✅ |
 | Tableau récapitulatif des scores par poule | ✅ |
@@ -105,7 +104,7 @@ DartsOpen/
 | QR Code | `qrcode` npm |
 | Tests | Vitest + Testing Library |
 | Containerisation | Docker + Docker Compose |
-| Déploiement | Coolify (VPS Hostinger) |
+| Déploiement | Coolify |
 | CI/CD | GitHub Actions |
 
 ---
@@ -180,7 +179,8 @@ npm run test:coverage # Couverture de code
 - [x] Phase 3 — Navigation dashboard + QR codes cibles et spectateurs
 - [x] Phase 4 — Inscriptions en ligne par équipe + paiement Stripe Connect
 - [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement automatique)
-- [ ] Phase 6 — Pipeline de recette (staging Coolify, CI GitHub Actions)
+- [x] Phase 6 — CI GitHub Actions (lint + tests + build sur push/PR, déploiement auto sur main)
+- [ ] Phase 6 (suite) — Lier le dépôt à Coolify (webhook + secrets GitHub)
 
 ---
 
