@@ -45,14 +45,22 @@ export default async function BracketPage({ params }: Props) {
     .neq("status", "FINISHED");
 
   const poolsPending = (pendingPoolCount ?? 0) > 0;
-  const hasBracket = (bracketMatches?.length ?? 0) > 0;
+
+  // Supabase retourne les joins FK comme tableaux — on normalise en objets
+  const normalizedMatches = (bracketMatches ?? []).map((m) => ({
+    ...m,
+    player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+    player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+  }));
+
+  const hasBracket = normalizedMatches.length > 0;
 
   const maxRound = hasBracket
-    ? Math.max(...bracketMatches!.map((m) => m.bracket_round))
+    ? Math.max(...normalizedMatches.map((m) => m.bracket_round))
     : 0;
 
   const currentRoundMatches = hasBracket
-    ? bracketMatches!.filter((m) => m.bracket_round === maxRound)
+    ? normalizedMatches.filter((m) => m.bracket_round === maxRound)
     : [];
 
   const currentRoundFinished =
@@ -66,9 +74,9 @@ export default async function BracketPage({ params }: Props) {
     : null;
 
   const winnerName = winner
-    ? (currentRoundMatches[0].player1.id === winner
-        ? currentRoundMatches[0].player1.player_name
-        : currentRoundMatches[0].player2.player_name)
+    ? (currentRoundMatches[0].player1?.id === winner
+        ? currentRoundMatches[0].player1?.player_name
+        : currentRoundMatches[0].player2?.player_name)
     : null;
 
   return (
@@ -153,15 +161,7 @@ export default async function BracketPage({ params }: Props) {
       {hasBracket ? (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <BracketView
-            matches={bracketMatches!.map((m) => ({
-              id: m.id,
-              bracket_round: m.bracket_round,
-              bracket_position: m.bracket_position,
-              status: m.status,
-              winner_id: m.winner_id,
-              player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-              player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-            }))}
+            matches={normalizedMatches}
             maxRound={maxRound}
           />
         </div>
