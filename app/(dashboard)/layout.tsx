@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { logout } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -67,10 +68,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
           </form>
           <div className="pt-3 text-center">
             <p className="text-xs text-gray-400 mb-1">Développé par</p>
-            <img
+            <Image
               src="/logoSEP.svg"
               alt="Stêr Eo Production"
-              className="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity"
+              width={80}
+              height={32}
+              className="h-8 w-auto mx-auto opacity-60 hover:opacity-100 transition-opacity"
             />
           </div>
         </div>

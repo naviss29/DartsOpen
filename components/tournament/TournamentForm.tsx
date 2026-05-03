@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { createTournament } from "@/lib/actions/tournament";
 
 export function TournamentForm() {
@@ -116,12 +117,12 @@ export function TournamentForm() {
       </section>
 
       <div className="flex gap-3 justify-end">
-        <a
+        <Link
           href="/tournaments"
           className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
           Annuler
-        </a>
+        </Link>
         <button
           type="submit"
           disabled={isPending}

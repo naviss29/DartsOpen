@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
 interface Props {
@@ -8,13 +8,11 @@ interface Props {
 }
 
 export function StripeInfoModal({ stripeConnected }: Props) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !localStorage.getItem("stripe-info-dismissed");
+  });
   const [dontShowAgain, setDontShowAgain] = useState(false);
-
-  useEffect(() => {
-    const dismissed = localStorage.getItem("stripe-info-dismissed");
-    if (!dismissed) setOpen(true);
-  }, []);
 
   function close() {
     if (dontShowAgain) {
@@ -40,7 +38,7 @@ export function StripeInfoModal({ stripeConnected }: Props) {
           <div className="rounded-lg bg-green-50 border border-green-200 p-3 space-y-1">
             <p className="font-semibold text-green-800">Ce que reçoit votre association</p>
             <p>
-              Les droits d'inscription payés par les équipes sont versés <strong>directement sur votre compte Stripe</strong>,
+              Les droits d&apos;inscription payés par les équipes sont versés <strong>directement sur votre compte Stripe</strong>,
               déduction faite des frais Stripe (~1,5 % + 0,25 € par transaction).
               Le virement est déclenché <strong>automatiquement à la clôture du tournoi</strong> et apparaît sous 2 à 7 jours ouvrés.
             </p>
@@ -77,7 +75,7 @@ export function StripeInfoModal({ stripeConnected }: Props) {
           onClick={close}
           className="w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
         >
-          J'ai compris, créer mon tournoi
+          J&apos;ai compris, créer mon tournoi
         </button>
       </div>
     </div>

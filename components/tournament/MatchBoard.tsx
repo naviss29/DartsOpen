@@ -21,7 +21,7 @@ interface Props {
   nbBoards: number;
 }
 
-export function MatchBoard({ tournamentId, initialMatches, nbBoards }: Props) {
+export function MatchBoard({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<Match[]>(initialMatches);
   const [nextMatchAlert, setNextMatchAlert] = useState<{ boardNumber: number; match: Match } | null>(null);
 

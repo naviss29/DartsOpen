@@ -13,12 +13,6 @@ interface Props {
   maxRound: number;
 }
 
-const ROUND_LABELS: Record<number, string> = {
-  1: "Huitièmes",
-  2: "Quarts de finale",
-  3: "Demi-finales",
-  4: "Finale",
-};
 
 function roundLabel(round: number, maxRound: number): string {
   // Adapter le label selon le nombre total de tours

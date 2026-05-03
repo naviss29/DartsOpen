@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PaypalActivateButton } from "@/components/tournament/PaypalActivateButton";
 import type { Metadata } from "next";
