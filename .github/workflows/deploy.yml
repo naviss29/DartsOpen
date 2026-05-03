@@ -1,8 +1,13 @@
 name: Deploy → Production
 
+# Désactivé : Coolify redéploie automatiquement sur push main via GitHub polling.
+# Réactiver si Coolify est accessible publiquement sur son port API (8000).
+# on:
+#   push:
+#     branches: [main]
+
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
