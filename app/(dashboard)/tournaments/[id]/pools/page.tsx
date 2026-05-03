@@ -202,7 +202,7 @@ export default async function PoolsPage({ params }: Props) {
                     <ul className="space-y-1">
                       {pool.pool_players.map((pp) => (
                         <li key={pp.registration_id} className="text-sm text-gray-700">
-                          {pp.registrations.player_name}
+                          {(pp.registrations as Array<{ player_name: string }>)[0]?.player_name}
                         </li>
                       ))}
                     </ul>
@@ -215,7 +215,7 @@ export default async function PoolsPage({ params }: Props) {
                         <li key={m.id} className="text-sm flex items-center gap-2">
                           <span className="text-xs text-gray-400 w-16">Cible {m.board_number}</span>
                           <span className="text-gray-700">
-                            {m.player1.player_name} vs {m.player2.player_name}
+                            {(m.player1 as Array<{ player_name: string }>)[0]?.player_name} vs {(m.player2 as Array<{ player_name: string }>)[0]?.player_name}
                           </span>
                           <StatusDot status={m.status} />
                         </li>

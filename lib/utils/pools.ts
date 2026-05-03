@@ -1,14 +1,12 @@
-import type { Registration } from "@/types";
-
 /**
  * Répartit les joueurs en N poules équilibrées (distribution serpentine).
  * Exemple 8 joueurs, 2 poules → Poule A: 1,3,5,7 / Poule B: 2,4,6,8
  */
-export function distributePlayersIntoPools(
-  players: Registration[],
+export function distributePlayersIntoPools<T extends { id: string }>(
+  players: T[],
   nbPools: number
-): Registration[][] {
-  const pools: Registration[][] = Array.from({ length: nbPools }, () => []);
+): T[][] {
+  const pools: T[][] = Array.from({ length: nbPools }, () => []);
   players.forEach((player, index) => {
     pools[index % nbPools].push(player);
   });

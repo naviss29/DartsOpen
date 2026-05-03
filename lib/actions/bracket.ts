@@ -63,7 +63,7 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
 
       const players = pool.pool_players.map((pp) => ({
         registration_id: pp.registration_id,
-        player_name: (pp.registrations as { player_name: string }).player_name,
+        player_name: (Array.isArray(pp.registrations) ? pp.registrations[0] : pp.registrations as { player_name: string })?.player_name ?? "",
         wins: 0,
         losses: 0,
         sets_won: 0,

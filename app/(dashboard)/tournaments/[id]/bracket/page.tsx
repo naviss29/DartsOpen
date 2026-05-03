@@ -118,7 +118,7 @@ export default async function BracketPage({ params }: Props) {
         {tournament.status === "IN_PROGRESS" && !tournamentFinished && (
           <div className="flex flex-col items-end gap-2">
             {!hasBracket ? (
-              <form action={generateBracket.bind(null, id)}>
+              <form action={async () => { await generateBracket(id); }}>
                 <button
                   type="submit"
                   disabled={poolsPending}
@@ -129,7 +129,7 @@ export default async function BracketPage({ params }: Props) {
                 </button>
               </form>
             ) : currentRoundFinished ? (
-              <form action={advanceToNextRound.bind(null, id, maxRound)}>
+              <form action={async () => { await advanceToNextRound(id, maxRound); }}>
                 <button
                   type="submit"
                   className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"

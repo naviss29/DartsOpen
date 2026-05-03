@@ -48,7 +48,14 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
             .order("board_number")
             .order("created_at")
             .then(({ data }) => {
-              if (data) setMatches(data as Match[]);
+              if (data) {
+                const normalized = data.map((m) => ({
+                  ...m,
+                  player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+                  player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+                })) as Match[];
+                setMatches(normalized);
+              }
             });
         }
       )

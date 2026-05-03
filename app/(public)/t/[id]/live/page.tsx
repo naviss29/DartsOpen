@@ -23,7 +23,7 @@ export default async function LivePage({ params }: Props) {
   }
 
   // Matchs en cours et à venir
-  const { data: matches } = await supabase
+  const { data: rawMatches } = await supabase
     .from("matches")
     .select(`
       id, board_number, status,
@@ -36,8 +36,15 @@ export default async function LivePage({ params }: Props) {
     .order("board_number")
     .order("created_at");
 
+  // Supabase retourne les joins FK comme tableaux — on normalise en objets
+  const matches = (rawMatches ?? []).map((m) => ({
+    ...m,
+    player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+    player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+  }));
+
   // Poules et classements
-  const { data: pools } = await supabase
+  const { data: rawPools } = await supabase
     .from("pools")
     .select(`
       id, name,
@@ -48,6 +55,15 @@ export default async function LivePage({ params }: Props) {
     `)
     .eq("tournament_id", id)
     .order("name");
+
+  // Supabase retourne les joins FK comme tableaux — on normalise registrations en objet
+  const pools = (rawPools ?? []).map((pool) => ({
+    ...pool,
+    pool_players: pool.pool_players.map((pp) => ({
+      ...pp,
+      registrations: Array.isArray(pp.registrations) ? pp.registrations[0] : pp.registrations,
+    })),
+  }));
 
   const { data: finishedMatches } = await supabase
     .from("matches")
@@ -73,14 +89,14 @@ export default async function LivePage({ params }: Props) {
       {/* MatchBoard temps réel */}
       <MatchBoard
         tournamentId={id}
-        initialMatches={matches ?? []}
+        initialMatches={matches}
         nbBoards={tournament.nb_boards}
       />
 
       {/* ScoreBoard par poule */}
       <ScoreBoard
         tournamentId={id}
-        pools={pools ?? []}
+        pools={pools}
         finishedMatches={finishedMatches ?? []}
       />
     </div>

@@ -119,14 +119,14 @@ function ElectronicScoreForm({ match, sets, rounds }: { match: Match; sets: Matc
                   <div className="flex gap-2">
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(() => confirmWinner(set.id, side))}
+                      onClick={() => startTransition(() => void confirmWinner(set.id, side))}
                       className="flex-1 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60 transition-colors"
                     >
                       ✓ Confirmer
                     </button>
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(() => disputeResult(set.id))}
+                      onClick={() => startTransition(() => void disputeResult(set.id))}
                       className="rounded-lg border border-red-700 text-red-400 px-4 py-2.5 text-sm font-semibold hover:bg-red-900/20 disabled:opacity-60 transition-colors"
                     >
                       Contester
@@ -141,7 +141,7 @@ function ElectronicScoreForm({ match, sets, rounds }: { match: Match; sets: Matc
                       <button
                         key={player.id}
                         disabled={isPending}
-                        onClick={() => startTransition(() => proposeWinner(set.id, player.id, side))}
+                        onClick={() => startTransition(() => void proposeWinner(set.id, player.id, side))}
                         className={`rounded-lg border py-3 px-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
                           player.id === me.id
                             ? "border-green-600 text-green-400 hover:bg-green-900/20"
@@ -264,12 +264,12 @@ function SetScoreTracker({
 
     if (newRemaining === 0) {
       const winnerId = player === "p1" ? p1.id : p2.id;
-      startTransition(() => markWinnerDirect(set.id, winnerId));
+      startTransition(() => void markWinnerDirect(set.id, winnerId));
     }
   }
 
   function forceWinner(winnerId: string) {
-    startTransition(() => markWinnerDirect(set.id, winnerId));
+    startTransition(() => void markWinnerDirect(set.id, winnerId));
   }
 
   return (

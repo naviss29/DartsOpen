@@ -226,6 +226,7 @@ export async function disputeResult(matchSetId: string): Promise<{ error?: strin
     .update({ winner_id: null, validated_p1: false, validated_p2: false })
     .eq("id", matchSetId);
 
-  revalidatePath(`/t/${(set.matches as { tournament_id: string }).tournament_id}/score`);
+  const matchData = Array.isArray(set.matches) ? set.matches[0] : set.matches as { tournament_id: string };
+  revalidatePath(`/t/${matchData.tournament_id}/score`);
   return {};
 }

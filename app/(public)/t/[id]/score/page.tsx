@@ -26,7 +26,7 @@ export default async function ScorePage({ params, searchParams }: Props) {
   if (!tournament || tournament.status !== "IN_PROGRESS") notFound();
 
   // Récupère le match en cours sur cette cible
-  const { data: match } = await supabase
+  const { data: rawMatch } = await supabase
     .from("matches")
     .select(`
       id, board_number, status,
@@ -41,6 +41,17 @@ export default async function ScorePage({ params, searchParams }: Props) {
     .eq("board_number", boardNumber)
     .eq("status", "IN_PROGRESS")
     .single();
+
+  // Supabase retourne les joins FK comme tableaux — on normalise en objets
+  const match = rawMatch ? {
+    ...rawMatch,
+    player1: Array.isArray(rawMatch.player1) ? rawMatch.player1[0] : rawMatch.player1,
+    player2: Array.isArray(rawMatch.player2) ? rawMatch.player2[0] : rawMatch.player2,
+    match_sets: rawMatch.match_sets.map((s) => ({
+      ...s,
+      winner: Array.isArray(s.winner) ? (s.winner[0] ?? null) : s.winner,
+    })),
+  } : null;
 
   // Récupère la config des rounds
   const { data: rounds } = await supabase
@@ -66,7 +77,7 @@ export default async function ScorePage({ params, searchParams }: Props) {
           </div>
         ) : (
           <ScoreForm
-            match={match as Parameters<typeof ScoreForm>[0]["match"]}
+            match={match}
             rounds={rounds ?? []}
             scoringMode={tournament.scoring_mode === "TRADITIONAL" ? "TRADITIONAL" : "ELECTRONIC"}
           />

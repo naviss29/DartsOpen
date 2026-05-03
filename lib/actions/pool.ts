@@ -64,7 +64,7 @@ export async function generatePools(
 
   // Distribution serpentine dans les poules
   const shuffled = [...players].sort(() => Math.random() - 0.5);
-  const poolGroups = distributePlayersIntoPools(shuffled as { id: string }[], effectivePools);
+  const poolGroups = distributePlayersIntoPools(shuffled, effectivePools);
 
   const rounds = (tournament.rounds as Array<{ id: string; order: number }>)
     .sort((a, b) => a.order - b.order);
