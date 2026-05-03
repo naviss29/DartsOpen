@@ -142,6 +142,26 @@ const normalized = matches.map((m) => ({
 }));
 ```
 
+### `startTransition` avec server actions
+
+React attend `() => void` dans `startTransition`, mais les server actions retournent `Promise<{ error? }>` — erreur TypeScript en build prod.
+
+```typescript
+// ❌ Erreur TypeScript en prod
+startTransition(() => markWinnerDirect(setId, winnerId));
+
+// ✅
+startTransition(() => { void markWinnerDirect(setId, winnerId); });
+```
+
+### Toujours builder avant de merger sur main
+
+Le serveur de dev (`npm run dev`) ignore les erreurs TypeScript que le build prod détecte. Règle absolue avant chaque merge `develop → main` :
+
+```bash
+npm run build  # doit passer sans erreur avant tout merge main
+```
+
 ### Version de l'API Stripe
 
 La version de l'API (`apiVersion`) dans `lib/stripe/index.ts` doit correspondre à la version attendue par le SDK installé. Si le build échoue avec `Type '"2025-xx-xx"' is not assignable to type '"2026-xx-xx"'`, mettre à jour la version :
