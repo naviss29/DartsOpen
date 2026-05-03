@@ -302,6 +302,7 @@ Mesures :
 | 19 | Avril 2026 | Recette & correctifs | Fix NaN création tournoi (advancement_per_pool absent du formData), popup Stripe (frais, reversement, lien settings), page /contact (formulaire mailto par sujet), page /dons (PayPal SEProduct), logo Stêr Eo Production en sidebar |
 | 20 | Mai 2026 | Recette Phase 6 — correctifs | proxy.ts (Next.js 16), entry_fee en euros→centimes (Zod transform), players_per_team, registration_mode ONLINE/ONSITE, player_names[], platform_fee_cents, fee_collected, page /activate (PayPal upfront), formulaire manche pré-rempli par type de jeu, section édition rétractable |
 | 21 | Mai 2026 | CI GitHub Actions | Workflows ci.yml (lint+tests+build sur push/PR develop+main) et deploy.yml (webhook Coolify sur push main). 4 erreurs lint corrigées (setState dans effect, apostrophes JSX, `<a>` → `<Link>`, `<img>` → `<Image>`). Règle eslint argsIgnorePattern ajoutée. 63 tests passants. |
+| 22 | Mai 2026 | Mise en ligne Coolify | Application créée dans Coolify v4 (Nixpacks, branche main, URL sslip.io HTTPS). 7 variables d'environnement configurées (Supabase + Stripe live + APP_URL). Webhook Stripe production créé (checkout.session.completed + account.updated). Token API Coolify `github-actions` (permission deploy). Secrets GitHub Actions ajoutés : COOLIFY_TOKEN + COOLIFY_WEBHOOK_URL. Migration 008_scoring_mode.sql à exécuter dans Supabase avant premier deploy. |
 
 ---
 
