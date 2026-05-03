@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.3
+> Version : 0.4
 > Auteur : Alan
-> Date : Avril 2026
-> Statut : **Phase 2 — Scores temps réel**
+> Date : Mai 2026
+> Statut : **Phase 6 — CI/CD + recette**
 
 ---
 
@@ -14,6 +14,7 @@
 | 0.1 | Avril 2026 | Document initial — socle technique |
 | 0.2 | Avril 2026 | Phase 1 — Auth Supabase, CRUD tournois + manches, middleware, SQL schema |
 | 0.3 | Avril 2026 | Phase 2 — Joueurs, poules round-robin, matchs, scores temps réel, Supabase Realtime, NextMatchAlert |
+| 0.4 | Mai 2026 | Phase 6 — CI GitHub Actions, scoring modes (ELECTRONIC/TRADITIONAL), QR codes pré-tournoi, génération de poules adaptive, correctifs lint (10 erreurs/warnings), 63 tests |
 
 ---
 
@@ -265,6 +266,12 @@ Mesures :
 | 2 | Next.js 16 — middleware | `middleware.ts` / export `middleware()` génère un warning de dépréciation | Renommer en `proxy.ts` et exporter `proxy()` — Next.js 16 a renommé le concept |
 | 3 | entry_fee en centimes | Le formulaire affichait `defaultValue="10"` (centimes) au lieu de euros, Stripe recevait 10 cts | Zod `.transform(v => Math.round(v * 100))` sur entry_fee, `defaultValue={tournament.entry_fee / 100}` dans EditTournamentForm |
 | 4 | npm run start sans build | `Error: Could not find a production build in the '.next' directory` | Utiliser `npm run dev` pour les tests locaux, `npm run build && npm run start` pour la prod |
+| 5 | `useEffect` + `setState` synchrone | ESLint `react-hooks/set-state-in-effect` — appeler `setState` directement dans le corps d'un effet déclenche des renders en cascade | Initialiser l'état via une **fonction lazy** : `useState(() => { if (typeof window === 'undefined') return false; return !localStorage.getItem('key'); })` — pas besoin d'effet |
+| 6 | Apostrophes dans JSX | ESLint `react/no-unescaped-entities` — les `'` dans le texte JSX provoquent une erreur de build CI | Remplacer par `&apos;` ou `{'\''}`  dans les nœuds texte JSX |
+| 7 | `<a href>` navigation interne | ESLint `@next/next/no-html-link-for-pages` — utiliser `<a>` pour naviguer entre pages Next.js contourne le routeur (pas de prefetch, rechargement complet) | Toujours utiliser `<Link href>` de `next/link` pour la navigation interne |
+| 8 | `<img>` pour les assets locaux | ESLint `@next/next/no-img-element` — `<img>` brut ne bénéficie pas de l'optimisation automatique (LCP dégradé, bande passante) | Utiliser `<Image>` de `next/image` avec `width` et `height` explicites |
+| 9 | Params `_prevState`/`_formData` non reconnus | ESLint `@typescript-eslint/no-unused-vars` signale les params même préfixés `_` si la règle n'est pas configurée | Ajouter dans `eslint.config.mjs` : `"@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }]` |
+| 10 | `main` vs `develop` — confusion staging/prod | Appeler `main` "staging" est incorrect | `develop` = staging/recette, `main` = production. On ne merge sur `main` que du code validé en recette |
 
 ---
 
@@ -294,6 +301,7 @@ Mesures :
 | 18 | Avril 2026 | Phase 5 — Bracket phases finales | Migration 003 (advancement_per_pool, bracket_position), seedBracket (puissance de 2, byes pour têtes de série), generateBracket, advanceToNextRound, BracketView, page /bracket, navigation mise à jour, 53 tests |
 | 19 | Avril 2026 | Recette & correctifs | Fix NaN création tournoi (advancement_per_pool absent du formData), popup Stripe (frais, reversement, lien settings), page /contact (formulaire mailto par sujet), page /dons (PayPal SEProduct), logo Stêr Eo Production en sidebar |
 | 20 | Mai 2026 | Recette Phase 6 — correctifs | proxy.ts (Next.js 16), entry_fee en euros→centimes (Zod transform), players_per_team, registration_mode ONLINE/ONSITE, player_names[], platform_fee_cents, fee_collected, page /activate (PayPal upfront), formulaire manche pré-rempli par type de jeu, section édition rétractable |
+| 21 | Mai 2026 | CI GitHub Actions | Workflows ci.yml (lint+tests+build sur push/PR develop+main) et deploy.yml (webhook Coolify sur push main). 4 erreurs lint corrigées (setState dans effect, apostrophes JSX, `<a>` → `<Link>`, `<img>` → `<Image>`). Règle eslint argsIgnorePattern ajoutée. 63 tests passants. |
 
 ---
 
