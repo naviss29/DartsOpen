@@ -272,6 +272,7 @@ Mesures :
 | 8 | `<img>` pour les assets locaux | ESLint `@next/next/no-img-element` — `<img>` brut ne bénéficie pas de l'optimisation automatique (LCP dégradé, bande passante) | Utiliser `<Image>` de `next/image` avec `width` et `height` explicites |
 | 9 | Params `_prevState`/`_formData` non reconnus | ESLint `@typescript-eslint/no-unused-vars` signale les params même préfixés `_` si la règle n'est pas configurée | Ajouter dans `eslint.config.mjs` : `"@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }]` |
 | 10 | `main` vs `develop` — confusion staging/prod | Appeler `main` "staging" est incorrect | `develop` = staging/recette, `main` = production. On ne merge sur `main` que du code validé en recette |
+| 11 | Supabase joins FK → tableaux en prod | En local TypeScript infère `player1` comme objet, en build prod strict il est inféré comme `{ id: any; player_name: any; }[]` (tableau) — `.id` échoue au type check | Normaliser après la requête : `player1: Array.isArray(m.player1) ? m.player1[0] : m.player1`. Faire cette normalisation une seule fois sur un tableau `normalizedMatches` et l'utiliser partout dans la page |
 
 ---
 
@@ -303,6 +304,7 @@ Mesures :
 | 20 | Mai 2026 | Recette Phase 6 — correctifs | proxy.ts (Next.js 16), entry_fee en euros→centimes (Zod transform), players_per_team, registration_mode ONLINE/ONSITE, player_names[], platform_fee_cents, fee_collected, page /activate (PayPal upfront), formulaire manche pré-rempli par type de jeu, section édition rétractable |
 | 21 | Mai 2026 | CI GitHub Actions | Workflows ci.yml (lint+tests+build sur push/PR develop+main) et deploy.yml (webhook Coolify sur push main). 4 erreurs lint corrigées (setState dans effect, apostrophes JSX, `<a>` → `<Link>`, `<img>` → `<Image>`). Règle eslint argsIgnorePattern ajoutée. 63 tests passants. |
 | 22 | Mai 2026 | Mise en ligne Coolify | Application créée dans Coolify v4 (Nixpacks, branche main, URL sslip.io HTTPS). 7 variables d'environnement configurées (Supabase + Stripe live + APP_URL). Webhook Stripe production créé (checkout.session.completed + account.updated). Token API Coolify `github-actions` (permission deploy). Secrets GitHub Actions ajoutés : COOLIFY_TOKEN + COOLIFY_WEBHOOK_URL. Migration 008_scoring_mode.sql à exécuter dans Supabase avant premier deploy. |
+| 23 | Mai 2026 | Correctifs build prod | Fix 1 : apiVersion Stripe `2025-03-31.basil` → `2026-04-22.dahlia` (SDK mis à jour). Fix 2 : normalisation player1/player2 dans bracket/page (Supabase FK join → tableau en TypeScript strict). |
 
 ---
 

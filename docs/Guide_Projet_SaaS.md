@@ -126,6 +126,22 @@ Stripe Dashboard → **Développeurs** → **Clés API** :
 
 > Quand tu changes de domaine, supprimer l'ancien endpoint et en créer un nouveau — le `whsec_` change.
 
+### Joins de clés étrangères — tableaux en TypeScript strict
+
+Supabase renvoie les joins FK comme **tableaux** en build production (TypeScript strict), même pour une relation many-to-one. Accéder directement à `.id` sur le résultat plante au type check.
+
+```typescript
+// ❌ Plante en prod
+const name = match.player1.player_name;
+
+// ✅ Normaliser après la requête, une seule fois
+const normalized = matches.map((m) => ({
+  ...m,
+  player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+  player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+}));
+```
+
 ### Version de l'API Stripe
 
 La version de l'API (`apiVersion`) dans `lib/stripe/index.ts` doit correspondre à la version attendue par le SDK installé. Si le build échoue avec `Type '"2025-xx-xx"' is not assignable to type '"2026-xx-xx"'`, mettre à jour la version :
