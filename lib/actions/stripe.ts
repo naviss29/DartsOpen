@@ -63,6 +63,10 @@ export async function createRegistration(
 
   if (!tournament) return { error: "Ce tournoi n'accepte plus les inscriptions." };
 
+  if (phone && !/^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(phone.trim())) {
+    return { error: "Numéro de téléphone invalide (ex : 0612345678)." };
+  }
+
   const { count } = await supabase
     .from("registrations")
     .select("id", { count: "exact", head: true })

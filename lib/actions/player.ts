@@ -10,7 +10,10 @@ const PlayerSchema = z.object({
   tournament_id: z.string().uuid(),
   player_name: z.string().trim().min(2, "Le nom doit contenir au moins 2 caractères."),
   player_email: z.string().trim().email("Email invalide."),
-  player_phone: z.string().trim().optional(),
+  player_phone: z.string().trim()
+    .refine(v => !v || /^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(v),
+      "Numéro de téléphone invalide (ex : 0612345678).")
+    .optional(),
 });
 
 export type PlayerState = { error?: string; errors?: Record<string, string[]> } | undefined;
