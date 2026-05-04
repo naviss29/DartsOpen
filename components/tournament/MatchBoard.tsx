@@ -125,8 +125,8 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
             À venir ({pending.length})
           </h2>
           <div className="grid gap-2 md:grid-cols-3">
-            {pending.slice(0, 9).map((m) => (
-              <MatchCard key={m.id} match={m} compact />
+            {pending.map((m, i) => (
+              <MatchCard key={m.id} match={m} compact index={i} />
             ))}
           </div>
         </div>
@@ -141,14 +141,18 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   );
 }
 
-function MatchCard({ match, compact = false }: { match: Match; compact?: boolean }) {
+function MatchCard({ match, compact = false, index }: { match: Match; compact?: boolean; index?: number }) {
   const setsPlayed = match.match_sets.filter((s) => s.winner_id).length;
   const totalSets = match.match_sets.length;
 
   return (
     <div className={`rounded-xl bg-gray-800 border border-gray-700 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
+        {compact ? (
+          <span className="text-xs text-gray-500">#{(index ?? 0) + 1}</span>
+        ) : (
+          <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
+        )}
         {!compact && totalSets > 0 && (
           <span className="text-xs text-gray-500">Manche {setsPlayed}/{totalSets}</span>
         )}
