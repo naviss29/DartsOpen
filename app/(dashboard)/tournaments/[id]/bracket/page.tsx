@@ -49,6 +49,17 @@ export default async function BracketPage({ params }: Props) {
 
   const poolsPending = (pendingPoolCount ?? 0) > 0;
 
+  // Tournoi à 1 seule poule : génération automatique dès que la poule est terminée
+  if (
+    tournament.nb_pools === 1 &&
+    tournament.status === "IN_PROGRESS" &&
+    !poolsPending &&
+    (bracketMatches ?? []).length === 0
+  ) {
+    const result = await generateBracket(id);
+    if (!result.error) redirect(`/tournaments/${id}/bracket`);
+  }
+
   // Supabase retourne les joins FK comme tableaux — on normalise en objets
   const normalizedMatches = (bracketMatches ?? []).map((m) => ({
     ...m,
@@ -173,6 +184,8 @@ export default async function BracketPage({ params }: Props) {
           <p className="text-gray-500">
             {poolsPending
               ? "Terminez tous les matchs de poules pour débloquer les phases finales."
+              : tournament.nb_pools === 1
+              ? "Génération des phases finales en cours…"
               : tournament.status !== "IN_PROGRESS"
               ? "Démarrez le tournoi pour accéder aux phases finales."
               : "Cliquez sur « Générer les phases finales » pour créer le tableau."}
