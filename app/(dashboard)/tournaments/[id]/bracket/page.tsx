@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { generateBracket, advanceToNextRound } from "@/lib/actions/bracket";
 import { BracketView } from "@/components/tournament/BracketView";
 import Link from "next/link";
@@ -22,6 +22,9 @@ export default async function BracketPage({ params }: Props) {
     .single();
 
   if (!tournament) notFound();
+  if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
+    redirect(`/tournaments/${id}/pools`);
+  }
 
   // Matchs de bracket
   const { data: bracketMatches } = await supabase
