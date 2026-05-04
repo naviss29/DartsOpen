@@ -18,8 +18,19 @@ export default async function LivePage({ params }: Props) {
     .eq("id", id)
     .single();
 
-  if (!tournament || !["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
-    notFound();
+  if (!tournament) notFound();
+
+  if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="text-center space-y-4">
+          <div className="text-5xl">🎯</div>
+          <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
+          <p className="text-gray-400">Le tournoi n&apos;a pas encore commencé.</p>
+          <p className="text-gray-500 text-sm">Cette page se mettra à jour automatiquement au démarrage.</p>
+        </div>
+      </div>
+    );
   }
 
   // Matchs en cours et à venir
