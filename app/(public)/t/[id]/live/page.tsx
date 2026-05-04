@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { MatchBoard } from "@/components/tournament/MatchBoard";
 import { ScoreBoard } from "@/components/tournament/ScoreBoard";
+import { BracketLive } from "@/components/tournament/BracketLive";
 import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }> }
@@ -82,6 +83,27 @@ export default async function LivePage({ params }: Props) {
     .eq("tournament_id", id)
     .eq("status", "FINISHED");
 
+  // Matchs de bracket (phases finales)
+  const { data: rawBracketMatches } = await supabase
+    .from("matches")
+    .select(`
+      id, bracket_round, bracket_position, status, winner_id,
+      player1:registrations!matches_player1_id_fkey(id, player_name),
+      player2:registrations!matches_player2_id_fkey(id, player_name)
+    `)
+    .eq("tournament_id", id)
+    .is("pool_id", null)
+    .order("bracket_round")
+    .order("bracket_position");
+
+  const bracketMatches = (rawBracketMatches ?? []).map((m) => ({
+    ...m,
+    player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+    player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+  }));
+
+  const hasBracket = bracketMatches.length > 0;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
       {/* En-tête */}
@@ -104,12 +126,22 @@ export default async function LivePage({ params }: Props) {
         nbBoards={tournament.nb_boards}
       />
 
-      {/* ScoreBoard par poule */}
-      <ScoreBoard
-        tournamentId={id}
-        pools={pools}
-        finishedMatches={finishedMatches ?? []}
-      />
+      {/* Phase finale : tableau de bracket */}
+      {hasBracket && (
+        <BracketLive
+          tournamentId={id}
+          initialMatches={bracketMatches}
+        />
+      )}
+
+      {/* Phase de poules : classements par poule */}
+      {!hasBracket && (
+        <ScoreBoard
+          tournamentId={id}
+          pools={pools}
+          finishedMatches={finishedMatches ?? []}
+        />
+      )}
     </div>
   );
 }
