@@ -58,7 +58,8 @@ export default async function PoolsPage({ params }: Props) {
   const totalPlayers = (playerCount ?? 0) * tournament.players_per_team;
   const registrationCount = playerCount ?? 0;
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
-  const canGenerate = tournament.status === "OPEN" && registrationCount >= 2;
+  // Format 1 poule = élimination directe : pas de génération de poule
+  const canGenerate = tournament.status === "OPEN" && registrationCount >= 2 && tournament.nb_pools > 1;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const showQRCodes = ["OPEN", "IN_PROGRESS", "FINISHED"].includes(tournament.status);
@@ -176,7 +177,29 @@ export default async function PoolsPage({ params }: Props) {
         </section>
       )}
 
-      {!hasPools ? (
+      {tournament.nb_pools === 1 ? (
+        /* Format élimination directe : pas de phase de poule */
+        ["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
+          <div className="rounded-xl bg-green-50 border border-green-200 p-10 text-center space-y-3">
+            <p className="text-green-800 font-semibold">Format élimination directe</p>
+            <p className="text-green-700 text-sm">
+              Tous les joueurs inscrits participent directement aux phases finales.
+            </p>
+            <Link
+              href={`/tournaments/${id}/bracket`}
+              className="inline-block rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
+            >
+              Voir les phases finales →
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center">
+            <p className="text-gray-500">
+              Format élimination directe — démarrez le tournoi pour accéder aux phases finales.
+            </p>
+          </div>
+        )
+      ) : !hasPools ? (
         <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center">
           <p className="text-gray-500">
             {canGenerate

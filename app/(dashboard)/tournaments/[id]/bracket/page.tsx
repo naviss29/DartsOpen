@@ -47,7 +47,8 @@ export default async function BracketPage({ params }: Props) {
     .not("pool_id", "is", null)
     .neq("status", "FINISHED");
 
-  const poolsPending = (pendingPoolCount ?? 0) > 0;
+  // Format 1 poule = élimination directe : pas de phase de poule
+  const poolsPending = tournament.nb_pools === 1 ? false : (pendingPoolCount ?? 0) > 0;
 
   // Tournoi à 1 seule poule : génération automatique dès que la poule est terminée
   if (
