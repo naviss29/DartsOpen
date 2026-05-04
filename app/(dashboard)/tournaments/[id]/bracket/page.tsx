@@ -83,6 +83,30 @@ export default async function BracketPage({ params }: Props) {
   const tournamentFinished =
     hasBracket && currentRoundMatches.length === 1 && currentRoundFinished;
 
+  // Élimination directe : auto-avancement au tour suivant dès que le tour est terminé
+  if (hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS") {
+    const { count: nextRoundExists } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("tournament_id", id)
+      .is("pool_id", null)
+      .eq("bracket_round", maxRound + 1);
+
+    if ((nextRoundExists ?? 0) === 0) {
+      const result = await advanceToNextRound(id, maxRound);
+      if (!result.error) redirect(`/tournaments/${id}/bracket`);
+    }
+  }
+
+  // Finale terminée : marquer le tournoi comme FINISHED
+  if (tournamentFinished && tournament.status === "IN_PROGRESS") {
+    await supabase
+      .from("tournaments")
+      .update({ status: "FINISHED" })
+      .eq("id", id)
+      .eq("association_id", user!.id);
+  }
+
   const winner = tournamentFinished
     ? currentRoundMatches[0].winner_id
     : null;
@@ -128,32 +152,20 @@ export default async function BracketPage({ params }: Props) {
           </p>
         </div>
 
-        {/* Bouton générer / tour suivant */}
-        {tournament.status === "IN_PROGRESS" && !tournamentFinished && (
+        {/* Bouton générer les phases finales (multi-poules uniquement) */}
+        {tournament.status === "IN_PROGRESS" && !hasBracket && (
           <div className="flex flex-col items-end gap-2">
-            {!hasBracket ? (
-              <form action={generateBracket.bind(null, id)}>
-                <button
-                  type="submit"
-                  disabled={poolsPending}
-                  title={poolsPending ? "Des matchs de poules sont encore en cours" : ""}
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Générer les phases finales
-                </button>
-              </form>
-            ) : currentRoundFinished ? (
-              <form action={advanceToNextRound.bind(null, id, maxRound)}>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-                >
-                  Lancer le tour suivant →
-                </button>
-              </form>
-            ) : null}
-
-            {poolsPending && !hasBracket && (
+            <form action={generateBracket.bind(null, id)}>
+              <button
+                type="submit"
+                disabled={poolsPending}
+                title={poolsPending ? "Des matchs de poules sont encore en cours" : ""}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Générer les phases finales
+              </button>
+            </form>
+            {poolsPending && (
               <p className="text-xs text-orange-600">
                 {pendingPoolCount} match(s) de poule encore en cours
               </p>
