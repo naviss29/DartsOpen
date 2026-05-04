@@ -21,7 +21,7 @@ export default async function RegisterSuccessPage({ params, searchParams }: Prop
             </p>
           )}
           <p className="text-gray-400 text-sm">
-            Un email de confirmation vous a été envoyé. Rendez-vous le jour du tournoi !
+            Votre paiement a bien été encaissé. Rendez-vous le jour du tournoi !
           </p>
         </div>
 
