@@ -1,8 +1,101 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { computeMatchWinner } from "@/lib/utils/bracket";
+
+/**
+ * Vérifie si tous les matchs du tour de bracket sont terminés et crée le tour suivant.
+ * Utilise le service client (bypass RLS) car appelé depuis une page publique (saisie scores).
+ */
+async function tryAdvanceBracket(
+  tournamentId: string,
+  bracketRound: number
+) {
+  const admin = createServiceClient();
+
+  const { count: remaining } = await admin
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", tournamentId)
+    .is("pool_id", null)
+    .eq("bracket_round", bracketRound)
+    .neq("status", "FINISHED");
+
+  if ((remaining ?? 1) > 0) return;
+
+  const { data: currentMatches } = await admin
+    .from("matches")
+    .select("bracket_position, winner_id")
+    .eq("tournament_id", tournamentId)
+    .eq("bracket_round", bracketRound)
+    .order("bracket_position");
+
+  if (!currentMatches?.length) return;
+
+  // Finale terminée — marquer le tournoi comme FINISHED
+  if (currentMatches.length === 1) {
+    await admin.from("tournaments").update({ status: "FINISHED" }).eq("id", tournamentId);
+    return;
+  }
+
+  // Vérifier que le tour suivant n'existe pas déjà
+  const { count: nextExists } = await admin
+    .from("matches")
+    .select("id", { count: "exact", head: true })
+    .eq("tournament_id", tournamentId)
+    .is("pool_id", null)
+    .eq("bracket_round", bracketRound + 1);
+
+  if ((nextExists ?? 0) > 0) return;
+
+  const { data: tournament } = await admin
+    .from("tournaments")
+    .select("nb_boards")
+    .eq("id", tournamentId)
+    .single();
+
+  const { data: rounds } = await admin
+    .from("rounds")
+    .select("order")
+    .eq("tournament_id", tournamentId)
+    .order("order");
+
+  if (!tournament) return;
+
+  const nextRound = bracketRound + 1;
+  let boardCounter = 1;
+
+  for (let i = 0; i < currentMatches.length; i += 2) {
+    const m1 = currentMatches[i];
+    const m2 = currentMatches[i + 1];
+    if (!m1?.winner_id || !m2?.winner_id) break;
+
+    const boardNum = ((boardCounter - 1) % tournament.nb_boards) + 1;
+    const isFirst = boardCounter <= tournament.nb_boards;
+    boardCounter++;
+
+    const { data: newMatch } = await admin
+      .from("matches")
+      .insert({
+        tournament_id: tournamentId,
+        bracket_round: nextRound,
+        bracket_position: Math.floor(i / 2),
+        board_number: boardNum,
+        player1_id: m1.winner_id,
+        player2_id: m2.winner_id,
+        status: isFirst ? "IN_PROGRESS" : "PENDING",
+      })
+      .select("id")
+      .single();
+
+    if (newMatch && rounds?.length) {
+      await admin.from("match_sets").insert(
+        rounds.map((r) => ({ match_id: newMatch.id, round_order: r.order }))
+      );
+    }
+  }
+}
 
 /**
  * Un joueur propose un gagnant pour un set.
@@ -53,7 +146,7 @@ export async function confirmWinner(
 
   const { data: set } = await supabase
     .from("match_sets")
-    .select("*, matches(id, tournament_id, player1_id, player2_id, status, board_number)")
+    .select("*, matches(id, tournament_id, player1_id, player2_id, status, board_number, pool_id, bracket_round)")
     .eq("id", matchSetId)
     .single();
 
@@ -100,7 +193,6 @@ export async function confirmWinner(
       .single();
 
     if (nextMatch) {
-      // Créer les sets pour ce match s'ils n'existent pas
       const { data: rounds } = await supabase
         .from("rounds")
         .select("order")
@@ -118,6 +210,11 @@ export async function confirmWinner(
           { onConflict: "match_id,round_order" }
         );
       }
+    }
+
+    // Auto-avancement du bracket si c'est un match de phases finales
+    if (!match.pool_id && match.bracket_round != null) {
+      await tryAdvanceBracket(match.tournament_id, match.bracket_round);
     }
   }
 
@@ -139,7 +236,7 @@ export async function markWinnerDirect(
 
   const { data: set } = await supabase
     .from("match_sets")
-    .select("*, matches(id, tournament_id, player1_id, player2_id, status, board_number)")
+    .select("*, matches(id, tournament_id, player1_id, player2_id, status, board_number, pool_id, bracket_round)")
     .eq("id", matchSetId)
     .single();
 
@@ -199,6 +296,11 @@ export async function markWinnerDirect(
           { onConflict: "match_id,round_order" }
         );
       }
+    }
+
+    // Auto-avancement du bracket si c'est un match de phases finales
+    if (!match.pool_id && match.bracket_round != null) {
+      await tryAdvanceBracket(match.tournament_id, match.bracket_round);
     }
   }
 

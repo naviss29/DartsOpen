@@ -35,47 +35,56 @@ function roundLabel(round: number, maxRound: number): string {
 export function BracketLive({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<BracketMatch[]>(initialMatches);
 
+  const fetchMatches = (client: ReturnType<typeof createClient>) =>
+    client
+      .from("matches")
+      .select(`
+        id, bracket_round, bracket_position, status, winner_id,
+        player1:registrations!matches_player1_id_fkey(id, player_name),
+        player2:registrations!matches_player2_id_fkey(id, player_name)
+      `)
+      .eq("tournament_id", tournamentId)
+      .is("pool_id", null)
+      .order("bracket_round")
+      .order("bracket_position")
+      .then(({ data }) => {
+        if (data) {
+          setMatches(data.map((m) => ({
+            ...m,
+            player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+            player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+          })) as BracketMatch[]);
+        }
+      });
+
   useEffect(() => {
     const supabase = createClient();
 
+    // Realtime — mises à jour immédiates sur changement de match
     const channel = supabase
       .channel(`bracket-live-${tournamentId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${tournamentId}` },
-        () => {
-          supabase
-            .from("matches")
-            .select(`
-              id, bracket_round, bracket_position, status, winner_id,
-              player1:registrations!matches_player1_id_fkey(id, player_name),
-              player2:registrations!matches_player2_id_fkey(id, player_name)
-            `)
-            .eq("tournament_id", tournamentId)
-            .is("pool_id", null)
-            .order("bracket_round")
-            .order("bracket_position")
-            .then(({ data }) => {
-              if (data) {
-                const normalized = data.map((m) => ({
-                  ...m,
-                  player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-                  player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-                })) as BracketMatch[];
-                setMatches(normalized);
-              }
-            });
-        }
+        () => fetchMatches(supabase)
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Polling 5s — filet de sécurité pour les nouveaux tours créés côté serveur
+    const poll = setInterval(() => fetchMatches(supabase), 5000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(poll);
+    };
   }, [tournamentId]);
 
   if (matches.length === 0) return null;
 
   const maxRound = Math.max(...matches.map((m) => m.bracket_round));
   const r1Count = matches.filter((m) => m.bracket_round === 1).length;
+  // totalRounds basé sur le nombre de matchs du 1er tour (toujours une puissance de 2)
+  const totalRounds = r1Count > 0 ? Math.round(Math.log2(r1Count)) + 1 : maxRound;
   const totalH = r1Count * BASE_SLOT;
   const rounds = Array.from({ length: maxRound }, (_, i) => i + 1);
 
@@ -112,7 +121,7 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
                   style={{ width: CARD_W }}
                   className="text-xs font-semibold text-gray-500 uppercase tracking-widest text-center"
                 >
-                  {roundLabel(round, maxRound)}
+                  {roundLabel(round, totalRounds)}
                 </div>
               </Fragment>
             ))}

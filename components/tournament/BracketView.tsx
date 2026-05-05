@@ -31,6 +31,8 @@ function roundLabel(round: number, maxRound: number): string {
 
 export function BracketView({ matches, maxRound }: Props) {
   const r1Count = matches.filter((m) => m.bracket_round === 1).length;
+  // totalRounds basé sur le nombre de matchs du 1er tour (toujours une puissance de 2)
+  const totalRounds = r1Count > 0 ? Math.round(Math.log2(r1Count)) + 1 : maxRound;
   const totalH = r1Count * BASE_SLOT;
   const rounds = Array.from({ length: maxRound }, (_, i) => i + 1);
 
@@ -45,7 +47,7 @@ export function BracketView({ matches, maxRound }: Props) {
               style={{ width: CARD_W }}
               className="text-xs font-semibold text-gray-400 uppercase tracking-widest text-center"
             >
-              {roundLabel(round, maxRound)}
+              {roundLabel(round, totalRounds)}
             </div>
           </Fragment>
         ))}
