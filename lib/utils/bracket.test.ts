@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateRoundRobin, assignBoards, computeMatchWinner, seedBracket } from "./bracket";
+import { generateRoundRobin, assignBoards, computeMatchWinner, seedBracket, roundLabel, computeTotalRounds } from "./bracket";
 
 describe("generateRoundRobin", () => {
   it("génère 6 matchs pour 4 joueurs (4×3/2 = 6)", () => {
@@ -105,6 +105,52 @@ describe("seedBracket", () => {
     const pairs = seedBracket(["p1","p2","p3","p4"]);
     const positions = pairs.map(p => p.bracket_position).sort((a, b) => a - b);
     expect(positions).toEqual([0, 1]);
+  });
+});
+
+describe("roundLabel", () => {
+  it("retourne 'Finale' pour le dernier tour", () => {
+    expect(roundLabel(3, 3)).toBe("Finale");
+    expect(roundLabel(1, 1)).toBe("Finale");
+  });
+
+  it("retourne 'Demi-finales' pour l'avant-dernier tour", () => {
+    expect(roundLabel(2, 3)).toBe("Demi-finales");
+  });
+
+  it("retourne 'Quarts de finale' à deux tours de la finale", () => {
+    expect(roundLabel(2, 4)).toBe("Quarts de finale");
+  });
+
+  it("retourne 'Huitièmes' à trois tours de la finale", () => {
+    expect(roundLabel(2, 5)).toBe("Huitièmes");
+  });
+
+  it("retourne 'Tour N' pour les tours plus lointains", () => {
+    expect(roundLabel(1, 6)).toBe("Tour 1");
+    expect(roundLabel(2, 7)).toBe("Tour 2");
+  });
+});
+
+describe("computeTotalRounds", () => {
+  it("2 matchs au 1er tour → 2 tours (finale + demi)", () => {
+    expect(computeTotalRounds(2, 0)).toBe(2);
+  });
+
+  it("4 matchs au 1er tour → 3 tours (+ quarts)", () => {
+    expect(computeTotalRounds(4, 0)).toBe(3);
+  });
+
+  it("8 matchs au 1er tour → 4 tours", () => {
+    expect(computeTotalRounds(8, 0)).toBe(4);
+  });
+
+  it("16 matchs au 1er tour → 5 tours", () => {
+    expect(computeTotalRounds(16, 0)).toBe(5);
+  });
+
+  it("utilise le fallback si r1Count est 0 (bracket en cours de création)", () => {
+    expect(computeTotalRounds(0, 3)).toBe(3);
   });
 });
 

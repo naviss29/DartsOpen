@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { roundLabel, computeTotalRounds } from "@/lib/utils/bracket";
 
 interface BracketMatch {
   id: string;
@@ -22,15 +23,6 @@ const CARD_H = 72;
 const CARD_W = 220;
 const CONN_W = 48;
 const BASE_SLOT = CARD_H + 32;
-
-function roundLabel(round: number, maxRound: number): string {
-  const fromEnd = maxRound - round;
-  if (fromEnd === 0) return "Finale";
-  if (fromEnd === 1) return "Demi-finales";
-  if (fromEnd === 2) return "Quarts de finale";
-  if (fromEnd === 3) return "Huitièmes";
-  return `Tour ${round}`;
-}
 
 export function BracketLive({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<BracketMatch[]>(initialMatches);
@@ -83,8 +75,7 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
   const maxRound = Math.max(...matches.map((m) => m.bracket_round));
   const r1Count = matches.filter((m) => m.bracket_round === 1).length;
-  // totalRounds basé sur le nombre de matchs du 1er tour (toujours une puissance de 2)
-  const totalRounds = r1Count > 0 ? Math.round(Math.log2(r1Count)) + 1 : maxRound;
+  const totalRounds = computeTotalRounds(r1Count, maxRound);
   const totalH = r1Count * BASE_SLOT;
   const rounds = Array.from({ length: maxRound }, (_, i) => i + 1);
 
