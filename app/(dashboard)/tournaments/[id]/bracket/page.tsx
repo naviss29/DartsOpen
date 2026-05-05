@@ -118,6 +118,12 @@ export default async function BracketPage({ params }: Props) {
         : currentRoundMatches[0].player2?.player_name)
     : null;
 
+  // Inline server actions (void) pour les formulaires — capturent id par closure
+  async function doGenerateBracket() {
+    "use server";
+    await generateBracket(id);
+  }
+
   return (
     <div className="space-y-6">
       {/* Breadcrumb + onglets */}
@@ -156,7 +162,7 @@ export default async function BracketPage({ params }: Props) {
         {/* Bouton générer les phases finales (multi-poules uniquement) */}
         {tournament.status === "IN_PROGRESS" && !hasBracket && (
           <div className="flex flex-col items-end gap-2">
-            <form action={generateBracket.bind(null, id)}>
+            <form action={doGenerateBracket}>
               <button
                 type="submit"
                 disabled={poolsPending}
