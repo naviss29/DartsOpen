@@ -73,6 +73,27 @@ export function seedBracket(
 }
 
 /**
+ * Libellé d'un tour de bracket selon sa position depuis la finale.
+ * maxRound = nombre total de tours déduit du 1er tour (log2(r1Count)+1).
+ */
+export function roundLabel(round: number, maxRound: number): string {
+  const fromEnd = maxRound - round;
+  if (fromEnd === 0) return "Finale";
+  if (fromEnd === 1) return "Demi-finales";
+  if (fromEnd === 2) return "Quarts de finale";
+  if (fromEnd === 3) return "Huitièmes";
+  return `Tour ${round}`;
+}
+
+/**
+ * Calcule le nombre total de tours d'un bracket à partir du 1er tour.
+ * r1Count doit être une puissance de 2 (seedBracket padde jusqu'à la prochaine).
+ */
+export function computeTotalRounds(r1Count: number, fallback: number): number {
+  return r1Count > 0 ? Math.round(Math.log2(r1Count)) + 1 : fallback;
+}
+
+/**
  * Détermine le gagnant d'un match à partir des sets gagnés.
  * En cas d'égalité retourne null (à gérer par l'organisateur).
  */

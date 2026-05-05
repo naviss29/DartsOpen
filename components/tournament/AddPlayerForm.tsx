@@ -78,9 +78,12 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
           <input
             name="player_phone"
             type="tel"
-            placeholder="06 00 00 00 00"
+            placeholder="0612345678"
             className={inputCn}
           />
+          {state?.errors?.player_phone && (
+            <p className="mt-1 text-xs text-red-600">{state.errors.player_phone[0]}</p>
+          )}
         </div>
       </div>
 

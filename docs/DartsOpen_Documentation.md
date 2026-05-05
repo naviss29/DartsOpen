@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.4
+> Version : 0.6
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 6 — CI/CD + recette**
+> Statut : **Phase 6 — recette terminée, prêt pour merge main**
 
 ---
 
@@ -15,6 +15,8 @@
 | 0.2 | Avril 2026 | Phase 1 — Auth Supabase, CRUD tournois + manches, middleware, SQL schema |
 | 0.3 | Avril 2026 | Phase 2 — Joueurs, poules round-robin, matchs, scores temps réel, Supabase Realtime, NextMatchAlert |
 | 0.4 | Mai 2026 | Phase 6 — CI GitHub Actions, scoring modes (ELECTRONIC/TRADITIONAL), QR codes pré-tournoi, génération de poules adaptive, correctifs lint (10 erreurs/warnings), 63 tests |
+| 0.5 | Mai 2026 | Mise en production — Coolify sur Hetzner CX23 (Nuremberg), Traefik v3.6, diagnostic réseau Docker, URL production identifiée |
+| 0.6 | Mai 2026 | Phases finales complètes — élimination directe 1-poule, auto-avancement depuis score.ts, BracketLive avec Realtime + polling, redesign visuel bracket (SVG), createServiceClient, 77 tests |
 
 ---
 
@@ -56,7 +58,7 @@ Ce projet est porté par un pratiquant de fléchettes qui est également dévelo
 | Tests | Vitest + @testing-library/react | Runner rapide, compatible Next.js |
 | Containerisation | Docker + Docker Compose | Déploiement Coolify identique à FestManager |
 | CI/CD | GitHub Actions | Tests auto sur PR + deploy staging/prod |
-| Hébergement | Coolify (VPS Hostinger) | Infrastructure existante |
+| Hébergement | Coolify v4 sur Hetzner CX23 (Nuremberg) — 2 vCPU, 4 GB RAM | Infrastructure partagée FestManager + DartsOpen |
 
 ---
 
@@ -275,6 +277,13 @@ Mesures :
 | 11 | Supabase joins FK → tableaux en prod | En local TypeScript infère `player1` comme objet, en build prod strict il est inféré comme `{ id: any; player_name: any; }[]` (tableau) — `.id` échoue au type check | Normaliser après la requête : `player1: Array.isArray(m.player1) ? m.player1[0] : m.player1`. Faire cette normalisation une seule fois sur un tableau `normalizedMatches` et l'utiliser partout dans la page. Affecter **tous** les fichiers qui consomment des joins FK : pages, composants ET server actions |
 | 12 | `startTransition` avec server action → `VoidOrUndefinedOnly` | React attend `() => void` dans `startTransition` mais les server actions retournent `Promise<{ error? }>` — erreur TypeScript en prod | Wrapper avec `void` : `startTransition(() => { void maServerAction(...) })` |
 | 13 | `npm run build` non lancé avant merge main | Des erreurs TypeScript bloquent le build Coolify alors que le lint et les tests passent | Toujours lancer `npm run build` en local avant de merger sur `main` — le build strict TypeScript détecte des erreurs que le dev server ignore |
+| 14 | Confusion `i` / `l` dans l'URL Coolify sslip.io | L'URL générée contient un `i` (ex. `jjbi4wsvrzdf…`) mais la police du navigateur le fait ressembler à un `l` → "no available server" car aucun routeur Traefik ne correspond | Copier-coller l'URL depuis Coolify (General → Domains), ne jamais la retaper. En cas de "no available server" inexpliqué, vérifier l'URL exacte via `curl http://localhost:8080/api/http/routers` sur le serveur |
+| 15 | Conflit routeurs Traefik lors de redéploiements successifs | Plusieurs containers du même service tournent simultanément (Coolify crée le nouveau avant de supprimer l'ancien) → Traefik voit 2 containers avec le même nom de routeur → "Router defined multiple times" → routeur désactivé → "no available server" | Attendre que Coolify nettoie les anciens containers. Si le problème persiste, redémarrer `coolify-proxy` : `docker restart coolify-proxy`. Diagnostiquer via `docker logs coolify-proxy --since 5m` et l'API Traefik |
+| 16 | `output: standalone` incompatible avec `next start` | Coolify (Nixpacks) lance `next start` par défaut, mais `output: standalone` requiert `node .next/standalone/server.js` → crash au démarrage | Supprimer `output: "standalone"` de `next.config.ts` si Nixpacks est utilisé avec `next start` |
+| 17 | `revalidatePath` pendant le rendu d'un Server Component | Appeler `revalidatePath` dans une fonction Server Action invoquée depuis un Server Component au rendu déclenche l'erreur "revalidatePath during render is unsupported" | Supprimer les appels `revalidatePath` des actions appelées depuis le rendu (ex. `generateBracket`). Les routes dynamiques Next.js se re-rendent de toute façon à la prochaine navigation |
+| 18 | Server Action retournant `Promise<{error?}>` dans un `<form action>` | TypeScript exige `() => Promise<void>` pour les form actions. Une server action qui retourne `Promise<{error?}>` provoque l'erreur `VoidOrUndefinedOnly` | Envelopper dans une inline server action locale : `async function doAction() { "use server"; await maServerAction(id); }` puis passer `doAction` à `action={}` |
+| 19 | `next/image` — avertissement ratio hauteur/largeur | Utiliser `className="w-auto"` en combinaison avec un `width` prop explicite force `width: auto` via CSS → Next.js avertit que la hauteur est inconnue | Utiliser `className="w-20"` (valeur fixe) + `style={{ height: "auto" }}` pour laisser le navigateur calculer la hauteur proportionnellement |
+| 20 | Labels de tour incorrects sur bracket en cours de création | Utiliser `maxRound` (nombre de tours créés en DB) pour calculer `totalRounds` donne des labels erronés : "Finale" s'affiche quand 2 matchs restent car un seul tour existe | Calculer `totalRounds` depuis le 1er tour : `Math.round(Math.log2(r1Count)) + 1`. Ce calcul est stable même quand les tours suivants n'existent pas encore en base |
 
 ---
 
@@ -306,7 +315,15 @@ Mesures :
 | 20 | Mai 2026 | Recette Phase 6 — correctifs | proxy.ts (Next.js 16), entry_fee en euros→centimes (Zod transform), players_per_team, registration_mode ONLINE/ONSITE, player_names[], platform_fee_cents, fee_collected, page /activate (PayPal upfront), formulaire manche pré-rempli par type de jeu, section édition rétractable |
 | 21 | Mai 2026 | CI GitHub Actions | Workflows ci.yml (lint+tests+build sur push/PR develop+main) et deploy.yml (webhook Coolify sur push main). 4 erreurs lint corrigées (setState dans effect, apostrophes JSX, `<a>` → `<Link>`, `<img>` → `<Image>`). Règle eslint argsIgnorePattern ajoutée. 63 tests passants. |
 | 22 | Mai 2026 | Mise en ligne Coolify | Application créée dans Coolify v4 (Nixpacks, branche main, URL sslip.io HTTPS). 7 variables d'environnement configurées (Supabase + Stripe live + APP_URL). Webhook Stripe production créé (checkout.session.completed + account.updated). Token API Coolify `github-actions` (permission deploy). Secrets GitHub Actions ajoutés : COOLIFY_TOKEN + COOLIFY_WEBHOOK_URL. Migration 008_scoring_mode.sql à exécuter dans Supabase avant premier deploy. |
-| 23 | Mai 2026 | Correctifs build prod | Fix 1 : apiVersion Stripe `2025-03-31.basil` → `2026-04-22.dahlia` (SDK mis à jour). Fix 2 : normalisation Supabase FK joins (player1/player2/registrations) systématique dans live, score, pools, bracket pages + server actions bracket.ts/score.ts. Fix 3 : ScoreForm void-wrap startTransition (React VoidOrUndefinedOnly). Fix 4 : ci.yml actions v5 + Node.js 22. Build prod validé localement avant chaque merge main. |
+| 23 | Mai 2026 | Correctifs build prod | Fix 1 : apiVersion Stripe `2025-03-31.basil` → `2026-04-22.dahlia`. Fix 2 : normalisation Supabase FK joins (player1/player2/registrations) dans live, score, pools, bracket + server actions. Fix 3 : void-wrap startTransition (React VoidOrUndefinedOnly). Fix 4 : ci.yml actions v5 + Node.js 22. |
+| 24 | Mai 2026 | Diagnostic Traefik "no available server" | Serveur = Hetzner CX23 (IP 167.235.134.247), pas Hostinger. Aucun firewall appliqué. Conflit de routeurs causé par 2 containers simultanés lors des redéploiements successifs → router désactivé. API Traefik activée temporairement (`--api.insecure=true`) pour diagnostic. Services UP sur `10.0.1.10:3000`. Cause finale : URL visitée avec `l` au lieu de `i` (confusion police). URL correcte : `https://jjbi4wsvrzdf084d64m07se2.167.235.134.247.sslip.io`. |
+| 25 | Mai 2026 | Config Traefik durcie | Ajout `--providers.docker.network=coolify` et `--api.insecure=false` restauré dans `/data/coolify/proxy/docker-compose.yml`. |
+| 26 | Mai 2026 | Élimination directe 1-poule | Quand `nb_pools === 1` : page /pools affiche un message "Format élimination directe" + lien vers /bracket. `generateBracket` saute la vérification des poules et prend tous les joueurs PAID directement. `poolsPending = nb_pools === 1 ? false : pendingCount > 0`. |
+| 27 | Mai 2026 | Auto-avancement bracket depuis score.ts | `tryAdvanceBracket(tournamentId, bracketRound)` appelé à la fin de `confirmWinner` et `markWinnerDirect` pour les matchs de phases finales (`!pool_id && bracket_round != null`). Utilise `createServiceClient()` (bypass RLS) car la page score est publique. Crée le tour suivant si tous les matchs sont FINISHED, ou marque le tournoi FINISHED si c'était la finale. |
+| 28 | Mai 2026 | createServiceClient — client Supabase service role | `createServiceClient()` ajouté dans `lib/supabase/server.ts` pour les opérations server-side qui doivent bypasser le RLS (actions depuis pages publiques). Utilise `SUPABASE_SERVICE_ROLE_KEY`. |
+| 29 | Mai 2026 | BracketLive — temps réel + polling | `BracketLive` (dark theme) combine Supabase Realtime (`postgres_changes` sur `matches`) et un polling `setInterval` à 5 secondes. Le Realtime gère les mises à jour instantanées, le polling sert de filet de sécurité pour les nouveaux tours créés côté serveur qui ne déclenchent pas toujours un événement Realtime immédiat. |
+| 30 | Mai 2026 | Redesign visuel bracket — SVG connectors | `BracketView` et `BracketLive` redessinés avec connecteurs SVG entre les colonnes de tours. Chaque paire de matchs est reliée par 4 lignes : horizontale depuis match 0, verticale, horizontale depuis match 1, horizontale vers le match du tour suivant. Constantes : `CARD_H=72, CARD_W=220, CONN_W=48, BASE_SLOT=104`. |
+| 31 | Mai 2026 | roundLabel + computeTotalRounds extraits vers bracket.ts | Fonctions `roundLabel` et `computeTotalRounds` extraites dans `lib/utils/bracket.ts` (exportées et testées). Les composants `BracketView` et `BracketLive` les importent depuis ce module au lieu de dupliquer la logique. 77 tests passants. |
 
 ---
 
@@ -317,8 +334,9 @@ Mesures :
 - [x] Phase 2 — Scores temps réel (QR code, saisie mobile, Supabase Realtime)
 - [x] Phase 3 — Navigation dashboard + QR codes cibles et spectateurs
 - [x] Phase 4 — Inscriptions en ligne par équipe + paiement Stripe Connect
-- [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement)
-- [ ] Phase 6 — Pipeline de recette (staging Coolify, CI GitHub Actions)
+- [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement automatique, BracketLive temps réel)
+- [x] Phase 6 — Pipeline CI/CD (GitHub Actions lint+tests+build, Coolify production sur Hetzner) + recette validée
+- [ ] Phase 7 — Recette avec associations (tests terrain, domaine personnalisé)
 
 ---
 

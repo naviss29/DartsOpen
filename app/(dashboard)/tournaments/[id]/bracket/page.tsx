@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { generateBracket, advanceToNextRound } from "@/lib/actions/bracket";
 import { BracketView } from "@/components/tournament/BracketView";
 import Link from "next/link";
@@ -22,6 +22,9 @@ export default async function BracketPage({ params }: Props) {
     .single();
 
   if (!tournament) notFound();
+  if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
+    redirect(`/tournaments/${id}/pools`);
+  }
 
   // Matchs de bracket
   const { data: bracketMatches } = await supabase
@@ -44,7 +47,19 @@ export default async function BracketPage({ params }: Props) {
     .not("pool_id", "is", null)
     .neq("status", "FINISHED");
 
-  const poolsPending = (pendingPoolCount ?? 0) > 0;
+  // Format 1 poule = élimination directe : pas de phase de poule
+  const poolsPending = tournament.nb_pools === 1 ? false : (pendingPoolCount ?? 0) > 0;
+
+  // Tournoi à 1 seule poule : génération automatique dès que la poule est terminée
+  if (
+    tournament.nb_pools === 1 &&
+    tournament.status === "IN_PROGRESS" &&
+    !poolsPending &&
+    (bracketMatches ?? []).length === 0
+  ) {
+    const result = await generateBracket(id);
+    if (!result.error) redirect(`/tournaments/${id}/bracket`);
+  }
 
   // Supabase retourne les joins FK comme tableaux — on normalise en objets
   const normalizedMatches = (bracketMatches ?? []).map((m) => ({
@@ -69,6 +84,30 @@ export default async function BracketPage({ params }: Props) {
   const tournamentFinished =
     hasBracket && currentRoundMatches.length === 1 && currentRoundFinished;
 
+  // Élimination directe : auto-avancement au tour suivant dès que le tour est terminé
+  if (hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS") {
+    const { count: nextRoundExists } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("tournament_id", id)
+      .is("pool_id", null)
+      .eq("bracket_round", maxRound + 1);
+
+    if ((nextRoundExists ?? 0) === 0) {
+      const result = await advanceToNextRound(id, maxRound);
+      if (!result.error) redirect(`/tournaments/${id}/bracket`);
+    }
+  }
+
+  // Finale terminée : marquer le tournoi comme FINISHED
+  if (tournamentFinished && tournament.status === "IN_PROGRESS") {
+    await supabase
+      .from("tournaments")
+      .update({ status: "FINISHED" })
+      .eq("id", id)
+      .eq("association_id", user!.id);
+  }
+
   const winner = tournamentFinished
     ? currentRoundMatches[0].winner_id
     : null;
@@ -78,6 +117,12 @@ export default async function BracketPage({ params }: Props) {
         ? currentRoundMatches[0].player1?.player_name
         : currentRoundMatches[0].player2?.player_name)
     : null;
+
+  // Inline server actions (void) pour les formulaires — capturent id par closure
+  async function doGenerateBracket() {
+    "use server";
+    await generateBracket(id);
+  }
 
   return (
     <div className="space-y-6">
@@ -114,32 +159,20 @@ export default async function BracketPage({ params }: Props) {
           </p>
         </div>
 
-        {/* Bouton générer / tour suivant */}
-        {tournament.status === "IN_PROGRESS" && !tournamentFinished && (
+        {/* Bouton générer les phases finales (multi-poules uniquement) */}
+        {tournament.status === "IN_PROGRESS" && !hasBracket && (
           <div className="flex flex-col items-end gap-2">
-            {!hasBracket ? (
-              <form action={async () => { await generateBracket(id); }}>
-                <button
-                  type="submit"
-                  disabled={poolsPending}
-                  title={poolsPending ? "Des matchs de poules sont encore en cours" : ""}
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Générer les phases finales
-                </button>
-              </form>
-            ) : currentRoundFinished ? (
-              <form action={async () => { await advanceToNextRound(id, maxRound); }}>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-                >
-                  Lancer le tour suivant →
-                </button>
-              </form>
-            ) : null}
-
-            {poolsPending && !hasBracket && (
+            <form action={doGenerateBracket}>
+              <button
+                type="submit"
+                disabled={poolsPending}
+                title={poolsPending ? "Des matchs de poules sont encore en cours" : ""}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Générer les phases finales
+              </button>
+            </form>
+            {poolsPending && (
               <p className="text-xs text-orange-600">
                 {pendingPoolCount} match(s) de poule encore en cours
               </p>
@@ -170,6 +203,8 @@ export default async function BracketPage({ params }: Props) {
           <p className="text-gray-500">
             {poolsPending
               ? "Terminez tous les matchs de poules pour débloquer les phases finales."
+              : tournament.nb_pools === 1
+              ? "Génération des phases finales en cours…"
               : tournament.status !== "IN_PROGRESS"
               ? "Démarrez le tournoi pour accéder aux phases finales."
               : "Cliquez sur « Générer les phases finales » pour créer le tableau."}

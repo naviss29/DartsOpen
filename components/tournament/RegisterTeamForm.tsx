@@ -31,12 +31,18 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       ? (fd.get("team_name") as string)
       : playerNames[0];
 
+    const phone = (fd.get("phone") as string).trim();
+    if (phone && !/^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(phone)) {
+      setError("Numéro de téléphone invalide (ex : 0612345678).");
+      return;
+    }
+
     startTransition(async () => {
       const result = await createRegistration(
         tournamentId,
         teamName,
         fd.get("contact_email") as string,
-        (fd.get("phone") as string) || null,
+        phone || null,
         playerNames
       );
       if (result?.error) setError(result.error);
@@ -107,7 +113,8 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
         <input
           name="phone"
           type="tel"
-          placeholder="06 00 00 00 00"
+          placeholder="0612345678"
+          pattern="^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$"
           className={inputCn}
         />
       </div>
