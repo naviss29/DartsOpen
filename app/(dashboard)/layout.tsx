@@ -72,7 +72,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
               src="/logoSEP.svg"
               alt="Stêr Eo Production"
               width={80}
-              height={32}
+              height={0}
+              priority
               style={{ height: "auto" }}
               className="w-20 mx-auto opacity-60 hover:opacity-100 transition-opacity"
             />
