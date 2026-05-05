@@ -1,11 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { requestPasswordReset } from "@/lib/actions/auth";
 import Link from "next/link";
 
 export function ForgotPasswordForm() {
   const [state, action, isPending] = useActionState(requestPasswordReset, undefined);
+  const searchParams = useSearchParams();
+  const isExpired = searchParams.get("error") === "expired";
 
   if (state?.success) {
     return (
@@ -22,6 +25,11 @@ export function ForgotPasswordForm() {
 
   return (
     <form action={action} className="space-y-5">
+      {isExpired && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+          Le lien de réinitialisation a expiré. Saisissez votre email pour en recevoir un nouveau.
+        </div>
+      )}
       {state?.error && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {state.error}
