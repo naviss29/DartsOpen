@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 interface BracketMatch {
@@ -17,6 +17,11 @@ interface Props {
   tournamentId: string;
   initialMatches: BracketMatch[];
 }
+
+const CARD_H = 72;
+const CARD_W = 220;
+const CONN_W = 48;
+const BASE_SLOT = CARD_H + 32;
 
 function roundLabel(round: number, maxRound: number): string {
   const fromEnd = maxRound - round;
@@ -70,17 +75,17 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
   if (matches.length === 0) return null;
 
   const maxRound = Math.max(...matches.map((m) => m.bracket_round));
+  const r1Count = matches.filter((m) => m.bracket_round === 1).length;
+  const totalH = r1Count * BASE_SLOT;
   const rounds = Array.from({ length: maxRound }, (_, i) => i + 1);
 
-  const winner = (() => {
-    const final = matches.find((m) => m.bracket_round === maxRound);
-    if (final?.status === "FINISHED" && final.winner_id) {
-      return final.winner_id === final.player1?.id
-        ? final.player1?.player_name
-        : final.player2?.player_name;
-    }
-    return null;
-  })();
+  const finalMatch = matches.find((m) => m.bracket_round === maxRound);
+  const winner =
+    finalMatch?.status === "FINISHED" && finalMatch.winner_id
+      ? finalMatch.winner_id === finalMatch.player1?.id
+        ? finalMatch.player1?.player_name
+        : finalMatch.player2?.player_name
+      : null;
 
   return (
     <div className="space-y-4">
@@ -97,28 +102,69 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
       )}
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 overflow-x-auto">
-        <div className="flex gap-6 min-w-max">
-          {rounds.map((round) => {
-            const roundMatches = matches
-              .filter((m) => m.bracket_round === round)
-              .sort((a, b) => a.bracket_position - b.bracket_position);
-
-            return (
-              <div key={round} className="space-y-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider text-center px-2">
-                  {roundLabel(round, maxRound)}
-                </p>
+        <div className="pb-2">
+          {/* Round labels */}
+          <div className="flex mb-4">
+            {rounds.map((round, i) => (
+              <Fragment key={round}>
+                {i > 0 && <div style={{ width: CONN_W }} />}
                 <div
-                  className="flex flex-col gap-3"
-                  style={{ justifyContent: roundMatches.length === 1 ? "center" : "space-around" }}
+                  style={{ width: CARD_W }}
+                  className="text-xs font-semibold text-gray-500 uppercase tracking-widest text-center"
                 >
-                  {roundMatches.map((match) => (
-                    <BracketCard key={match.id} match={match} />
-                  ))}
+                  {roundLabel(round, maxRound)}
                 </div>
-              </div>
-            );
-          })}
+              </Fragment>
+            ))}
+          </div>
+
+          {/* Bracket body */}
+          <div className="flex items-start">
+            {rounds.map((round, roundIdx) => {
+              const roundMatches = matches
+                .filter((m) => m.bracket_round === round)
+                .sort((a, b) => a.bracket_position - b.bracket_position);
+
+              const slotH = BASE_SLOT * Math.pow(2, round - 1);
+              const prevSlotH = slotH / 2;
+
+              return (
+                <Fragment key={round}>
+                  {/* SVG connector */}
+                  {roundIdx > 0 && (
+                    <svg width={CONN_W} height={totalH} style={{ flexShrink: 0 }} aria-hidden="true">
+                      {roundMatches.map((_, idx) => {
+                        const cy  = idx * slotH + slotH / 2;
+                        const py0 = (2 * idx) * prevSlotH + prevSlotH / 2;
+                        const py1 = (2 * idx + 1) * prevSlotH + prevSlotH / 2;
+                        const mx  = CONN_W / 2;
+                        return (
+                          <g key={idx}>
+                            <line x1={0} y1={py0} x2={mx} y2={py0} stroke="#374151" strokeWidth={1.5} />
+                            <line x1={mx} y1={py0} x2={mx} y2={py1} stroke="#374151" strokeWidth={1.5} />
+                            <line x1={0} y1={py1} x2={mx} y2={py1} stroke="#374151" strokeWidth={1.5} />
+                            <line x1={mx} y1={cy} x2={CONN_W} y2={cy} stroke="#374151" strokeWidth={1.5} />
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  )}
+
+                  {/* Match column */}
+                  <div style={{ width: CARD_W, height: totalH, position: "relative", flexShrink: 0 }}>
+                    {roundMatches.map((match, idx) => {
+                      const top = idx * slotH + (slotH - CARD_H) / 2;
+                      return (
+                        <div key={match.id} style={{ position: "absolute", top, left: 0, right: 0 }}>
+                          <BracketCard match={match} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -130,46 +176,71 @@ function BracketCard({ match }: { match: BracketMatch }) {
 
   if (isBye) {
     return (
-      <div className="w-52 rounded-lg border border-dashed border-gray-600 bg-gray-700/40 p-3 text-center">
-        <p className="text-xs text-gray-500">BYE</p>
-        <p className="text-sm font-medium text-gray-300 mt-1">{match.player1?.player_name}</p>
+      <div className="rounded-lg border border-dashed border-gray-600 bg-gray-700/40 px-3 py-2.5">
+        <p className="text-xs text-gray-500 mb-0.5">BYE</p>
+        <p className="text-sm font-semibold text-gray-300">{match.player1?.player_name}</p>
       </div>
     );
   }
 
-  const borderColor = {
-    IN_PROGRESS: "border-green-500/50 bg-green-500/5",
-    FINISHED: "border-gray-600 bg-gray-700/30",
-    PENDING: "border-gray-700 bg-gray-800/50",
-  }[match.status] ?? "border-gray-700 bg-gray-800/50";
+  const hasResult = match.winner_id !== null;
+  const accentBorder =
+    match.status === "IN_PROGRESS" ? "border-l-green-500" : "border-l-transparent";
 
   return (
-    <div className={`w-52 rounded-lg border p-3 space-y-2 ${borderColor}`}>
+    <div className={`rounded-lg border border-gray-600 bg-gray-700 overflow-hidden border-l-4 ${accentBorder}`}>
       <PlayerRow
         name={match.player1?.player_name ?? "?"}
-        isWinner={match.winner_id === match.player1?.id}
-        isFinished={match.status === "FINISHED"}
+        isWinner={hasResult && match.winner_id === match.player1?.id}
+        isLoser={hasResult && match.winner_id !== match.player1?.id}
+        inProgress={match.status === "IN_PROGRESS"}
       />
-      <div className="border-t border-gray-700" />
+      <div className="border-t border-gray-600" />
       <PlayerRow
         name={match.player2?.player_name ?? "?"}
-        isWinner={match.winner_id === match.player2?.id}
-        isFinished={match.status === "FINISHED"}
+        isWinner={hasResult && match.winner_id === match.player2?.id}
+        isLoser={hasResult && match.winner_id !== match.player2?.id}
+        inProgress={match.status === "IN_PROGRESS"}
       />
-      {match.status === "IN_PROGRESS" && (
-        <p className="text-center text-xs text-green-400 font-medium animate-pulse">EN COURS</p>
-      )}
     </div>
   );
 }
 
-function PlayerRow({ name, isWinner, isFinished }: { name: string; isWinner: boolean; isFinished: boolean }) {
+function PlayerRow({
+  name,
+  isWinner,
+  isLoser,
+  inProgress,
+}: {
+  name: string;
+  isWinner: boolean;
+  isLoser: boolean;
+  inProgress: boolean;
+}) {
   return (
-    <div className={`flex items-center gap-2 text-sm ${
-      isWinner ? "text-green-400 font-semibold" : isFinished ? "text-gray-500" : "text-gray-200"
-    }`}>
-      {isWinner && <span className="text-green-400 text-xs">✓</span>}
-      <span className="truncate">{name}</span>
+    <div
+      className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-green-500/10" : ""}`}
+      style={{ height: 36 }}
+    >
+      <span
+        className={`text-sm truncate ${
+          isWinner
+            ? "text-green-400 font-semibold"
+            : isLoser
+            ? "text-gray-500"
+            : inProgress
+            ? "text-gray-100 font-medium"
+            : "text-gray-200"
+        }`}
+      >
+        {name}
+      </span>
+      {isWinner && (
+        <span className="flex-shrink-0 text-xs font-bold text-green-400">✓</span>
+      )}
+      {inProgress && !isWinner && !isLoser && (
+        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+      )}
     </div>
   );
 }
