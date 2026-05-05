@@ -2,7 +2,6 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { seedBracket } from "@/lib/utils/bracket";
 import { computePoolStandings } from "@/lib/utils/pools";
 
@@ -168,8 +167,6 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
     }
   }
 
-  revalidatePath(`/tournaments/${tournamentId}/bracket`);
-  revalidatePath(`/tournaments/${tournamentId}`);
   return {};
 }
 
@@ -246,7 +243,5 @@ export async function advanceToNextRound(
     }
   }
 
-  revalidatePath(`/tournaments/${tournamentId}/bracket`);
-  revalidatePath(`/t/${tournamentId}/live`);
   return {};
 }
