@@ -73,7 +73,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
               alt="Stêr Eo Production"
               width={80}
               height={32}
-              className="h-8 w-auto mx-auto opacity-60 hover:opacity-100 transition-opacity"
+              style={{ height: "auto" }}
+              className="w-20 mx-auto opacity-60 hover:opacity-100 transition-opacity"
             />
           </div>
         </div>
