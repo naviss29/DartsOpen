@@ -1,23 +1,27 @@
-name: Deploy → Production
-
-# Désactivé : Coolify redéploie automatiquement sur push main via GitHub polling.
-# Réactiver si Coolify est accessible publiquement sur son port API (8000).
-# on:
-#   push:
-#     branches: [main]
+name: Deploy
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [main, develop]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
-    name: Déploiement Coolify
+    name: Deploy vers Coolify
     runs-on: ubuntu-latest
-
     steps:
-      - name: Déclencher le déploiement Coolify
+      - name: Deploy staging (develop)
+        if: github.ref == 'refs/heads/develop'
         run: |
-          curl --silent --fail -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-            -H "Content-Type: application/json"
-        timeout-minutes: 2
+          curl --silent --show-error --fail \
+            -X GET "${{ secrets.COOLIFY_STAGING_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+
+      - name: Deploy prod (main)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          curl --silent --show-error --fail \
+            -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
