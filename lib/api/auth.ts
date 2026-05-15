@@ -53,7 +53,7 @@ export type SterUser = {
 };
 
 export async function getUser(): Promise<SterUser | null> {
-  let token = await getServerToken();
+  const token = await getServerToken();
   if (!token) return null;
 
   let res = await apiFetch('/api/auth/me', {}, token);

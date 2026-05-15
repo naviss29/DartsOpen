@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { apiFetch } from "@/lib/api/client";
-import { setAuthCookies, clearAuthCookies, getServerToken } from "@/lib/api/auth";
+import { setAuthCookies, clearAuthCookies } from "@/lib/api/auth";
 import { cookies } from "next/headers";
 
 const RegisterSchema = z.object({

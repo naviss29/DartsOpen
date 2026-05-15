@@ -27,30 +27,30 @@ const BASE_SLOT = CARD_H + 32;
 export function BracketLive({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<BracketMatch[]>(initialMatches);
 
-  const fetchMatches = (client: ReturnType<typeof createClient>) =>
-    client
-      .from("matches")
-      .select(`
-        id, bracket_round, bracket_position, status, winner_id,
-        player1:registrations!matches_player1_id_fkey(id, player_name),
-        player2:registrations!matches_player2_id_fkey(id, player_name)
-      `)
-      .eq("tournament_id", tournamentId)
-      .is("pool_id", null)
-      .order("bracket_round")
-      .order("bracket_position")
-      .then(({ data }) => {
-        if (data) {
-          setMatches(data.map((m) => ({
-            ...m,
-            player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-            player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-          })) as BracketMatch[]);
-        }
-      });
-
   useEffect(() => {
     const supabase = createClient();
+
+    const fetchMatches = () =>
+      supabase
+        .from("matches")
+        .select(`
+          id, bracket_round, bracket_position, status, winner_id,
+          player1:registrations!matches_player1_id_fkey(id, player_name),
+          player2:registrations!matches_player2_id_fkey(id, player_name)
+        `)
+        .eq("tournament_id", tournamentId)
+        .is("pool_id", null)
+        .order("bracket_round")
+        .order("bracket_position")
+        .then(({ data }) => {
+          if (data) {
+            setMatches(data.map((m) => ({
+              ...m,
+              player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
+              player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
+            })) as BracketMatch[]);
+          }
+        });
 
     // Realtime — mises à jour immédiates sur changement de match
     const channel = supabase
@@ -58,12 +58,12 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${tournamentId}` },
-        () => fetchMatches(supabase)
+        () => fetchMatches()
       )
       .subscribe();
 
     // Polling 5s — filet de sécurité pour les nouveaux tours créés côté serveur
-    const poll = setInterval(() => fetchMatches(supabase), 5000);
+    const poll = setInterval(() => fetchMatches(), 5000);
 
     return () => {
       supabase.removeChannel(channel);
