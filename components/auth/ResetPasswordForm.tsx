@@ -3,11 +3,12 @@
 import { useActionState } from "react";
 import { updatePassword } from "@/lib/actions/auth";
 
-export function ResetPasswordForm() {
+export function ResetPasswordForm({ token }: { token: string }) {
   const [state, action, isPending] = useActionState(updatePassword, undefined);
 
   return (
     <form action={action} className="space-y-5">
+      <input type="hidden" name="token" value={token} />
       {state?.error && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {state.error}

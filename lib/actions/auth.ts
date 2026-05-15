@@ -1,8 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { apiFetch } from "@/lib/api/client";
+import { setAuthCookies, clearAuthCookies, getServerToken } from "@/lib/api/auth";
+import { cookies } from "next/headers";
 
 const RegisterSchema = z.object({
   name: z.string().trim().min(2, "Le nom doit contenir au moins 2 caractères."),
@@ -13,6 +15,18 @@ const RegisterSchema = z.object({
 const LoginSchema = z.object({
   email: z.string().trim().email("Email invalide."),
   password: z.string().min(1, "Mot de passe requis."),
+});
+
+const ForgotPasswordSchema = z.object({
+  email: z.string().trim().email("Email invalide."),
+});
+
+const ResetPasswordSchema = z.object({
+  password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères."),
+  confirm: z.string(),
+}).refine((d) => d.password === d.confirm, {
+  message: "Les mots de passe ne correspondent pas.",
+  path: ["confirm"],
 });
 
 export type AuthState = {
@@ -33,26 +47,23 @@ export async function register(prevState: AuthState, formData: FormData): Promis
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const supabase = await createClient();
+  const verifyRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verified`;
 
-  const { data, error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
-    options: {
-      data: { name: parsed.data.name },
-    },
+  const res = await apiFetch('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      verifyRedirectUri,
+    }),
   });
 
-  if (error) {
-    return { error: error.message };
+  if (!res.ok && res.status !== 201) {
+    const data = await res.json().catch(() => ({})) as Record<string, string>;
+    return { error: data.error ?? "Une erreur est survenue." };
   }
 
-  // Session nulle = confirmation email requise par Supabase
-  if (!data.session) {
-    return { success: true, email: parsed.data.email };
-  }
-
-  redirect("/dashboard");
+  return { success: true, email: parsed.data.email };
 }
 
 export async function login(prevState: AuthState, formData: FormData): Promise<AuthState> {
@@ -65,67 +76,79 @@ export async function login(prevState: AuthState, formData: FormData): Promise<A
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const supabase = await createClient();
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email: parsed.data.email,
-    password: parsed.data.password,
+  const res = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password }),
   });
 
-  if (error) {
+  if (!res.ok) {
     return { error: "Identifiants incorrects." };
   }
 
-  redirect("/dashboard");
+  const data = await res.json() as { token: string; refresh_token: string };
+  await setAuthCookies(data.token, data.refresh_token);
+
+  redirect('/dashboard');
 }
 
 export async function logout() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect("/login");
-}
+  const store = await cookies();
+  const refreshToken = store.get('ster_refresh_token')?.value;
 
-const ForgotPasswordSchema = z.object({
-  email: z.string().trim().email("Email invalide."),
-});
+  if (refreshToken) {
+    await apiFetch('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }).catch(() => {});
+  }
+
+  await clearAuthCookies();
+  redirect('/login');
+}
 
 export async function requestPasswordReset(prevState: AuthState, formData: FormData): Promise<AuthState> {
   const parsed = ForgotPasswordSchema.safeParse({ email: formData.get("email") });
+
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const supabase = await createClient();
-  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/reset-password`;
+  await apiFetch('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: parsed.data.email,
+      resetRedirectBaseUrl: process.env.NEXT_PUBLIC_APP_URL,
+    }),
+  }).catch(() => {});
 
-  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, { redirectTo });
-
-  // On retourne toujours success pour ne pas révéler si l'email existe
-  if (error) console.error("resetPasswordForEmail:", error.message);
   return { success: true, email: parsed.data.email };
 }
-
-const ResetPasswordSchema = z.object({
-  password: z.string().min(8, "Le mot de passe doit contenir au moins 8 caractères."),
-  confirm: z.string(),
-}).refine((d) => d.password === d.confirm, {
-  message: "Les mots de passe ne correspondent pas.",
-  path: ["confirm"],
-});
 
 export async function updatePassword(prevState: AuthState, formData: FormData): Promise<AuthState> {
   const parsed = ResetPasswordSchema.safeParse({
     password: formData.get("password"),
     confirm: formData.get("confirm"),
   });
+
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  const token = (formData.get("token") as string) ?? "";
 
-  if (error) return { error: "Impossible de mettre à jour le mot de passe. Le lien a peut-être expiré." };
+  if (!token) {
+    return { error: "Token manquant. Veuillez utiliser le lien reçu par email." };
+  }
 
-  redirect("/dashboard");
+  const res = await apiFetch('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password: parsed.data.password }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({})) as Record<string, string>;
+    return { error: data.error ?? "Impossible de mettre à jour le mot de passe. Le lien a peut-être expiré." };
+  }
+
+  redirect('/login?reset=success');
 }

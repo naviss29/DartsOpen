@@ -1,17 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
-import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/api/auth";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data: association } = await supabase
-    .from("associations")
-    .select("name")
-    .eq("id", user?.id)
-    .single();
+  const user = await getUser();
+  if (!user) redirect('/login');
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -21,7 +16,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <Link href="/dashboard" className="text-xl font-bold text-gray-900">
             🎯 DartsOpen
           </Link>
-          <p className="mt-1 text-xs text-gray-500 truncate">{association?.name ?? "Association"}</p>
+          <p className="mt-1 text-xs text-gray-500 truncate">{user.email}</p>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
