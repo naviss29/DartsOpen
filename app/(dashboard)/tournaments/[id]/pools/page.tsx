@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 import { PrintButton } from "@/components/tournament/PrintButton";
+import { apiGetTournament, apiListPools, apiListRegistrations } from "@/lib/api/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -10,55 +10,45 @@ interface Props { params: Promise<{ id: string }> }
 
 export const metadata: Metadata = { title: "Poules — DartsOpen" };
 
+type Tournament = {
+  id: string;
+  name: string;
+  status: string;
+  nb_pools: number;
+  nb_boards: number;
+  players_per_team: number;
+};
+
+type PoolMatch = {
+  id: string;
+  board_number: number;
+  status: string;
+  player1: { id: string; player_name: string };
+  player2: { id: string; player_name: string };
+};
+
+type Pool = {
+  id: string;
+  name: string;
+  players: { id: string; player_name: string }[];
+  matches: PoolMatch[];
+};
+
 export default async function PoolsPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, status, nb_pools, nb_boards, players_per_team")
-    .eq("id", id)
-    .eq("association_id", user!.id)
-    .single();
+  const [tournament, pools, registrations] = await Promise.all([
+    apiGetTournament(id) as Promise<Tournament | null>,
+    apiListPools(id) as Promise<Pool[]>,
+    apiListRegistrations(id, "PAID") as Promise<{ id: string }[]>,
+  ]);
 
   if (!tournament) notFound();
 
-  const { data: pools } = await supabase
-    .from("pools")
-    .select(`
-      id, name,
-      pool_players(
-        registration_id,
-        registrations(player_name)
-      )
-    `)
-    .eq("tournament_id", id)
-    .order("name");
-
-  const { data: matches } = await supabase
-    .from("matches")
-    .select(`
-      id, board_number, status,
-      player1:registrations!matches_player1_id_fkey(player_name),
-      player2:registrations!matches_player2_id_fkey(player_name),
-      pool_id
-    `)
-    .eq("tournament_id", id)
-    .order("board_number")
-    .order("created_at");
-
-  const { count: playerCount } = await supabase
-    .from("registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", id)
-    .eq("status", "PAID");
-
-  const hasPools = (pools?.length ?? 0) > 0;
-  const totalPlayers = (playerCount ?? 0) * tournament.players_per_team;
-  const registrationCount = playerCount ?? 0;
+  const hasPools = pools.length > 0;
+  const registrationCount = registrations.length;
+  const totalPlayers = registrationCount * tournament.players_per_team;
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
-  // Format 1 poule = élimination directe : pas de génération de poule
   const canGenerate = tournament.status === "OPEN" && registrationCount >= 2 && tournament.nb_pools > 1;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -77,7 +67,6 @@ export default async function PoolsPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb + onglets */}
       <div className="space-y-3">
         <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
@@ -137,7 +126,6 @@ export default async function PoolsPage({ params }: Props) {
         )}
       </div>
 
-      {/* QR codes cibles */}
       {showQRCodes && (
         <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -164,7 +152,6 @@ export default async function PoolsPage({ params }: Props) {
               </div>
             ))}
 
-            {/* QR spectateurs — à imprimer et afficher en salle */}
             {spectatorQR && (
               <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-green-200 bg-green-50 p-4 text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -178,7 +165,6 @@ export default async function PoolsPage({ params }: Props) {
       )}
 
       {tournament.nb_pools === 1 ? (
-        /* Format élimination directe : pas de phase de poule */
         ["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
           <div className="rounded-xl bg-green-50 border border-green-200 p-10 text-center space-y-3">
             <p className="text-green-800 font-semibold">Format élimination directe</p>
@@ -211,50 +197,45 @@ export default async function PoolsPage({ params }: Props) {
         </div>
       ) : (
         <div className="space-y-6">
-          {pools?.map((pool) => {
-            const poolMatches = matches?.filter((m) => m.pool_id === pool.id) ?? [];
-            return (
-              <div key={pool.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                  <h2 className="font-semibold text-gray-900">{pool.name}</h2>
-                  <span className="text-xs text-gray-500">
-                    {tournament.players_per_team > 1
-                      ? `${pool.pool_players.length} équipes (${pool.pool_players.length * tournament.players_per_team} joueurs)`
-                      : `${pool.pool_players.length} joueurs`
-                    } · {poolMatches.length} matchs
-                  </span>
+          {pools.map((pool) => (
+            <div key={pool.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900">{pool.name}</h2>
+                <span className="text-xs text-gray-500">
+                  {tournament.players_per_team > 1
+                    ? `${pool.players.length} équipes (${pool.players.length * tournament.players_per_team} joueurs)`
+                    : `${pool.players.length} joueurs`
+                  } · {pool.matches.length} matchs
+                </span>
+              </div>
+
+              <div className="p-5 grid md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Joueurs</p>
+                  <ul className="space-y-1">
+                    {pool.players.map((p) => (
+                      <li key={p.id} className="text-sm text-gray-700">{p.player_name}</li>
+                    ))}
+                  </ul>
                 </div>
 
-                <div className="p-5 grid md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Joueurs</p>
-                    <ul className="space-y-1">
-                      {pool.pool_players.map((pp) => (
-                        <li key={pp.registration_id} className="text-sm text-gray-700">
-                          {(pp.registrations as Array<{ player_name: string }>)[0]?.player_name}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Matchs</p>
-                    <ul className="space-y-1">
-                      {poolMatches.map((m) => (
-                        <li key={m.id} className="text-sm flex items-center gap-2">
-                          <span className="text-xs text-gray-400 w-16">Cible {m.board_number}</span>
-                          <span className="text-gray-700">
-                            {(m.player1 as Array<{ player_name: string }>)[0]?.player_name} vs {(m.player2 as Array<{ player_name: string }>)[0]?.player_name}
-                          </span>
-                          <StatusDot status={m.status} />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Matchs</p>
+                  <ul className="space-y-1">
+                    {pool.matches.map((m) => (
+                      <li key={m.id} className="text-sm flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-16">Cible {m.board_number}</span>
+                        <span className="text-gray-700">
+                          {m.player1.player_name} vs {m.player2.player_name}
+                        </span>
+                        <StatusDot status={m.status} />
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>

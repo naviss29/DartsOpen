@@ -1,38 +1,38 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { RegisterTeamForm } from "@/components/tournament/RegisterTeamForm";
+import { apiGetTournamentPublic } from "@/lib/api/tournament";
 import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }>; searchParams: Promise<{ cancelled?: string }> }
 
 export const metadata: Metadata = { title: "Inscription — DartsOpen" };
 
+type Tournament = {
+  id: string;
+  name: string;
+  date: string;
+  location: string;
+  entry_fee: number;
+  max_players: number;
+  players_per_team: number;
+  registration_mode: string;
+  status: string;
+  registered_count: number;
+};
+
 export default async function RegisterPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { cancelled } = await searchParams;
-  const supabase = await createClient();
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, date, location, entry_fee, max_players, players_per_team, registration_mode, status")
-    .eq("id", id)
-    .eq("status", "OPEN")
-    .single();
+  const tournament = await apiGetTournamentPublic(id) as Tournament | null;
+  if (!tournament || tournament.status !== "OPEN") notFound();
 
-  if (!tournament) notFound();
-
-  const { count } = await supabase
-    .from("registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", id)
-    .eq("status", "PAID");
-
-  const isFull = (count ?? 0) * tournament.players_per_team >= tournament.max_players;
+  const count = tournament.registered_count;
+  const isFull = count * tournament.players_per_team >= tournament.max_players;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-6">
-        {/* En-tête */}
         <div className="text-center space-y-2">
           <p className="text-green-400 text-sm font-medium">🎯 DartsOpen</p>
           <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
@@ -41,7 +41,7 @@ export default async function RegisterPage({ params, searchParams }: Props) {
             📍 {tournament.location}
           </p>
           <p className="text-gray-300 text-sm">
-            {(count ?? 0) * tournament.players_per_team} / {tournament.max_players} joueurs inscrits
+            {count * tournament.players_per_team} / {tournament.max_players} joueurs inscrits
           </p>
           <p className="text-gray-400 text-sm">
             👥 {tournament.players_per_team} joueur{tournament.players_per_team > 1 ? "s" : ""} par équipe

@@ -1,25 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { computePoolStandings } from "@/lib/utils/pools";
 
-interface PoolPlayer {
-  registration_id: string;
-  registrations: { player_name: string };
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
 
 interface Pool {
   id: string;
   name: string;
-  pool_players: PoolPlayer[];
+  players: { id: string; player_name: string }[];
 }
 
 interface FinishedMatch {
   player1_id: string;
   player2_id: string;
   winner_id: string | null;
-  pool_id: string | null;
+  pool_id: string;
 }
 
 interface Props {
@@ -28,34 +25,27 @@ interface Props {
   finishedMatches: FinishedMatch[];
 }
 
+async function fetchFinishedPoolMatches(tournamentId: string): Promise<FinishedMatch[]> {
+  const res = await fetch(`${API_URL}/api/public/tournaments/${tournamentId}/matches`, {
+    headers: { "X-Organization-Slug": ORG_SLUG },
+  });
+  if (!res.ok) return [];
+  const all = await res.json() as Array<{ player1_id: string; player2_id: string; winner_id: string | null; pool_id: string | null; status: string }>;
+  return all
+    .filter((m) => m.pool_id !== null && m.status === "FINISHED")
+    .map((m) => ({ player1_id: m.player1_id, player2_id: m.player2_id, winner_id: m.winner_id, pool_id: m.pool_id as string }));
+}
+
 export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatches }: Props) {
   const [finishedMatches, setFinishedMatches] = useState(initialMatches);
 
   useEffect(() => {
-    const supabase = createClient();
+    const poll = setInterval(async () => {
+      const next = await fetchFinishedPoolMatches(tournamentId);
+      setFinishedMatches(next);
+    }, 5000);
 
-    const channel = supabase
-      .channel(`scoreboard-${tournamentId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "matches",
-          filter: `tournament_id=eq.${tournamentId}`,
-        },
-        () => {
-          supabase
-            .from("matches")
-            .select("player1_id, player2_id, winner_id, pool_id")
-            .eq("tournament_id", tournamentId)
-            .eq("status", "FINISHED")
-            .then(({ data }) => { if (data) setFinishedMatches(data); });
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    return () => clearInterval(poll);
   }, [tournamentId]);
 
   return (
@@ -69,17 +59,17 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
           const poolMatches = finishedMatches.filter((m) => m.pool_id === pool.id);
 
           const standings = computePoolStandings(
-            pool.pool_players.map((pp) => {
-              const wins = poolMatches.filter((m) => m.winner_id === pp.registration_id).length;
+            pool.players.map((p) => {
+              const wins = poolMatches.filter((m) => m.winner_id === p.id).length;
               const losses = poolMatches.filter(
                 (m) =>
-                  (m.player1_id === pp.registration_id || m.player2_id === pp.registration_id) &&
+                  (m.player1_id === p.id || m.player2_id === p.id) &&
                   m.winner_id !== null &&
-                  m.winner_id !== pp.registration_id
+                  m.winner_id !== p.id
               ).length;
               return {
-                registration_id: pp.registration_id,
-                player_name: pp.registrations.player_name,
+                registration_id: p.id,
+                player_name: p.player_name,
                 wins,
                 losses,
                 sets_won: wins,

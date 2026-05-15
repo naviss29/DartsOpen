@@ -25,6 +25,7 @@ interface Props {
   match: Match;
   rounds: Round[];
   scoringMode: "ELECTRONIC" | "TRADITIONAL";
+  tournamentId: string;
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -33,20 +34,20 @@ const GAME_LABELS: Record<string, string> = {
 const ENTRY_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Double", TRIPLE: "Triple" };
 const FINISH_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Double", TRIPLE: "Triple", MASTER: "Master" };
 
-export function ScoreForm({ match, rounds, scoringMode }: Props) {
+export function ScoreForm({ match, rounds, scoringMode, tournamentId }: Props) {
   const sets = [...match.match_sets].sort((a, b) => a.round_order - b.round_order);
 
   if (scoringMode === "TRADITIONAL") {
-    return <TraditionalScoreForm match={match} sets={sets} rounds={rounds} />;
+    return <TraditionalScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />;
   }
 
-  return <ElectronicScoreForm match={match} sets={sets} rounds={rounds} />;
+  return <ElectronicScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />;
 }
 
 /* ─────────────────────────────────────────────
    Mode ÉLECTRONIQUE
 ───────────────────────────────────────────── */
-function ElectronicScoreForm({ match, sets, rounds }: { match: Match; sets: MatchSet[]; rounds: Round[] }) {
+function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string }) {
   const [isPending, startTransition] = useTransition();
   const [side, setSide] = useState<1 | 2 | null>(null);
 
@@ -119,14 +120,14 @@ function ElectronicScoreForm({ match, sets, rounds }: { match: Match; sets: Matc
                   <div className="flex gap-2">
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(() => void confirmWinner(set.id, side))}
+                      onClick={() => startTransition(() => void confirmWinner(set.id, side, tournamentId))}
                       className="flex-1 rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60 transition-colors"
                     >
                       ✓ Confirmer
                     </button>
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(() => void disputeResult(set.id))}
+                      onClick={() => startTransition(() => void disputeResult(set.id, tournamentId))}
                       className="rounded-lg border border-red-700 text-red-400 px-4 py-2.5 text-sm font-semibold hover:bg-red-900/20 disabled:opacity-60 transition-colors"
                     >
                       Contester
@@ -165,7 +166,7 @@ function ElectronicScoreForm({ match, sets, rounds }: { match: Match; sets: Matc
 /* ─────────────────────────────────────────────
    Mode TRADITIONNEL
 ───────────────────────────────────────────── */
-function TraditionalScoreForm({ match, sets, rounds }: { match: Match; sets: MatchSet[]; rounds: Round[] }) {
+function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string }) {
   const completedSets = sets.filter((s) => s.validated_p1 && s.validated_p2);
   const currentSet = sets.find((s) => !(s.validated_p1 && s.validated_p2));
 
@@ -210,6 +211,7 @@ function TraditionalScoreForm({ match, sets, rounds }: { match: Match; sets: Mat
           round={rounds.find((r) => r.order === currentSet.round_order)}
           setNumber={currentSet.round_order}
           totalSets={sets.length}
+          tournamentId={tournamentId}
         />
       ) : (
         <div className="rounded-xl bg-gray-800 border border-gray-700 p-8 text-center">
@@ -225,7 +227,7 @@ function TraditionalScoreForm({ match, sets, rounds }: { match: Match; sets: Mat
 }
 
 function SetScoreTracker({
-  set, p1, p2, round, setNumber, totalSets,
+  set, p1, p2, round, setNumber, totalSets, tournamentId,
 }: {
   set: MatchSet;
   p1: Player;
@@ -233,6 +235,7 @@ function SetScoreTracker({
   round: Round | undefined;
   setNumber: number;
   totalSets: number;
+  tournamentId: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const isCricket = round?.game_type === "CRICKET";
@@ -264,12 +267,12 @@ function SetScoreTracker({
 
     if (newRemaining === 0) {
       const winnerId = player === "p1" ? p1.id : p2.id;
-      startTransition(() => void markWinnerDirect(set.id, winnerId));
+      startTransition(() => void markWinnerDirect(set.id, winnerId, tournamentId));
     }
   }
 
   function forceWinner(winnerId: string) {
-    startTransition(() => void markWinnerDirect(set.id, winnerId));
+    startTransition(() => void markWinnerDirect(set.id, winnerId, tournamentId));
   }
 
   return (

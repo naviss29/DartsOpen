@@ -1,78 +1,75 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { seedBracket } from "@/lib/utils/bracket";
 import { computePoolStandings } from "@/lib/utils/pools";
+import { getUser } from "@/lib/api/auth";
+import {
+  apiGetTournament,
+  apiListRegistrations,
+  apiListPools,
+  apiListMatches,
+  apiBulkCreateMatches,
+  apiDeleteBracketMatches,
+} from "@/lib/api/tournament";
 
-async function getAuthenticatedUser() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  return { supabase, user };
-}
+type Tournament = {
+  id: string;
+  nb_boards: number;
+  nb_pools: number;
+  advancement_per_pool: number;
+  rounds: { id: string; order: number }[];
+};
+
+type Match = {
+  id: string;
+  pool_id: string | null;
+  bracket_round: number | null;
+  bracket_position: number | null;
+  player1_id: string;
+  player2_id: string;
+  winner_id: string | null;
+  status: string;
+  sets: { winner_id: string | null }[];
+};
+
+type Pool = {
+  id: string;
+  name: string;
+  players: { id: string; player_name: string }[];
+};
 
 export async function generateBracket(tournamentId: string): Promise<{ error?: string }> {
-  const { supabase, user } = await getAuthenticatedUser();
+  const user = await getUser();
+  if (!user) redirect("/login");
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, nb_boards, nb_pools, advancement_per_pool, association_id")
-    .eq("id", tournamentId)
-    .eq("association_id", user.id)
-    .single();
-
+  const tournament = await apiGetTournament(tournamentId) as Tournament | null;
   if (!tournament) return { error: "Tournoi introuvable." };
 
   let advancingPlayers: string[] = [];
 
   if (tournament.nb_pools === 1) {
-    // Élimination directe : tous les joueurs inscrits (PAID) passent au bracket
-    const { data: registrations } = await supabase
-      .from("registrations")
-      .select("id")
-      .eq("tournament_id", tournamentId)
-      .eq("status", "PAID")
-      .order("created_at");
-
-    advancingPlayers = (registrations ?? []).map((r) => r.id);
+    const registrations = await apiListRegistrations(tournamentId, "PAID") as { id: string }[];
+    advancingPlayers = registrations.map((r) => r.id);
   } else {
-    // Multi-poules : vérifier que tous les matchs de poules sont terminés
-    const { count: pendingCount } = await supabase
-      .from("matches")
-      .select("id", { count: "exact", head: true })
-      .eq("tournament_id", tournamentId)
-      .not("pool_id", "is", null)
-      .neq("status", "FINISHED");
+    const allMatches = await apiListMatches(tournamentId) as Match[];
+    const poolMatches = allMatches.filter((m) => m.pool_id !== null);
+    const pendingCount = poolMatches.filter((m) => m.status !== "FINISHED").length;
 
-    if (pendingCount && pendingCount > 0) {
+    if (pendingCount > 0) {
       return { error: "Tous les matchs de poules doivent être terminés avant de générer les phases finales." };
     }
 
-    // Récupérer les poules avec joueurs
-    const { data: pools } = await supabase
-      .from("pools")
-      .select(`id, name, pool_players(registration_id, registrations(player_name))`)
-      .eq("tournament_id", tournamentId)
-      .order("name");
-
-    // Récupérer les matchs de poules terminés avec leurs sets
-    const { data: poolMatches } = await supabase
-      .from("matches")
-      .select("player1_id, player2_id, winner_id, pool_id, match_sets(winner_id)")
-      .eq("tournament_id", tournamentId)
-      .eq("status", "FINISHED")
-      .not("pool_id", "is", null);
-
-    if (!pools?.length || poolMatches === null) return { error: "Données de poules introuvables." };
+    const pools = await apiListPools(tournamentId) as Pool[];
+    if (!pools.length) return { error: "Données de poules introuvables." };
 
     for (let rank = 0; rank < tournament.advancement_per_pool; rank++) {
       for (const pool of pools) {
         const poolMatchResults = poolMatches.filter((m) => m.pool_id === pool.id);
 
-        const players = pool.pool_players.map((pp) => ({
-          registration_id: pp.registration_id,
-          player_name: (Array.isArray(pp.registrations) ? pp.registrations[0] : pp.registrations as { player_name: string })?.player_name ?? "",
+        const players = pool.players.map((p) => ({
+          registration_id: p.id,
+          player_name: p.player_name,
           wins: 0,
           losses: 0,
           sets_won: 0,
@@ -87,7 +84,7 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
           if (winner) winner.wins++;
           if (loser) loser.losses++;
 
-          for (const s of m.match_sets) {
+          for (const s of m.sets) {
             if (!s.winner_id) continue;
             const setLoserId = s.winner_id === m.player1_id ? m.player2_id : m.player1_id;
             const setWinner = players.find((p) => p.registration_id === s.winner_id);
@@ -109,63 +106,48 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
     return { error: "Pas assez de joueurs inscrits pour générer les phases finales." };
   }
 
-  // Supprimer les matchs de bracket existants
-  await supabase
-    .from("matches")
-    .delete()
-    .eq("tournament_id", tournamentId)
-    .is("pool_id", null);
+  const deleteRes = await apiDeleteBracketMatches(tournamentId);
+  if (!deleteRes.ok) return { error: "Erreur lors de la suppression des phases finales existantes." };
 
   const pairs = seedBracket(advancingPlayers);
-  const { data: rounds } = await supabase
-    .from("rounds")
-    .select("order")
-    .eq("tournament_id", tournamentId)
-    .order("order");
+  const rounds = [...tournament.rounds].sort((a, b) => a.order - b.order);
 
   let boardCounter = 1;
+  const matches: Record<string, unknown>[] = [];
 
   for (const pair of pairs) {
     if (pair.player1_id === null) continue;
 
     if (pair.player2_id === null) {
-      // BYE — victoire automatique
-      await supabase.from("matches").insert({
-        tournament_id: tournamentId,
-        bracket_round: 1,
-        bracket_position: pair.bracket_position,
-        board_number: 0,
-        player1_id: pair.player1_id,
-        player2_id: pair.player1_id,
-        winner_id: pair.player1_id,
+      matches.push({
+        player1Id: pair.player1_id,
+        player2Id: null,
+        bracketRound: 1,
+        bracketPosition: pair.bracket_position,
+        boardNumber: 0,
         status: "FINISHED",
+        winnerId: pair.player1_id,
+        roundIds: rounds.map((r) => r.id),
       });
     } else {
       const boardNum = ((boardCounter - 1) % tournament.nb_boards) + 1;
       const isFirst = boardCounter <= tournament.nb_boards;
       boardCounter++;
 
-      const { data: match } = await supabase
-        .from("matches")
-        .insert({
-          tournament_id: tournamentId,
-          bracket_round: 1,
-          bracket_position: pair.bracket_position,
-          board_number: boardNum,
-          player1_id: pair.player1_id,
-          player2_id: pair.player2_id,
-          status: isFirst ? "IN_PROGRESS" : "PENDING",
-        })
-        .select("id")
-        .single();
-
-      if (match && rounds?.length) {
-        await supabase.from("match_sets").insert(
-          rounds.map((r) => ({ match_id: match.id, round_order: r.order }))
-        );
-      }
+      matches.push({
+        player1Id: pair.player1_id,
+        player2Id: pair.player2_id,
+        bracketRound: 1,
+        bracketPosition: pair.bracket_position,
+        boardNumber: boardNum,
+        status: isFirst ? "IN_PROGRESS" : "PENDING",
+        roundIds: rounds.map((r) => r.id),
+      });
     }
   }
+
+  const res = await apiBulkCreateMatches(tournamentId, matches);
+  if (!res.ok) return { error: "Erreur lors de la création des phases finales." };
 
   return {};
 }
@@ -174,74 +156,21 @@ export async function advanceToNextRound(
   tournamentId: string,
   currentBracketRound: number
 ): Promise<{ error?: string; finished?: boolean }> {
-  const { supabase, user } = await getAuthenticatedUser();
+  const user = await getUser();
+  if (!user) redirect("/login");
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, nb_boards, association_id")
-    .eq("id", tournamentId)
-    .eq("association_id", user.id)
-    .single();
+  const currentMatches = await apiListMatches(tournamentId, {
+    bracket_round: String(currentBracketRound),
+  }) as Match[];
 
-  if (!tournament) return { error: "Tournoi introuvable." };
-
-  const { data: currentMatches } = await supabase
-    .from("matches")
-    .select("id, bracket_position, winner_id, status, player1_id, player2_id")
-    .eq("tournament_id", tournamentId)
-    .eq("bracket_round", currentBracketRound)
-    .order("bracket_position");
-
-  if (!currentMatches?.length) return { error: "Aucun match trouvé pour ce tour." };
+  if (!currentMatches.length) return { error: "Aucun match trouvé pour ce tour." };
 
   const allFinished = currentMatches.every((m) => m.status === "FINISHED");
   if (!allFinished) return { error: "Tous les matchs du tour en cours doivent être terminés." };
 
-  // Finale jouée — tournoi terminé
+  // Finale terminée
   if (currentMatches.length === 1) return { finished: true };
 
-  const { data: rounds } = await supabase
-    .from("rounds")
-    .select("order")
-    .eq("tournament_id", tournamentId)
-    .order("order");
-
-  const nextRound = currentBracketRound + 1;
-  let boardCounter = 1;
-
-  for (let i = 0; i < currentMatches.length; i += 2) {
-    const m1 = currentMatches[i];
-    const m2 = currentMatches[i + 1];
-    if (!m1 || !m2) break;
-
-    const p1 = m1.winner_id;
-    const p2 = m2.winner_id;
-    if (!p1 || !p2) return { error: "Certains matchs n'ont pas de gagnant." };
-
-    const boardNum = ((boardCounter - 1) % tournament.nb_boards) + 1;
-    const isFirst = boardCounter <= tournament.nb_boards;
-    boardCounter++;
-
-    const { data: newMatch } = await supabase
-      .from("matches")
-      .insert({
-        tournament_id: tournamentId,
-        bracket_round: nextRound,
-        bracket_position: Math.floor(i / 2),
-        board_number: boardNum,
-        player1_id: p1,
-        player2_id: p2,
-        status: isFirst ? "IN_PROGRESS" : "PENDING",
-      })
-      .select("id")
-      .single();
-
-    if (newMatch && rounds?.length) {
-      await supabase.from("match_sets").insert(
-        rounds.map((r) => ({ match_id: newMatch.id, round_order: r.order }))
-      );
-    }
-  }
-
+  // SterPlatform auto-advances the bracket via tryAdvanceBracket when the last match finishes.
   return {};
 }

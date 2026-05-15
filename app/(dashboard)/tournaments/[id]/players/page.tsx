@@ -1,7 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { AddPlayerForm } from "@/components/tournament/AddPlayerForm";
 import { RemovePlayerButton } from "@/components/tournament/RemovePlayerButton";
+import { apiGetTournament, apiListRegistrations } from "@/lib/api/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -9,35 +9,42 @@ interface Props { params: Promise<{ id: string }> }
 
 export const metadata: Metadata = { title: "Joueurs — DartsOpen" };
 
+type Tournament = {
+  id: string;
+  name: string;
+  status: string;
+  max_players: number;
+  nb_pools: number;
+  players_per_team: number;
+};
+
+type Registration = {
+  id: string;
+  player_name: string;
+  player_email: string;
+  player_phone: string | null;
+  player_names: string[] | null;
+  created_at: string;
+};
+
 export default async function PlayersPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, status, max_players, nb_pools, players_per_team")
-    .eq("id", id)
-    .eq("association_id", user!.id)
-    .single();
+  const [tournament, registrations] = await Promise.all([
+    apiGetTournament(id) as Promise<Tournament | null>,
+    apiListRegistrations(id, "PAID") as Promise<Registration[]>,
+  ]);
 
   if (!tournament) notFound();
 
-  const { data: registrations, count } = await supabase
-    .from("registrations")
-    .select("id, player_name, player_email, player_phone, player_names, created_at", { count: "exact" })
-    .eq("tournament_id", id)
-    .eq("status", "PAID")
-    .order("created_at");
-
-  const playerCount = (count ?? 0) * tournament.players_per_team;
+  const count = registrations.length;
+  const playerCount = count * tournament.players_per_team;
   const canEdit = ["DRAFT", "OPEN"].includes(tournament.status);
   const isFull = playerCount >= tournament.max_players;
   const isTeam = tournament.players_per_team > 1;
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb + onglets */}
       <div className="space-y-3">
         <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
@@ -62,7 +69,7 @@ export default async function PlayersPage({ params }: Props) {
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             {playerCount} / {tournament.max_players} joueurs
-            {isTeam && ` (${count ?? 0} équipe${(count ?? 0) > 1 ? "s" : ""})`}
+            {isTeam && ` (${count} équipe${count > 1 ? "s" : ""})`}
             &nbsp;·&nbsp; {tournament.nb_pools} poules prévues
           </p>
         </div>
@@ -83,7 +90,7 @@ export default async function PlayersPage({ params }: Props) {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {!registrations?.length ? (
+        {!registrations.length ? (
           <div className="p-12 text-center text-gray-500">
             Aucun{isTeam ? "e équipe" : " joueur"} inscrit{isTeam ? "e" : ""} pour l&apos;instant.
           </div>

@@ -1,9 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { RoundForm } from "@/components/tournament/RoundForm";
 import { DeleteRoundButton } from "@/components/tournament/DeleteRoundButton";
 import { TournamentStatusButton } from "@/components/tournament/TournamentStatusButton";
 import { EditTournamentForm } from "@/components/tournament/EditTournamentForm";
+import { apiGetTournament, apiListRegistrations, apiListPools } from "@/lib/api/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -11,41 +11,44 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+type Tournament = {
+  id: string;
+  name: string;
+  date: string;
+  location: string;
+  status: string;
+  max_players: number;
+  players_per_team: number;
+  nb_pools: number;
+  nb_boards: number;
+  entry_fee: number;
+  advancement_per_pool: number;
+  registration_mode: string;
+  scoring_mode: string;
+  rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[];
+};
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase.from("tournaments").select("name").eq("id", id).single();
-  return { title: data ? `${data.name} — DartsOpen` : "Tournoi — DartsOpen" };
+  const tournament = await apiGetTournament(id) as Tournament | null;
+  return { title: tournament ? `${tournament.name} — DartsOpen` : "Tournoi — DartsOpen" };
 }
 
 export default async function TournamentDetailPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("*, rounds(*)")
-    .eq("id", id)
-    .eq("association_id", user!.id)
-    .single();
+  const [tournament, registrations, pools] = await Promise.all([
+    apiGetTournament(id) as Promise<Tournament | null>,
+    apiListRegistrations(id, "PAID") as Promise<{ id: string }[]>,
+    apiListPools(id) as Promise<{ id: string }[]>,
+  ]);
 
   if (!tournament) notFound();
 
-  const { count: playerCount } = await supabase
-    .from("registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", id)
-    .eq("status", "PAID");
+  const playerCount = registrations.length;
+  const poolCount = pools.length;
 
-  const { count: poolCount } = await supabase
-    .from("pools")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", id);
-
-  const rounds = (tournament.rounds ?? []).sort(
-    (a: { order: number }, b: { order: number }) => a.order - b.order
-  );
+  const rounds = [...(tournament.rounds ?? [])].sort((a, b) => a.order - b.order);
 
   const GAME_LABELS: Record<string, string> = {
     "501": "501", "701": "701", "901": "901", "1001": "1001", CRICKET: "Cricket",
@@ -66,7 +69,6 @@ export default async function TournamentDetailPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      {/* En-tête */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{tournament.name}</h1>
@@ -87,7 +89,6 @@ export default async function TournamentDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Résumé config */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Joueurs max", value: tournament.max_players },
@@ -103,7 +104,6 @@ export default async function TournamentDetailPage({ params }: Props) {
         ))}
       </div>
 
-      {/* Navigation */}
       <nav className="flex items-center gap-3 flex-wrap">
         <Link
           href={`/tournaments/${id}/players`}
@@ -111,7 +111,7 @@ export default async function TournamentDetailPage({ params }: Props) {
         >
           👥 Joueurs
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-            {(playerCount ?? 0) * tournament.players_per_team}/{tournament.max_players}
+            {playerCount * tournament.players_per_team}/{tournament.max_players}
           </span>
         </Link>
 
@@ -120,7 +120,7 @@ export default async function TournamentDetailPage({ params }: Props) {
           className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
         >
           🏆 Poules & Matchs
-          {(poolCount ?? 0) > 0 && (
+          {poolCount > 0 && (
             <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
               {poolCount}
             </span>
@@ -162,14 +162,12 @@ export default async function TournamentDetailPage({ params }: Props) {
         )}
       </nav>
 
-      {/* Édition en brouillon */}
       {tournament.status === "DRAFT" && (
         <section className="bg-white rounded-xl border border-gray-200 p-6">
           <EditTournamentForm tournament={tournament} />
         </section>
       )}
 
-      {/* Manches */}
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="font-semibold text-gray-900">
           Manches ({rounds.length})
@@ -177,7 +175,7 @@ export default async function TournamentDetailPage({ params }: Props) {
 
         {rounds.length > 0 && (
           <div className="space-y-2">
-            {rounds.map((round: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }) => (
+            {rounds.map((round) => (
               <div
                 key={round.id}
                 className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3"

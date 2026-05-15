@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { roundLabel, computeTotalRounds } from "@/lib/utils/bracket";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
 
 interface BracketMatch {
   id: string;
@@ -24,51 +26,26 @@ const CARD_W = 220;
 const CONN_W = 48;
 const BASE_SLOT = CARD_H + 32;
 
+async function fetchBracketMatches(tournamentId: string): Promise<BracketMatch[]> {
+  const res = await fetch(
+    `${API_URL}/api/public/tournaments/${tournamentId}/matches?pool=null`,
+    { headers: { "X-Organization-Slug": ORG_SLUG } }
+  );
+  if (!res.ok) return [];
+  const all = await res.json() as BracketMatch[];
+  return all.filter((m) => m.bracket_round !== null);
+}
+
 export function BracketLive({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<BracketMatch[]>(initialMatches);
 
   useEffect(() => {
-    const supabase = createClient();
+    const poll = setInterval(async () => {
+      const next = await fetchBracketMatches(tournamentId);
+      if (next.length > 0) setMatches(next);
+    }, 5000);
 
-    const fetchMatches = () =>
-      supabase
-        .from("matches")
-        .select(`
-          id, bracket_round, bracket_position, status, winner_id,
-          player1:registrations!matches_player1_id_fkey(id, player_name),
-          player2:registrations!matches_player2_id_fkey(id, player_name)
-        `)
-        .eq("tournament_id", tournamentId)
-        .is("pool_id", null)
-        .order("bracket_round")
-        .order("bracket_position")
-        .then(({ data }) => {
-          if (data) {
-            setMatches(data.map((m) => ({
-              ...m,
-              player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-              player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-            })) as BracketMatch[]);
-          }
-        });
-
-    // Realtime — mises à jour immédiates sur changement de match
-    const channel = supabase
-      .channel(`bracket-live-${tournamentId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${tournamentId}` },
-        () => fetchMatches()
-      )
-      .subscribe();
-
-    // Polling 5s — filet de sécurité pour les nouveaux tours créés côté serveur
-    const poll = setInterval(() => fetchMatches(), 5000);
-
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(poll);
-    };
+    return () => clearInterval(poll);
   }, [tournamentId]);
 
   if (matches.length === 0) return null;
@@ -103,7 +80,6 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 overflow-x-auto">
         <div className="pb-2">
-          {/* Round labels */}
           <div className="flex mb-4">
             {rounds.map((round, i) => (
               <Fragment key={round}>
@@ -118,7 +94,6 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
             ))}
           </div>
 
-          {/* Bracket body */}
           <div className="flex items-start">
             {rounds.map((round, roundIdx) => {
               const roundMatches = matches
@@ -130,7 +105,6 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
               return (
                 <Fragment key={round}>
-                  {/* SVG connector */}
                   {roundIdx > 0 && (
                     <svg width={CONN_W} height={totalH} style={{ flexShrink: 0 }} aria-hidden="true">
                       {roundMatches.map((_, idx) => {
@@ -150,7 +124,6 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
                     </svg>
                   )}
 
-                  {/* Match column */}
                   <div style={{ width: CARD_W, height: totalH, position: "relative", flexShrink: 0 }}>
                     {roundMatches.map((match, idx) => {
                       const top = idx * slotH + (slotH - CARD_H) / 2;

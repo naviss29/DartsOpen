@@ -1,21 +1,23 @@
-import { createClient } from "@/lib/supabase/server";
+import { apiListTournaments } from "@/lib/api/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Mes tournois — DartsOpen" };
 
+type Tournament = {
+  id: string;
+  name: string;
+  date: string;
+  location: string;
+  status: string;
+  max_players: number;
+  nb_pools: number;
+  nb_boards: number;
+  entry_fee: number;
+};
+
 export default async function TournamentsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const { data: tournaments } = await supabase
-    .from("tournaments")
-    .select("id, name, date, location, status, max_players, nb_pools, nb_boards, entry_fee")
-    .eq("association_id", user!.id)
-    .or(`date.gte.${today},status.in.(IN_PROGRESS,FINISHED)`)
-    .order("date", { ascending: false });
+  const tournaments = await apiListTournaments() as Tournament[];
 
   return (
     <div className="space-y-6">

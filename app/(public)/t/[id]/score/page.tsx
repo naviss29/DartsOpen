@@ -1,6 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { ScoreForm } from "@/components/tournament/ScoreForm";
+import { apiGetTournamentPublic, apiListMatchesPublic } from "@/lib/api/tournament";
 import type { Metadata } from "next";
 
 interface Props {
@@ -10,59 +10,61 @@ interface Props {
 
 export const metadata: Metadata = { title: "Saisie du score — DartsOpen" };
 
+type SterMatch = {
+  id: string;
+  board_number: number;
+  status: string;
+  player1_id: string;
+  player2_id: string;
+  player1: { id: string; player_name: string };
+  player2: { id: string; player_name: string };
+  sets: {
+    id: string;
+    round_order: number;
+    winner_id: string | null;
+    validated_p1: boolean;
+    validated_p2: boolean;
+  }[];
+};
+
 export default async function ScorePage({ params, searchParams }: Props) {
   const { id } = await params;
   const { board } = await searchParams;
   const boardNumber = parseInt(board ?? "1", 10);
 
-  const supabase = await createClient();
-
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, status, scoring_mode")
-    .eq("id", id)
-    .single();
+  const [tournament, allMatches] = await Promise.all([
+    apiGetTournamentPublic(id) as Promise<{ id: string; name: string; status: string; scoring_mode: string; rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[] } | null>,
+    apiListMatchesPublic(id) as Promise<SterMatch[]>,
+  ]);
 
   if (!tournament || tournament.status !== "IN_PROGRESS") notFound();
 
-  // Récupère le match en cours sur cette cible
-  const { data: rawMatch } = await supabase
-    .from("matches")
-    .select(`
-      id, board_number, status,
-      player1:registrations!matches_player1_id_fkey(id, player_name),
-      player2:registrations!matches_player2_id_fkey(id, player_name),
-      match_sets(
-        id, round_order, winner_id, validated_p1, validated_p2,
-        winner:registrations(player_name)
-      )
-    `)
-    .eq("tournament_id", id)
-    .eq("board_number", boardNumber)
-    .eq("status", "IN_PROGRESS")
-    .single();
+  const rawMatch = allMatches.find(
+    (m) => m.board_number === boardNumber && m.status === "IN_PROGRESS"
+  ) ?? null;
 
-  // Supabase retourne les joins FK comme tableaux — on normalise en objets
+  // Map SterPlatform format to ScoreForm interface
   const match = rawMatch ? {
-    ...rawMatch,
-    player1: Array.isArray(rawMatch.player1) ? rawMatch.player1[0] : rawMatch.player1,
-    player2: Array.isArray(rawMatch.player2) ? rawMatch.player2[0] : rawMatch.player2,
-    match_sets: rawMatch.match_sets.map((s) => ({
-      ...s,
-      winner: Array.isArray(s.winner) ? (s.winner[0] ?? null) : s.winner,
+    id: rawMatch.id,
+    board_number: rawMatch.board_number,
+    player1: rawMatch.player1,
+    player2: rawMatch.player2,
+    match_sets: rawMatch.sets.map((s) => ({
+      id: s.id,
+      round_order: s.round_order,
+      winner_id: s.winner_id,
+      validated_p1: s.validated_p1,
+      validated_p2: s.validated_p2,
+      winner: s.winner_id
+        ? { player_name: s.winner_id === rawMatch.player1_id ? rawMatch.player1.player_name : rawMatch.player2.player_name }
+        : null,
     })),
   } : null;
 
-  // Récupère la config des rounds
-  const { data: rounds } = await supabase
-    .from("rounds")
-    .select("id, order, game_type, entry_type, finish_type")
-    .eq("tournament_id", id)
-    .order("order");
+  const rounds = tournament.rounds ?? [];
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header cible */}
       <div className="bg-gray-900 border-b border-gray-800 px-4 py-4">
         <p className="text-gray-400 text-xs uppercase tracking-wider">🎯 {tournament.name}</p>
         <h1 className="text-xl font-bold mt-1">Cible {boardNumber}</h1>
@@ -78,8 +80,9 @@ export default async function ScorePage({ params, searchParams }: Props) {
         ) : (
           <ScoreForm
             match={match}
-            rounds={rounds ?? []}
+            rounds={rounds}
             scoringMode={tournament.scoring_mode === "TRADITIONAL" ? "TRADITIONAL" : "ELECTRONIC"}
+            tournamentId={id}
           />
         )}
       </div>

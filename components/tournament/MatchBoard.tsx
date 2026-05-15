@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { NextMatchAlert } from "./NextMatchAlert";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
 
 interface Player { id: string; player_name: string }
 interface MatchSet { id: string; round_order: number; winner_id: string | null; validated_p1: boolean; validated_p2: boolean }
@@ -12,7 +14,7 @@ interface Match {
   status: string;
   player1: Player;
   player2: Player;
-  match_sets: MatchSet[];
+  sets: MatchSet[];
 }
 
 interface Props {
@@ -21,76 +23,41 @@ interface Props {
   nbBoards: number;
 }
 
+async function fetchActiveMatches(tournamentId: string): Promise<Match[]> {
+  const res = await fetch(`${API_URL}/api/public/tournaments/${tournamentId}/matches`, {
+    headers: { "X-Organization-Slug": ORG_SLUG },
+  });
+  if (!res.ok) return [];
+  const all = await res.json() as Match[];
+  return all.filter((m) => ["IN_PROGRESS", "PENDING"].includes(m.status));
+}
+
 export function MatchBoard({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<Match[]>(initialMatches);
   const [nextMatchAlert, setNextMatchAlert] = useState<{ boardNumber: number; match: Match } | null>(null);
 
   useEffect(() => {
-    const supabase = createClient();
-
-    const channel = supabase
-      .channel(`live-matches-${tournamentId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${tournamentId}` },
-        () => {
-          // Re-fetch on any match change
-          supabase
-            .from("matches")
-            .select(`
-              id, board_number, status,
-              player1:registrations!matches_player1_id_fkey(id, player_name),
-              player2:registrations!matches_player2_id_fkey(id, player_name),
-              match_sets(id, round_order, winner_id, validated_p1, validated_p2)
-            `)
-            .eq("tournament_id", tournamentId)
-            .in("status", ["IN_PROGRESS", "PENDING"])
-            .order("board_number")
-            .order("created_at")
-            .then(({ data }) => {
-              if (data) {
-                const normalized = data.map((m) => ({
-                  ...m,
-                  player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-                  player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-                })) as Match[];
-                setMatches(normalized);
-              }
-            });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_sets" },
-        (payload) => {
-          // Détecter la dernière manche en cours → annoncer prochain match
-          const updatedSet = payload.new as MatchSet & { match_id: string };
-          setMatches((prev) => {
-            const match = prev.find((m) => m.match_sets.some((s) => s.id === updatedSet.id));
-            if (match && match.match_sets.length > 0) {
-              const lastRound = Math.max(...match.match_sets.map((s) => s.round_order));
-              const isLastSet = updatedSet.round_order === lastRound;
-              const hasOneValidation = updatedSet.validated_p1 || updatedSet.validated_p2;
-
-              if (isLastSet && hasOneValidation) {
-                // Trouver le prochain PENDING sur la même cible
-                const nextPending = prev.find(
-                  (m) => m.status === "PENDING" && m.board_number === match.board_number
-                );
-                if (nextPending) {
-                  setNextMatchAlert({ boardNumber: match.board_number, match: nextPending });
-                  setTimeout(() => setNextMatchAlert(null), 12000);
-                }
-              }
+    const poll = setInterval(async () => {
+      const next = await fetchActiveMatches(tournamentId);
+      setMatches((prev) => {
+        // Detect when an IN_PROGRESS match disappears → show next PENDING alert
+        for (const prevMatch of prev.filter((m) => m.status === "IN_PROGRESS")) {
+          if (!next.find((m) => m.id === prevMatch.id)) {
+            const nextPending = next.find(
+              (m) => m.status === "PENDING" && m.board_number === prevMatch.board_number
+            );
+            if (nextPending) {
+              setNextMatchAlert({ boardNumber: prevMatch.board_number, match: nextPending });
+              setTimeout(() => setNextMatchAlert(null), 12000);
             }
-            return prev;
-          });
+          }
         }
-      )
-      .subscribe();
+        return next;
+      });
+    }, 3000);
 
-    return () => { supabase.removeChannel(channel); };
-  }, [tournamentId]);
+    return () => clearInterval(poll);
+  }, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const inProgress = matches.filter((m) => m.status === "IN_PROGRESS");
   const pending = matches.filter((m) => m.status === "PENDING");
@@ -104,7 +71,6 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
         />
       )}
 
-      {/* Matchs en cours */}
       {inProgress.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
@@ -118,7 +84,6 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
         </div>
       )}
 
-      {/* Matchs à venir */}
       {pending.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
@@ -142,8 +107,8 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
 }
 
 function MatchCard({ match, compact = false, index }: { match: Match; compact?: boolean; index?: number }) {
-  const setsPlayed = match.match_sets.filter((s) => s.winner_id).length;
-  const totalSets = match.match_sets.length;
+  const setsPlayed = match.sets.filter((s) => s.winner_id).length;
+  const totalSets = match.sets.length;
 
   return (
     <div className={`rounded-xl bg-gray-800 border border-gray-700 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>

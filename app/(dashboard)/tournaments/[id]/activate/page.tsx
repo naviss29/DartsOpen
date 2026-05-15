@@ -1,25 +1,24 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PaypalActivateButton } from "@/components/tournament/PaypalActivateButton";
+import { apiGetTournament } from "@/lib/api/tournament";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Activer le tournoi — DartsOpen" };
 
 interface Props { params: Promise<{ id: string }> }
 
+type Tournament = {
+  id: string;
+  name: string;
+  max_players: number;
+  players_per_team: number;
+  registration_mode: string;
+};
+
 export default async function ActivatePage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, max_players, players_per_team, registration_mode, association_id")
-    .eq("id", id)
-    .eq("association_id", user!.id)
-    .single();
-
+  const tournament = await apiGetTournament(id) as Tournament | null;
   if (!tournament) notFound();
 
   const platformFeeEuros = tournament.max_players * 0.10;
@@ -31,7 +30,6 @@ export default async function ActivatePage({ params }: Props) {
         <p className="text-sm text-gray-500 mt-1">{tournament.name}</p>
       </div>
 
-      {/* Frais plateforme */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="font-semibold text-gray-900">Frais de plateforme</h2>
         <p className="text-sm text-gray-600">
@@ -42,7 +40,6 @@ export default async function ActivatePage({ params }: Props) {
         <p className="text-xs text-center text-gray-400">Merci pour votre soutien !</p>
       </div>
 
-      {/* Mode inscription sur place */}
       {tournament.registration_mode === "ONSITE" && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800 space-y-1">
           <p className="font-medium">📍 Mode : inscriptions sur place uniquement</p>
