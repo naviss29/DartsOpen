@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AddPlayerForm } from "@/components/tournament/AddPlayerForm";
 import { RemovePlayerButton } from "@/components/tournament/RemovePlayerButton";
-import { apiGetTournament, apiListRegistrations } from "@/lib/api/tournament";
+import { dbGetTournament, dbListRegistrations } from "@/lib/db/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -31,8 +31,8 @@ export default async function PlayersPage({ params }: Props) {
   const { id } = await params;
 
   const [tournament, registrations] = await Promise.all([
-    apiGetTournament(id) as Promise<Tournament | null>,
-    apiListRegistrations(id, "PAID") as Promise<Registration[]>,
+    dbGetTournament(id).catch(() => null) as Promise<Tournament | null>,
+    dbListRegistrations(id, "PAID").catch(() => []) as Promise<Registration[]>,
   ]);
 
   if (!tournament) notFound();

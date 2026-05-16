@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 import { PrintButton } from "@/components/tournament/PrintButton";
-import { apiGetTournament, apiListPools, apiListRegistrations } from "@/lib/api/tournament";
+import { dbGetTournament, dbListPools, dbListRegistrations } from "@/lib/db/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -38,9 +38,9 @@ export default async function PoolsPage({ params }: Props) {
   const { id } = await params;
 
   const [tournament, pools, registrations] = await Promise.all([
-    apiGetTournament(id) as Promise<Tournament | null>,
-    apiListPools(id) as Promise<Pool[]>,
-    apiListRegistrations(id, "PAID") as Promise<{ id: string }[]>,
+    dbGetTournament(id).catch(() => null) as Promise<Tournament | null>,
+    dbListPools(id).catch(() => []) as Promise<Pool[]>,
+    dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
   ]);
 
   if (!tournament) notFound();

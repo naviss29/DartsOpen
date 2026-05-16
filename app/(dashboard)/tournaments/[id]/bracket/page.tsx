@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { generateBracket } from "@/lib/actions/bracket";
 import { BracketView } from "@/components/tournament/BracketView";
-import { apiGetTournament, apiListMatches } from "@/lib/api/tournament";
+import { dbGetTournament, dbListMatches } from "@/lib/db/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -32,13 +32,13 @@ type BracketMatch = {
 export default async function BracketPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await apiGetTournament(id) as Tournament | null;
+  const tournament = await dbGetTournament(id).catch(() => null) as Tournament | null;
   if (!tournament) notFound();
   if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
     redirect(`/tournaments/${id}/pools`);
   }
 
-  const allMatches = await apiListMatches(id) as BracketMatch[];
+  const allMatches = await dbListMatches(id).catch(() => []) as BracketMatch[];
   const bracketMatches = allMatches.filter((m) => m.pool_id === null && m.bracket_round !== null);
   const poolMatches = allMatches.filter((m) => m.pool_id !== null);
 

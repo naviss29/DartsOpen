@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { ScoreForm } from "@/components/tournament/ScoreForm";
-import { apiGetTournamentPublic, apiListMatchesPublic } from "@/lib/api/tournament";
+import { dbGetTournamentPublic, dbListMatches } from "@/lib/db/tournament";
 import type { Metadata } from "next";
 
 interface Props {
@@ -33,8 +33,8 @@ export default async function ScorePage({ params, searchParams }: Props) {
   const boardNumber = parseInt(board ?? "1", 10);
 
   const [tournament, allMatches] = await Promise.all([
-    apiGetTournamentPublic(id) as Promise<{ id: string; name: string; status: string; scoring_mode: string; rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[] } | null>,
-    apiListMatchesPublic(id) as Promise<SterMatch[]>,
+    dbGetTournamentPublic(id).catch(() => null) as Promise<{ id: string; name: string; status: string; scoring_mode: string; rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[] } | null>,
+    dbListMatches(id).catch(() => []) as Promise<SterMatch[]>,
   ]);
 
   if (!tournament || tournament.status !== "IN_PROGRESS") notFound();

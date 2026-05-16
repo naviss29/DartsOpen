@@ -3,14 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { getUser } from "@/lib/api/auth";
 import {
-  apiCreateTournament,
-  apiUpdateTournament,
-  apiUpdateTournamentStatus,
-  apiDeleteTournament,
-  apiAddRound,
-  apiDeleteRound,
-} from "@/lib/api/tournament";
+  dbCreateTournament,
+  dbUpdateTournament,
+  dbUpdateTournamentStatus,
+  dbDeleteTournament,
+  dbAddRound,
+  dbDeleteRound,
+} from "@/lib/db/tournament";
 
 const TournamentSchema = z.object({
   name: z.string().trim().min(3, "Le nom doit contenir au moins 3 caractères."),
@@ -35,6 +36,9 @@ const RoundSchema = z.object({
 export type TournamentState = { error?: string; errors?: Record<string, string[]> } | undefined;
 
 export async function createTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
+  const user = await getUser();
+  if (!user) redirect("/login");
+
   const parsed = TournamentSchema.safeParse({
     name: formData.get("name"),
     date: formData.get("date"),
@@ -53,13 +57,9 @@ export async function createTournament(prevState: TournamentState, formData: For
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const res = await apiCreateTournament(parsed.data);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Erreur lors de la création du tournoi." };
-  }
+  const tournament = await dbCreateTournament(user.id, parsed.data).catch(() => null);
+  if (!tournament) return { error: "Erreur lors de la création du tournoi." };
 
-  const tournament = await res.json() as { id: string };
   revalidatePath("/tournaments");
   redirect(`/tournaments/${tournament.id}/activate`);
 }
@@ -85,8 +85,8 @@ export async function updateTournament(prevState: TournamentState, formData: For
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const res = await apiUpdateTournament(tournamentId, parsed.data);
-  if (!res.ok) return { error: "Erreur lors de la modification du tournoi." };
+  const ok = await dbUpdateTournament(tournamentId, parsed.data).catch(() => null);
+  if (!ok) return { error: "Erreur lors de la modification du tournoi." };
 
   revalidatePath(`/tournaments/${tournamentId}`);
 }
@@ -95,19 +95,13 @@ export async function updateTournamentStatus(
   tournamentId: string,
   status: string
 ): Promise<{ error?: string } | void> {
-  const res = await apiUpdateTournamentStatus(tournamentId, status);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Impossible de mettre à jour le statut." };
-  }
-
+  const ok = await dbUpdateTournamentStatus(tournamentId, status).catch(() => null);
+  if (!ok) return { error: "Impossible de mettre à jour le statut." };
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
 export async function deleteTournament(tournamentId: string) {
-  const res = await apiDeleteTournament(tournamentId);
-  if (!res.ok) throw new Error("Impossible de supprimer le tournoi.");
-
+  await dbDeleteTournament(tournamentId);
   revalidatePath("/tournaments");
   redirect("/tournaments");
 }
@@ -125,15 +119,13 @@ export async function addRound(prevState: TournamentState, formData: FormData): 
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const res = await apiAddRound(tournamentId, parsed.data);
-  if (!res.ok) return { error: "Erreur lors de l'ajout de la manche." };
+  const ok = await dbAddRound(tournamentId, parsed.data).catch(() => null);
+  if (!ok) return { error: "Erreur lors de l'ajout de la manche." };
 
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
 export async function deleteRound(roundId: string, tournamentId: string) {
-  const res = await apiDeleteRound(tournamentId, roundId);
-  if (!res.ok) throw new Error("Impossible de supprimer la manche.");
-
+  await dbDeleteRound(roundId);
   revalidatePath(`/tournaments/${tournamentId}`);
 }

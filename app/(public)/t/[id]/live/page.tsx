@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { MatchBoard } from "@/components/tournament/MatchBoard";
 import { ScoreBoard } from "@/components/tournament/ScoreBoard";
 import { BracketLive } from "@/components/tournament/BracketLive";
-import { apiGetTournamentPublic, apiListMatchesPublic, apiListPoolsPublic } from "@/lib/api/tournament";
+import { dbGetTournamentPublic, dbListMatches, dbListPools } from "@/lib/db/tournament";
 import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }> }
@@ -34,7 +34,7 @@ type SterPool = {
 export default async function LivePage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await apiGetTournamentPublic(id) as {
+  const tournament = await dbGetTournamentPublic(id).catch(() => null) as {
     id: string;
     name: string;
     status: string;
@@ -58,8 +58,8 @@ export default async function LivePage({ params }: Props) {
   }
 
   const [allMatches, pools] = await Promise.all([
-    apiListMatchesPublic(id) as Promise<SterMatch[]>,
-    apiListPoolsPublic(id) as Promise<SterPool[]>,
+    dbListMatches(id).catch(() => []) as Promise<SterMatch[]>,
+    dbListPools(id).catch(() => []) as Promise<SterPool[]>,
   ]);
 
   // Matches for the board (IN_PROGRESS + PENDING)

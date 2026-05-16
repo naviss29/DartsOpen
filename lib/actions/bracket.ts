@@ -5,54 +5,29 @@ import { seedBracket } from "@/lib/utils/bracket";
 import { computePoolStandings } from "@/lib/utils/pools";
 import { getUser } from "@/lib/api/auth";
 import {
-  apiGetTournament,
-  apiListRegistrations,
-  apiListPools,
-  apiListMatches,
-  apiBulkCreateMatches,
-  apiDeleteBracketMatches,
-} from "@/lib/api/tournament";
-
-type Tournament = {
-  id: string;
-  nb_boards: number;
-  nb_pools: number;
-  advancement_per_pool: number;
-  rounds: { id: string; order: number }[];
-};
-
-type Match = {
-  id: string;
-  pool_id: string | null;
-  bracket_round: number | null;
-  bracket_position: number | null;
-  player1_id: string;
-  player2_id: string;
-  winner_id: string | null;
-  status: string;
-  sets: { winner_id: string | null }[];
-};
-
-type Pool = {
-  id: string;
-  name: string;
-  players: { id: string; player_name: string }[];
-};
+  dbGetTournament,
+  dbListRegistrations,
+  dbListPools,
+  dbListMatches,
+  dbBulkCreateMatches,
+  dbDeleteBracketMatches,
+  dbAdvanceBracket,
+} from "@/lib/db/tournament";
 
 export async function generateBracket(tournamentId: string): Promise<{ error?: string }> {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const tournament = await apiGetTournament(tournamentId) as Tournament | null;
+  const tournament = await dbGetTournament(tournamentId);
   if (!tournament) return { error: "Tournoi introuvable." };
 
   let advancingPlayers: string[] = [];
 
   if (tournament.nb_pools === 1) {
-    const registrations = await apiListRegistrations(tournamentId, "PAID") as { id: string }[];
+    const registrations = await dbListRegistrations(tournamentId, "PAID");
     advancingPlayers = registrations.map((r) => r.id);
   } else {
-    const allMatches = await apiListMatches(tournamentId) as Match[];
+    const allMatches = await dbListMatches(tournamentId);
     const poolMatches = allMatches.filter((m) => m.pool_id !== null);
     const pendingCount = poolMatches.filter((m) => m.status !== "FINISHED").length;
 
@@ -60,7 +35,7 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
       return { error: "Tous les matchs de poules doivent être terminés avant de générer les phases finales." };
     }
 
-    const pools = await apiListPools(tournamentId) as Pool[];
+    const pools = await dbListPools(tournamentId);
     if (!pools.length) return { error: "Données de poules introuvables." };
 
     for (let rank = 0; rank < tournament.advancement_per_pool; rank++) {
@@ -106,14 +81,13 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
     return { error: "Pas assez de joueurs inscrits pour générer les phases finales." };
   }
 
-  const deleteRes = await apiDeleteBracketMatches(tournamentId);
-  if (!deleteRes.ok) return { error: "Erreur lors de la suppression des phases finales existantes." };
+  await dbDeleteBracketMatches(tournamentId);
 
   const pairs = seedBracket(advancingPlayers);
   const rounds = [...tournament.rounds].sort((a, b) => a.order - b.order);
 
   let boardCounter = 1;
-  const matches: Record<string, unknown>[] = [];
+  const matches: Parameters<typeof dbBulkCreateMatches>[1] = [];
 
   for (const pair of pairs) {
     if (pair.player1_id === null) continue;
@@ -146,8 +120,8 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
     }
   }
 
-  const res = await apiBulkCreateMatches(tournamentId, matches);
-  if (!res.ok) return { error: "Erreur lors de la création des phases finales." };
+  const ok = await dbBulkCreateMatches(tournamentId, matches).catch(() => false);
+  if (ok === false) return { error: "Erreur lors de la création des phases finales." };
 
   return {};
 }
@@ -159,18 +133,5 @@ export async function advanceToNextRound(
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const currentMatches = await apiListMatches(tournamentId, {
-    bracket_round: String(currentBracketRound),
-  }) as Match[];
-
-  if (!currentMatches.length) return { error: "Aucun match trouvé pour ce tour." };
-
-  const allFinished = currentMatches.every((m) => m.status === "FINISHED");
-  if (!allFinished) return { error: "Tous les matchs du tour en cours doivent être terminés." };
-
-  // Finale terminée
-  if (currentMatches.length === 1) return { finished: true };
-
-  // SterPlatform auto-advances the bracket via tryAdvanceBracket when the last match finishes.
-  return {};
+  return dbAdvanceBracket(tournamentId, currentBracketRound);
 }

@@ -1,5 +1,5 @@
 import { stripe } from "@/lib/stripe";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { dbMarkRegistrationPaid } from "@/lib/db/tournament";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -27,18 +27,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "registration_id manquant." }, { status: 400 });
     }
 
-    const supabase = createAdminClient();
-
-    const { error } = await supabase
-      .from("registrations")
-      .update({ status: "PAID", fee_collected: true })
-      .eq("id", registrationId)
-      .eq("status", "PENDING");
-
-    if (error) {
-      console.error("[webhook] Erreur mise à jour registration:", error.message);
-      return NextResponse.json({ error: "Erreur base de données." }, { status: 500 });
-    }
+    await dbMarkRegistrationPaid(registrationId).catch((err) => {
+      console.error("[webhook] Erreur mise à jour registration:", err);
+    });
   }
 
   return NextResponse.json({ received: true });

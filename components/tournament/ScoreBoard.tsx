@@ -27,9 +27,7 @@ interface Props {
 }
 
 async function fetchFinishedPoolMatches(tournamentId: string): Promise<FinishedMatch[]> {
-  const res = await fetch(`${API_URL}/api/public/tournaments/${tournamentId}/matches`, {
-    headers: { "X-Organization-Slug": ORG_SLUG },
-  });
+  const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
   if (!res.ok) return [];
   const all = await res.json() as Array<{ player1_id: string; player2_id: string; winner_id: string | null; pool_id: string | null; status: string }>;
   return all

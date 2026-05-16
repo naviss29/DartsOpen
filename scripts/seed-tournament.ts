@@ -3,12 +3,13 @@
  * Usage : npx tsx scripts/seed-tournament.ts <tournament_id> [nb_equipes]
  */
 
-import { createClient } from "@supabase/supabase-js";
+import "dotenv/config";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../lib/generated/prisma/client";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 const PRENOMS = [
   "Enzo", "Lucas", "Léo", "Hugo", "Tom", "Mathis", "Axel", "Théo", "Noah", "Ethan",
@@ -42,40 +43,37 @@ async function main() {
     process.exit(1);
   }
 
-  const { data: tournament, error } = await supabase
-    .from("tournaments")
-    .select("id, name, max_players, players_per_team, registration_mode")
-    .eq("id", tournamentId)
-    .single();
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: { id: true, name: true, maxPlayers: true, playersPerTeam: true },
+  });
 
-  if (error || !tournament) {
-    console.error("Tournoi introuvable :", error?.message);
+  if (!tournament) {
+    console.error("Tournoi introuvable.");
     process.exit(1);
   }
 
-  const { count: existing } = await supabase
-    .from("registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", tournamentId)
-    .eq("status", "PAID");
+  const existing = await prisma.registration.count({
+    where: { tournamentId, status: "PAID" },
+  });
 
-  const playersRegistered = (existing ?? 0) * tournament.players_per_team;
-  const slotsLeft = tournament.max_players - playersRegistered;
-  const teamsLeft = Math.floor(slotsLeft / tournament.players_per_team);
+  const playersRegistered = existing * tournament.playersPerTeam;
+  const slotsLeft = tournament.maxPlayers - playersRegistered;
+  const teamsLeft = Math.floor(slotsLeft / tournament.playersPerTeam);
   const teamsToCreate = nbEquipes > 0 ? Math.min(nbEquipes, teamsLeft) : teamsLeft;
 
   console.log(`\n🎯 Tournoi : ${tournament.name}`);
-  console.log(`👥 ${tournament.players_per_team} joueur(s) par équipe`);
+  console.log(`👥 ${tournament.playersPerTeam} joueur(s) par équipe`);
   console.log(`📊 Places restantes : ${slotsLeft} joueurs (${teamsLeft} équipes)`);
   console.log(`➕ Équipes à créer : ${teamsToCreate}\n`);
 
   if (teamsToCreate === 0) {
     console.log("✅ Tournoi déjà complet.");
+    await prisma.$disconnect();
     return;
   }
 
   const usedNames = new Set<string>();
-  const registrations = [];
 
   for (let i = 0; i < teamsToCreate; i++) {
     let teamName = randomPick(NOMS_EQUIPE);
@@ -84,35 +82,28 @@ async function main() {
     }
     usedNames.add(teamName);
 
-    const playerNames = Array.from({ length: tournament.players_per_team }, () =>
-      randomPick(PRENOMS)
-    );
-
+    const playerNames = Array.from({ length: tournament.playersPerTeam }, () => randomPick(PRENOMS));
     const contactName = playerNames[0];
+    const playerName = tournament.playersPerTeam > 1 ? teamName : playerNames[0];
 
-    registrations.push({
-      tournament_id: tournamentId,
-      player_name: tournament.players_per_team > 1 ? teamName : playerNames[0],
-      player_email: randomEmail(contactName, i + 1),
-      player_phone: null,
-      player_names: playerNames,
-      platform_fee_cents: 10 * tournament.players_per_team,
-      fee_collected: false,
-      status: "PAID",
+    await prisma.registration.create({
+      data: {
+        tournamentId,
+        playerName,
+        playerEmail: randomEmail(contactName, i + 1),
+        playerPhone: null,
+        playerNames,
+        platformFeeCents: 10 * tournament.playersPerTeam,
+        feeCollected: false,
+        status: "PAID",
+      },
     });
+
+    console.log(`  ${i + 1}. ${playerName} (${playerNames.join(", ")}) — ${randomEmail(contactName, i + 1)}`);
   }
 
-  const { error: insertError } = await supabase.from("registrations").insert(registrations);
-
-  if (insertError) {
-    console.error("❌ Erreur lors de l'insertion :", insertError.message);
-    process.exit(1);
-  }
-
-  console.log(`✅ ${teamsToCreate} équipe(s) insérée(s) avec succès !\n`);
-  registrations.forEach((r, i) => {
-    console.log(`  ${i + 1}. ${r.player_name} (${r.player_names.join(", ")}) — ${r.player_email}`);
-  });
+  console.log(`\n✅ ${teamsToCreate} équipe(s) insérée(s) avec succès !`);
+  await prisma.$disconnect();
 }
 
 main();

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { RegisterTeamForm } from "@/components/tournament/RegisterTeamForm";
-import { apiGetTournamentPublic } from "@/lib/api/tournament";
+import { dbGetTournamentPublic, dbCountRegistrations } from "@/lib/db/tournament";
 import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }>; searchParams: Promise<{ cancelled?: string }> }
@@ -24,10 +24,10 @@ export default async function RegisterPage({ params, searchParams }: Props) {
   const { id } = await params;
   const { cancelled } = await searchParams;
 
-  const tournament = await apiGetTournamentPublic(id) as Tournament | null;
+  const tournament = await dbGetTournamentPublic(id).catch(() => null) as Tournament | null;
   if (!tournament || tournament.status !== "OPEN") notFound();
 
-  const count = tournament.registered_count;
+  const count = await dbCountRegistrations(id, "PAID").catch(() => 0);
   const isFull = count * tournament.players_per_team >= tournament.max_players;
 
   return (

@@ -25,9 +25,7 @@ interface Props {
 }
 
 async function fetchActiveMatches(tournamentId: string): Promise<Match[]> {
-  const res = await fetch(`${API_URL}/api/public/tournaments/${tournamentId}/matches`, {
-    headers: { "X-Organization-Slug": ORG_SLUG },
-  });
+  const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
   if (!res.ok) return [];
   const all = await res.json() as Match[];
   return all.filter((m) => ["IN_PROGRESS", "PENDING"].includes(m.status));

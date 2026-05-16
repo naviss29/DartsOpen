@@ -1,18 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { apiProposeWinner, apiConfirmWinner, apiDisputeResult, apiMarkWinnerDirect } from "@/lib/api/tournament";
+import {
+  dbProposeWinner,
+  dbConfirmWinner,
+  dbDisputeResult,
+  dbMarkWinnerDirect,
+} from "@/lib/db/tournament";
 
 export async function proposeWinner(
   matchSetId: string,
   winnerId: string,
   playerSide: 1 | 2
 ): Promise<{ error?: string }> {
-  const res = await apiProposeWinner(matchSetId, winnerId, playerSide);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Erreur lors de la saisie du score." };
-  }
+  const result = await dbProposeWinner(matchSetId, winnerId, playerSide).catch(() => ({
+    error: "Erreur lors de la saisie du score.",
+    set: null as never,
+  }));
+  if (result.error) return { error: result.error };
   return {};
 }
 
@@ -21,11 +26,11 @@ export async function confirmWinner(
   playerSide: 1 | 2,
   tournamentId: string
 ): Promise<{ error?: string; disputed?: boolean }> {
-  const res = await apiConfirmWinner(matchSetId, playerSide);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Erreur lors de la confirmation." };
-  }
+  const result = await dbConfirmWinner(matchSetId, playerSide).catch(() => ({
+    error: "Erreur lors de la confirmation.",
+  }));
+  if (result.error) return { error: result.error };
+
   revalidatePath(`/t/${tournamentId}/score`);
   revalidatePath(`/t/${tournamentId}/live`);
   return {};
@@ -36,11 +41,11 @@ export async function markWinnerDirect(
   winnerId: string,
   tournamentId: string
 ): Promise<{ error?: string }> {
-  const res = await apiMarkWinnerDirect(matchSetId, winnerId);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Erreur lors de la saisie du score." };
-  }
+  const result = await dbMarkWinnerDirect(matchSetId, winnerId).catch(() => ({
+    error: "Erreur lors de la saisie du score.",
+  }));
+  if (result.error) return { error: result.error };
+
   revalidatePath(`/t/${tournamentId}/score`);
   revalidatePath(`/t/${tournamentId}/live`);
   return {};
@@ -50,8 +55,11 @@ export async function disputeResult(
   matchSetId: string,
   tournamentId: string
 ): Promise<{ error?: string }> {
-  const res = await apiDisputeResult(matchSetId);
-  if (!res.ok) return { error: "Erreur lors de la contestation." };
+  const result = await dbDisputeResult(matchSetId).catch(() => ({
+    error: "Erreur lors de la contestation.",
+  }));
+  if (result.error) return { error: result.error };
+
   revalidatePath(`/t/${tournamentId}/score`);
   return {};
 }

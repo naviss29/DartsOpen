@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { apiAddRegistration, apiDeleteRegistration, apiGetTournament } from "@/lib/api/tournament";
+import { dbAddRegistration, dbDeleteRegistration, dbGetTournament } from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
 
 const PlayerSchema = z.object({
@@ -40,34 +40,32 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
   }
 
-  const tournament = await apiGetTournament(parsed.data.tournament_id) as { status: string } | null;
+  const tournament = await dbGetTournament(parsed.data.tournament_id);
   if (!tournament) return { error: "Tournoi introuvable ou accès refusé." };
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     return { error: "Les inscriptions sont fermées pour ce tournoi." };
   }
 
-  const res = await apiAddRegistration(parsed.data.tournament_id, {
+  const reg = await dbAddRegistration(parsed.data.tournament_id, {
     playerName: parsed.data.player_name,
     playerEmail: parsed.data.player_email,
     playerPhone: parsed.data.player_phone ?? null,
     playerNames,
     platformFeeCents: PLATFORM_FEE_CENTS * playersPerTeam,
-  });
+  }).catch(() => null);
 
-  if (!res.ok) return { error: "Erreur lors de l'inscription." };
+  if (!reg) return { error: "Erreur lors de l'inscription." };
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
 }
 
 export async function removePlayer(registrationId: string, tournamentId: string) {
-  const tournament = await apiGetTournament(tournamentId) as { status: string } | null;
+  const tournament = await dbGetTournament(tournamentId);
   if (!tournament) throw new Error("Tournoi introuvable.");
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     throw new Error("Impossible de retirer un joueur une fois le tournoi démarré.");
   }
 
-  const res = await apiDeleteRegistration(tournamentId, registrationId);
-  if (!res.ok) throw new Error("Impossible de retirer le joueur.");
-
+  await dbDeleteRegistration(registrationId);
   revalidatePath(`/tournaments/${tournamentId}/players`);
 }

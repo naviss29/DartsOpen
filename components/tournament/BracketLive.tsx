@@ -28,10 +28,7 @@ const CONN_W = 48;
 const BASE_SLOT = CARD_H + 32;
 
 async function fetchBracketMatches(tournamentId: string): Promise<BracketMatch[]> {
-  const res = await fetch(
-    `${API_URL}/api/public/tournaments/${tournamentId}/matches?pool=null`,
-    { headers: { "X-Organization-Slug": ORG_SLUG } }
-  );
+  const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
   if (!res.ok) return [];
   const all = await res.json() as BracketMatch[];
   return all.filter((m) => m.bracket_round !== null);

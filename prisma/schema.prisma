@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TournamentStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  FINISHED
+}
+
+enum MatchStatus {
+  PENDING
+  IN_PROGRESS
+  FINISHED
+}
+
+enum RegistrationStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum RegistrationMode {
+  ONLINE
+  ONSITE
+}
+
+enum ScoringMode {
+  ELECTRONIC
+  TRADITIONAL
+}
+
+model Organization {
+  userId          String  @id @map("user_id")
+  stripeAccountId String? @map("stripe_account_id")
+
+  @@map("organizations")
+}
+
+model Tournament {
+  id                 String           @id @default(uuid())
+  userId             String           @map("user_id")
+  name               String
+  date               DateTime         @db.Date
+  location           String
+  status             TournamentStatus @default(DRAFT)
+  maxPlayers         Int              @map("max_players")
+  entryFee           Int              @default(0) @map("entry_fee")
+  nbPools            Int              @default(1) @map("nb_pools")
+  nbBoards           Int              @default(1) @map("nb_boards")
+  advancementPerPool Int              @default(1) @map("advancement_per_pool")
+  playersPerTeam     Int              @default(1) @map("players_per_team")
+  registrationMode   RegistrationMode @default(ONLINE) @map("registration_mode")
+  scoringMode        ScoringMode      @default(ELECTRONIC) @map("scoring_mode")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  rounds        Round[]
+  registrations Registration[]
+  pools         Pool[]
+  matches       Match[]
+
+  @@map("tournaments")
+}
+
+model Round {
+  id           String @id @default(uuid())
+  tournamentId String @map("tournament_id")
+  roundOrder   Int    @map("round_order")
+  gameType     String @map("game_type")
+  entryType    String @map("entry_type")
+  finishType   String @map("finish_type")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  matchSets  MatchSet[]
+
+  @@map("rounds")
+}
+
+model Registration {
+  id               String             @id @default(uuid())
+  tournamentId     String             @map("tournament_id")
+  playerName       String             @map("player_name")
+  playerEmail      String             @map("player_email")
+  playerPhone      String?            @map("player_phone")
+  playerNames      Json               @default("[]") @map("player_names")
+  status           RegistrationStatus @default(PENDING)
+  qrCodeToken      String             @unique @default(uuid()) @map("qr_code_token")
+  stripeSessionId  String?            @map("stripe_session_id")
+  entryFeeCents    Int                @default(0) @map("entry_fee_cents")
+  platformFeeCents Int                @default(0) @map("platform_fee_cents")
+  feeCollected     Boolean            @default(false) @map("fee_collected")
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  tournament  Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  poolPlayers PoolPlayer[]
+  matchesAsP1 Match[]      @relation("MatchPlayer1")
+  matchesAsP2 Match[]      @relation("MatchPlayer2")
+  matchesWon  Match[]      @relation("MatchWinner")
+  setsWon     MatchSet[]
+
+  @@map("registrations")
+}
+
+model Pool {
+  id           String @id @default(uuid())
+  tournamentId String @map("tournament_id")
+  name         String
+
+  tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  players    PoolPlayer[]
+  matches    Match[]
+
+  @@map("pools")
+}
+
+model PoolPlayer {
+  poolId         String @map("pool_id")
+  registrationId String @map("registration_id")
+  rank           Int?
+
+  pool         Pool         @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@id([poolId, registrationId])
+  @@map("pool_players")
+}
+
+model Match {
+  id              String      @id @default(uuid())
+  tournamentId    String      @map("tournament_id")
+  poolId          String?     @map("pool_id")
+  bracketRound    Int?        @map("bracket_round")
+  bracketPosition Int?        @map("bracket_position")
+  boardNumber     Int         @default(0) @map("board_number")
+  status          MatchStatus @default(PENDING)
+  player1Id       String      @map("player1_id")
+  player2Id       String?     @map("player2_id")
+  winnerId        String?     @map("winner_id")
+
+  tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  pool       Pool?        @relation(fields: [poolId], references: [id])
+  player1    Registration  @relation("MatchPlayer1", fields: [player1Id], references: [id])
+  player2    Registration? @relation("MatchPlayer2", fields: [player2Id], references: [id])
+  winner     Registration? @relation("MatchWinner", fields: [winnerId], references: [id])
+  sets       MatchSet[]
+
+  @@map("matches")
+}
+
+model MatchSet {
+  id          String  @id @default(uuid())
+  matchId     String  @map("match_id")
+  roundId     String  @map("round_id")
+  scoreP1     Int     @default(0) @map("score_p1")
+  scoreP2     Int     @default(0) @map("score_p2")
+  winnerId    String? @map("winner_id")
+  validatedP1 Boolean @default(false) @map("validated_p1")
+  validatedP2 Boolean @default(false) @map("validated_p2")
+
+  match  Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  round  Round        @relation(fields: [roundId], references: [id])
+  winner Registration? @relation(fields: [winnerId], references: [id])
+
+  @@map("match_sets")
+}

@@ -1,36 +1,32 @@
 "use server";
 
 import { stripe, PLATFORM_FEE_CENTS } from "@/lib/stripe";
-import { createClient } from "@/lib/supabase/server";
+import { getUser } from "@/lib/api/auth";
 import { redirect } from "next/navigation";
+import {
+  dbGetTournament,
+  dbCountRegistrations,
+  dbAddRegistration,
+  dbUpdateRegistrationStripeSession,
+  dbGetOrganization,
+  dbUpsertOrganizationStripeAccount,
+} from "@/lib/db/tournament";
 
 export async function createStripeOnboardingLink(): Promise<{ url?: string; error?: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser();
   if (!user) redirect("/login");
 
-  const { data: association } = await supabase
-    .from("associations")
-    .select("stripe_account_id, name, email")
-    .eq("id", user.id)
-    .single();
-
-  if (!association) return { error: "Association introuvable." };
-
-  let accountId = association.stripe_account_id;
+  const org = await dbGetOrganization(user.id);
+  let accountId = org?.stripeAccountId ?? null;
 
   if (!accountId) {
     const account = await stripe.accounts.create({
       type: "express",
-      email: association.email,
-      metadata: { association_id: user.id },
+      email: user.email,
+      metadata: { user_id: user.id },
     });
     accountId = account.id;
-
-    await supabase
-      .from("associations")
-      .update({ stripe_account_id: accountId })
-      .eq("id", user.id);
+    await dbUpsertOrganizationStripeAccount(user.id, accountId);
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -52,72 +48,39 @@ export async function createRegistration(
   phone: string | null,
   playerNames: string[]
 ): Promise<{ error?: string }> {
-  const supabase = await createClient();
-
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, entry_fee, players_per_team, status, max_players, association_id")
-    .eq("id", tournamentId)
-    .eq("status", "OPEN")
-    .single();
-
-  if (!tournament) return { error: "Ce tournoi n'accepte plus les inscriptions." };
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.status !== "OPEN") {
+    return { error: "Ce tournoi n'accepte plus les inscriptions." };
+  }
 
   if (phone && !/^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(phone.trim())) {
     return { error: "Numéro de téléphone invalide (ex : 0612345678)." };
   }
 
-  const { count } = await supabase
-    .from("registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", tournamentId)
-    .eq("status", "PAID");
-
-  if ((count ?? 0) * tournament.players_per_team >= tournament.max_players) {
+  const paidCount = await dbCountRegistrations(tournamentId, "PAID");
+  if (paidCount * tournament.players_per_team >= tournament.max_players) {
     return { error: "Ce tournoi est complet." };
-  }
-
-  const { data: association } = await supabase
-    .from("associations")
-    .select("stripe_account_id")
-    .eq("id", tournament.association_id)
-    .single();
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-
-  // Insère l'inscription en statut PENDING
-  const { data: registration, error: insertError } = await supabase
-    .from("registrations")
-    .insert({
-      tournament_id: tournamentId,
-      player_name: teamName,
-      player_email: contactEmail,
-      player_phone: phone,
-      player_names: playerNames,
-      status: "PENDING",
-    })
-    .select("id, qr_code_token")
-    .single();
-
-  if (insertError || !registration) return { error: "Erreur lors de l'inscription." };
-
-  // Si l'inscription est gratuite, passe directement à PAID (frais non collectés)
-  if (tournament.entry_fee === 0) {
-    await supabase
-      .from("registrations")
-      .update({
-        status: "PAID",
-        platform_fee_cents: PLATFORM_FEE_CENTS * tournament.players_per_team,
-        fee_collected: false,
-      })
-      .eq("id", registration.id);
-
-    redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`);
   }
 
   const platformFeeCents = PLATFORM_FEE_CENTS * tournament.players_per_team;
 
-  // Crée une session Stripe Checkout
+  const registration = await dbAddRegistration(tournamentId, {
+    playerName: teamName,
+    playerEmail: contactEmail,
+    playerPhone: phone,
+    playerNames,
+    platformFeeCents,
+  }).catch(() => null);
+
+  if (!registration) return { error: "Erreur lors de l'inscription." };
+
+  if (tournament.entry_fee === 0) {
+    redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`);
+  }
+
+  const org = await dbGetOrganization(tournament.association_id);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
   const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = {
     mode: "payment",
     customer_email: contactEmail,
@@ -139,21 +102,16 @@ export async function createRegistration(
     cancel_url: `${appUrl}/t/${tournamentId}/register?cancelled=1`,
   };
 
-  // Si l'association a un compte Stripe Connect, on l'utilise avec les frais plateforme
-  if (association?.stripe_account_id) {
+  if (org?.stripeAccountId) {
     sessionParams.payment_intent_data = {
       application_fee_amount: platformFeeCents,
-      transfer_data: { destination: association.stripe_account_id },
+      transfer_data: { destination: org.stripeAccountId },
     };
   }
 
   const session = await stripe.checkout.sessions.create(sessionParams);
 
-  // Stocke le session ID
-  await supabase
-    .from("registrations")
-    .update({ stripe_payment_intent_id: session.id })
-    .eq("id", registration.id);
+  await dbUpdateRegistrationStripeSession(registration.id, session.id);
 
   redirect(session.url!);
 }

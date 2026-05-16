@@ -1,4 +1,5 @@
-import { apiListTournaments } from "@/lib/api/tournament";
+import { dbListTournaments } from "@/lib/db/tournament";
+import { getUser } from "@/lib/api/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -17,7 +18,8 @@ type Tournament = {
 };
 
 export default async function TournamentsPage() {
-  const tournaments = await apiListTournaments() as Tournament[];
+  const user = await getUser();
+  const tournaments = user ? await dbListTournaments(user.id).catch(() => []) as Tournament[] : [];
 
   return (
     <div className="space-y-6">

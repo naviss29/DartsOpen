@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { distributePlayersIntoPools } from "@/lib/utils/pools";
 import { generateRoundRobin, assignBoards } from "@/lib/utils/bracket";
-import { apiListRegistrations, apiGeneratePools, apiGetTournament } from "@/lib/api/tournament";
+import { dbListRegistrations, dbGeneratePools, dbGetTournament } from "@/lib/db/tournament";
 
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -13,19 +13,14 @@ export async function generatePools(
   _prevState: { error?: string } | null,
   _formData: FormData
 ): Promise<{ error?: string }> {
-  const tournament = await apiGetTournament(tournamentId) as {
-    status: string;
-    nb_pools: number;
-    nb_boards: number;
-    rounds: { id: string; order: number }[];
-  } | null;
+  const tournament = await dbGetTournament(tournamentId);
 
   if (!tournament) return { error: "Tournoi introuvable." };
   if (tournament.status !== "OPEN") {
     return { error: "Les poules ne peuvent être générées que lorsque le tournoi est ouvert." };
   }
 
-  const players = await apiListRegistrations(tournamentId, "PAID") as { id: string }[];
+  const players = await dbListRegistrations(tournamentId, "PAID");
 
   if (!players || players.length < 2) {
     return { error: "Il faut au moins 2 équipes inscrites pour générer les poules." };
@@ -64,11 +59,8 @@ export async function generatePools(
     });
   });
 
-  const res = await apiGeneratePools(tournamentId, { pools, matches });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Erreur lors de la génération des poules." };
-  }
+  const ok = await dbGeneratePools(tournamentId, pools, matches).catch(() => false);
+  if (ok === false) return { error: "Erreur lors de la génération des poules." };
 
   revalidatePath(`/tournaments/${tournamentId}`);
   revalidatePath(`/tournaments/${tournamentId}/pools`);

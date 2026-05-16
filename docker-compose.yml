@@ -1,33 +1,19 @@
 services:
-  app:
-    build: .
-    container_name: dartsopen-app
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-    env_file:
-      - .env.local
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  postgres:
-    image: postgres:15-alpine
-    container_name: dartsopen-postgres
+  db:
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: dartsopen
       POSTGRES_USER: dartsopen
       POSTGRES_PASSWORD: dartsopen
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dartsopen"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U dartsopen -d dartsopen"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
 volumes:
-  postgres_data:
+  db_data:
