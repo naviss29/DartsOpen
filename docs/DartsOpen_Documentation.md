@@ -291,6 +291,8 @@ Mesures :
 | 23 | Supabase redirectTo avec query params — rejet si pas dans la liste exacte | La Redirect URL autorisée était `/auth/callback` (exacte). Notre `redirectTo` = `/auth/callback?next=/reset-password` → Supabase rejette (pas de correspondance exacte) → redirige vers Site URL avec `#error=otp_expired` | Ajouter l'URL avec wildcard dans Supabase : `/auth/callback*` et `/auth/confirm*`. Les wildcards matchent les query strings. |
 | 24 | `advanceToNextRound` avec auth dans un contexte public | Appeler `advanceToNextRound` (qui fait `redirect("/login")` si pas d'user) depuis une server action de page publique provoque un redirect inattendu pour le joueur qui saisit un score | Extraire la logique métier dans `doAdvanceToNextRound` (sans auth). `advanceToNextRound` garde la vérification d'auth pour le bouton organisateur. `doAdvanceToNextRound` est appelée sans auth depuis `score.ts`. |
 | 25 | `poolsPending` toujours false quand aucun match de poule n'existe | `[].some(m => m.status !== "FINISHED")` retourne `false` → le bouton "Générer phases finales" s'affiche même avant que les poules soient terminées | Condition correcte : `poolMatches.length === 0 \|\| poolMatches.some(m => m.status !== "FINISHED")` |
+| 26 | Dockerfile Node 20 incompatible Prisma 7 | `@prisma/streams-local` requiert Node ≥ 22 → build Docker échoue avec un `EBADENGINE` puis une erreur module introuvable | Utiliser `node:22-alpine` dans le Dockerfile |
+| 27 | Client Prisma généré absent du build Docker | `lib/generated/prisma/` est dans `.gitignore` → le client n'existe pas dans l'image → `Cannot find module` au build | Ajouter `RUN npx prisma generate` avant `RUN npm run build` dans le stage builder du Dockerfile |
 
 ---
 
@@ -340,10 +342,50 @@ Mesures :
 | 38 | Mai 2026 | BracketLive — alignement avec BracketView | `BracketLive` aligné sur `BracketView` : helpers `deriveR1Slots`, `expectedCount`, `slotHasCard` ajoutés, colonnes pour `totalRounds` (au lieu de `maxRound`), `PlaceholderCard` en thème sombre pour les positions vides en R2+, connecteurs SVG recalculés via `slotHasCard`. Le polling/SSE remplace les "?" par les vrais matchs dès qu'ils sont créés. |
 | 39 | Mai 2026 | Dashboard branché sur les vraies données | La page `/dashboard` affichait des compteurs codés en dur (0) et "Aucun tournoi". Branchée sur `dbListTournaments` : compteurs réels (total, ouvertes, en cours, terminés), liste des 5 tournois les plus récents avec lien "Voir tout" si plus de 5. |
 | 40 | Mai 2026 | Affichage places prises sur les listes de tournois | `dbListTournaments` inclut désormais un `_count` Prisma filtré sur `registrations.status = PAID`. Dashboard et "Mes tournois" affichent `{players_paid}/{max_players} joueurs` au lieu du seul max. |
+| 41 | Mai 2026 | Fix Dockerfile — Node 22 + prisma generate | `node:20-alpine` → `node:22-alpine` (Prisma 7 / `@prisma/streams-local` requiert Node ≥ 22). Ajout de `npx prisma generate` avant `npm run build` dans le stage builder (le client généré est gitignored, il doit être régénéré à chaque build Docker). |
 
 ---
 
-## 9. Roadmap
+## 9. Checklist mise en production
+
+> À valider dans l'ordre avant chaque merge `develop` → `main`.
+
+### SMTP (SterPlatform gère tous les emails — register, forgot-password)
+
+| Env | Action | Où |
+|---|---|---|
+| **Staging** | Configurer `MAILER_DSN` avec un vrai SMTP (ou Mailpit si suffisant) | Coolify → SterPlatform staging → Environment Variables |
+| **Prod** | Configurer `MAILER_DSN` avec un vrai SMTP | Coolify → SterPlatform prod → Environment Variables |
+
+Fournisseurs recommandés (gratuits pour commencer) :
+- **Brevo** (ex-Sendinblue) : 300 emails/jour gratuit → `smtp://login:api_key@smtp-relay.brevo.com:587`
+- **Resend** : 100 emails/jour gratuit → utiliser le relais SMTP `smtp.resend.com:465`
+- **Gmail** : `smtp://adresse@gmail.com:mot_de_passe_applicatif@smtp.gmail.com:587` (créer un mot de passe applicatif dans les paramètres de sécurité Google)
+
+Ne pas oublier de mettre à jour `APP_FROM_EMAIL` dans Coolify (ex: `noreply@dartsopen.fr`).
+
+### DartsOpen staging (develop → Coolify staging)
+
+| Étape | Action |
+|---|---|
+| App Coolify | Créer une app depuis `naviss29/DartsOpen`, branche `develop` |
+| Variables d'environnement | `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL` (SterPlatform staging), `STER_ORG_SLUG=dartsopen`, `NEXT_PUBLIC_STER_ORG_SLUG=dartsopen`, `STRIPE_SECRET_KEY` (clé test), `STRIPE_WEBHOOK_SECRET` (test), `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (test) |
+| Base de données | Créer une DB PostgreSQL dans Coolify (ou réutiliser celle de prod avec un schéma séparé) et injecter `DATABASE_URL` |
+| Migration Prisma | Après premier déploiement : `docker exec <container> npx prisma migrate deploy` |
+| Webhook Stripe staging | Créer un webhook Stripe en mode test pointant sur `https://<staging-url>/api/webhooks/stripe` |
+| Build args Coolify | Supprimer `SUPABASE_SERVICE_ROLE_KEY` des build args Coolify (vestige Supabase, génère des warnings Docker) |
+
+### DartsOpen prod (main → Coolify prod)
+
+| Étape | Action |
+|---|---|
+| Merge | Merger `develop` → `main` uniquement après validation complète en staging |
+| Migration Prisma | `docker exec <container> npx prisma migrate deploy` après chaque deploy avec migration |
+| Webhook Stripe prod | Vérifier que le webhook prod pointe sur `https://<prod-url>/api/webhooks/stripe` |
+
+---
+
+## 10. Roadmap
 
 - [x] Phase 0 — Socle technique (Next.js, Supabase, Docker, git, CI)
 - [x] Phase 1 — Auth + Gestion tournoi (CRUD, configuration, poules, matchs)
