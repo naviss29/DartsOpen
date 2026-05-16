@@ -27,9 +27,9 @@ export async function confirmWinner(
   playerSide: 1 | 2,
   tournamentId: string
 ): Promise<{ error?: string; disputed?: boolean }> {
-  const result = await dbConfirmWinner(matchSetId, playerSide).catch(() => ({
-    error: "Erreur lors de la confirmation.",
-  }));
+  const result = await dbConfirmWinner(matchSetId, playerSide).catch(
+    (): Awaited<ReturnType<typeof dbConfirmWinner>> => ({ error: "Erreur lors de la confirmation." })
+  );
   if (result.error) return { error: result.error };
 
   if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
@@ -46,9 +46,9 @@ export async function markWinnerDirect(
   winnerId: string,
   tournamentId: string
 ): Promise<{ error?: string }> {
-  const result = await dbMarkWinnerDirect(matchSetId, winnerId).catch(() => ({
-    error: "Erreur lors de la saisie du score.",
-  }));
+  const result = await dbMarkWinnerDirect(matchSetId, winnerId).catch(
+    (): Awaited<ReturnType<typeof dbMarkWinnerDirect>> => ({ error: "Erreur lors de la saisie du score." })
+  );
   if (result.error) return { error: result.error };
 
   if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
