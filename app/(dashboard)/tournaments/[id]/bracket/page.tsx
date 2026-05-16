@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { generateBracket } from "@/lib/actions/bracket";
+import { generateBracket, advanceToNextRound } from "@/lib/actions/bracket";
 import { BracketView } from "@/components/tournament/BracketView";
 import { dbGetTournament, dbListMatches } from "@/lib/db/tournament";
 import Link from "next/link";
@@ -44,7 +44,7 @@ export default async function BracketPage({ params }: Props) {
 
   const poolsPending = tournament.nb_pools === 1
     ? false
-    : poolMatches.some((m) => m.status !== "FINISHED");
+    : poolMatches.length === 0 || poolMatches.some((m) => m.status !== "FINISHED");
 
   // Single-pool format: auto-generate bracket on first load
   if (
@@ -81,6 +81,11 @@ export default async function BracketPage({ params }: Props) {
   async function doGenerateBracket() {
     "use server";
     await generateBracket(id);
+  }
+
+  async function doAdvanceToNextRound() {
+    "use server";
+    await advanceToNextRound(id, maxRound);
   }
 
   return (
@@ -136,6 +141,19 @@ export default async function BracketPage({ params }: Props) {
           </div>
         )}
       </div>
+
+      {hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS" && (
+        <div className="flex justify-end">
+          <form action={doAdvanceToNextRound}>
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              Tour suivant →
+            </button>
+          </form>
+        </div>
+      )}
 
       {tournamentFinished && winnerName && (
         <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-6 text-center space-y-2">

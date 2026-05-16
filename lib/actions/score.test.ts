@@ -39,15 +39,15 @@ describe("Flux de validation de score", () => {
   });
 });
 
-// Tests de la logique d'auto-avancement du bracket (tryAdvanceBracket)
+// Tests de la logique d'auto-avancement du bracket (doAdvanceToNextRound)
 describe("Logique auto-avancement bracket", () => {
   it("ne crée pas le tour suivant si des matchs ne sont pas terminés", () => {
     const matches = [
       { status: "FINISHED", winner_id: "p1" },
       { status: "IN_PROGRESS", winner_id: null },
     ];
-    const remaining = matches.filter((m) => m.status !== "FINISHED").length;
-    expect(remaining).toBeGreaterThan(0);
+    const allFinished = matches.every((m) => m.status === "FINISHED");
+    expect(allFinished).toBe(false);
   });
 
   it("détecte la finale : un seul match dans le tour courant → tournoi terminé", () => {
@@ -56,38 +56,46 @@ describe("Logique auto-avancement bracket", () => {
     expect(isFinal).toBe(true);
   });
 
-  it("crée les bonnes paires pour le tour suivant", () => {
+  it("crée les bonnes paires pour le tour suivant (appariement séquentiel sans byes)", () => {
     const currentMatches = [
       { bracket_position: 0, winner_id: "p1" },
       { bracket_position: 1, winner_id: "p3" },
       { bracket_position: 2, winner_id: "p5" },
       { bracket_position: 3, winner_id: "p7" },
     ];
-    const pairs: Array<{ p1: string; p2: string; position: number }> = [];
-    for (let i = 0; i < currentMatches.length; i += 2) {
-      const m1 = currentMatches[i];
-      const m2 = currentMatches[i + 1];
-      if (m1?.winner_id && m2?.winner_id) {
-        pairs.push({ p1: m1.winner_id, p2: m2.winner_id, position: Math.floor(i / 2) });
-      }
-    }
+    const winners = currentMatches.map((m) => m.winner_id!);
+    const pairs = Array.from({ length: Math.floor(winners.length / 2) }, (_, j) => ({
+      p1: winners[j * 2],
+      p2: winners[j * 2 + 1],
+      position: j,
+    }));
     expect(pairs).toHaveLength(2);
     expect(pairs[0]).toEqual({ p1: "p1", p2: "p3", position: 0 });
     expect(pairs[1]).toEqual({ p1: "p5", p2: "p7", position: 1 });
   });
 
-  it("ignore la progression si un winner_id est manquant dans la paire", () => {
-    const currentMatches = [
-      { bracket_position: 0, winner_id: "p1" },
-      { bracket_position: 1, winner_id: null },
+  it("détecte les byes quand le nombre de matchs < nombre de positions attendues", () => {
+    // 10 joueurs → 8 positions en R1 (0-7), mais seulement 2 matchs réels (positions 6 et 7)
+    const sortedMatches = [
+      { bracket_position: 6, status: "FINISHED", winner_id: "p7" },
+      { bracket_position: 7, status: "FINISHED", winner_id: "p8" },
     ];
-    let shouldAdvance = true;
-    for (let i = 0; i < currentMatches.length; i += 2) {
-      const m1 = currentMatches[i];
-      const m2 = currentMatches[i + 1];
-      if (!m1?.winner_id || !m2?.winner_id) { shouldAdvance = false; break; }
-    }
-    expect(shouldAdvance).toBe(false);
+    const maxPosition = Math.max(...sortedMatches.map((m) => m.bracket_position));
+    const expectedSlots = maxPosition + 1; // 8
+    const hasByes = sortedMatches.length < expectedSlots; // 2 < 8
+    expect(hasByes).toBe(true);
+  });
+
+  it("pas de byes quand tous les slots sont remplis", () => {
+    const sortedMatches = [
+      { bracket_position: 0, status: "FINISHED", winner_id: "p1" },
+      { bracket_position: 1, status: "FINISHED", winner_id: "p3" },
+      { bracket_position: 2, status: "FINISHED", winner_id: "p5" },
+      { bracket_position: 3, status: "FINISHED", winner_id: "p7" },
+    ];
+    const maxPosition = Math.max(...sortedMatches.map((m) => m.bracket_position));
+    const hasByes = sortedMatches.length < maxPosition + 1; // 4 < 4 = false
+    expect(hasByes).toBe(false);
   });
 });
 

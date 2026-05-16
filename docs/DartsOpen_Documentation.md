@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.6
+> Version : 0.8
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 6 — recette terminée, prêt pour merge main**
+> Statut : **Phase 5 terminée — bracket complet avec auto-avancement, affichage temps réel**
 
 ---
 
@@ -17,6 +17,8 @@
 | 0.4 | Mai 2026 | Phase 6 — CI GitHub Actions, scoring modes (ELECTRONIC/TRADITIONAL), QR codes pré-tournoi, génération de poules adaptive, correctifs lint (10 erreurs/warnings), 63 tests |
 | 0.5 | Mai 2026 | Mise en production — Coolify sur Hetzner CX23 (Nuremberg), Traefik v3.6, diagnostic réseau Docker, URL production identifiée |
 | 0.6 | Mai 2026 | Phases finales complètes — élimination directe 1-poule, auto-avancement depuis score.ts, BracketLive avec Realtime + polling, redesign visuel bracket (SVG), createServiceClient, 77 tests |
+| 0.7 | Mai 2026 | Bracket refactorisé — affichage toutes colonnes dès le départ (placeholders ?), byes gérés côté serveur, doAdvanceToNextRound sans auth, auto-avancement depuis score.ts, BracketLive aligné, 83 tests |
+| 0.8 | Mai 2026 | Dashboard branché sur les vraies données — compteurs réels, liste tournois récents, places prises/total via _count Prisma |
 
 ---
 
@@ -287,6 +289,8 @@ Mesures :
 | 21 | Callback auth — cookies session non propagés au redirect | `createClient()` de next/headers écrit les cookies dans un store interne. Le `NextResponse.redirect()` retourné en fin de route est une réponse séparée — les cookies ne s'y trouvent pas → session perdue immédiatement | Créer la `NextResponse.redirect()` en premier, puis instancier le Supabase client avec `setAll` qui écrit directement sur `response.cookies`. Voir `app/auth/callback/route.ts` |
 | 22 | PKCE reset password — lien expiré si changement de navigateur | `resetPasswordForEmail` avec PKCE stocke le code verifier dans un cookie. Si l'utilisateur clique le lien depuis un autre navigateur/appareil, le cookie est absent → `exchangeCodeForSession` échoue silencieusement → redirect vers `/dashboard` → middleware → `/login` | Utiliser le flow token_hash : route `/auth/confirm` + `verifyOtp({ token_hash, type })`. Pas de cookie requis, fonctionne cross-browser. Template email : `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password` |
 | 23 | Supabase redirectTo avec query params — rejet si pas dans la liste exacte | La Redirect URL autorisée était `/auth/callback` (exacte). Notre `redirectTo` = `/auth/callback?next=/reset-password` → Supabase rejette (pas de correspondance exacte) → redirige vers Site URL avec `#error=otp_expired` | Ajouter l'URL avec wildcard dans Supabase : `/auth/callback*` et `/auth/confirm*`. Les wildcards matchent les query strings. |
+| 24 | `advanceToNextRound` avec auth dans un contexte public | Appeler `advanceToNextRound` (qui fait `redirect("/login")` si pas d'user) depuis une server action de page publique provoque un redirect inattendu pour le joueur qui saisit un score | Extraire la logique métier dans `doAdvanceToNextRound` (sans auth). `advanceToNextRound` garde la vérification d'auth pour le bouton organisateur. `doAdvanceToNextRound` est appelée sans auth depuis `score.ts`. |
+| 25 | `poolsPending` toujours false quand aucun match de poule n'existe | `[].some(m => m.status !== "FINISHED")` retourne `false` → le bouton "Générer phases finales" s'affiche même avant que les poules soient terminées | Condition correcte : `poolMatches.length === 0 \|\| poolMatches.some(m => m.status !== "FINISHED")` |
 
 ---
 
@@ -330,6 +334,12 @@ Mesures :
 | 32 | Mai 2026 | Mot de passe oublié — forgot-password + reset-password | Pages `(auth)/forgot-password` + `(auth)/reset-password`. Actions `requestPasswordReset` (email Supabase) et `updatePassword` (supabase.auth.updateUser). Lien "Mot de passe oublié ?" ajouté dans LoginForm. |
 | 33 | Mai 2026 | Route /auth/confirm — token_hash cross-browser | Route `app/auth/confirm/route.ts` qui utilise `verifyOtp({ token_hash, type })` au lieu de `exchangeCodeForSession`. Avantage : pas besoin du code verifier PKCE → fonctionne depuis n'importe quel navigateur ou appareil. Template email Supabase mis à jour pour utiliser `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password`. |
 | 34 | Mai 2026 | Fix callback auth — cookies sur la réponse redirect | `app/auth/callback/route.ts` réécrit : le Supabase client écrit les cookies directement sur l'objet `NextResponse.redirect()` retourné, au lieu de passer par `cookies()` de next/headers (les cookies ne se propageaient pas sur la réponse finale). |
+| 35 | Mai 2026 | Bracket — correction gestion des byes | `generateBracket` saute les paires bye (player2_id=null) — seuls les vrais matchs R1 sont créés en DB. `BracketView` et `BracketLive` affichent toutes les colonnes dès le départ via `totalRounds = Math.round(Math.log2(r1Slots)) + 1`. Les positions vides en R2+ affichent une `PlaceholderCard` (carte "?"). `r1Slots` est dérivé de la position max du 1er tour trouvé en DB. |
+| 36 | Mai 2026 | doAdvanceToNextRound — extraction sans auth | `advanceToNextRound` (avec auth) délègue à `doAdvanceToNextRound` (sans auth, exportée). Permet d'appeler l'avancement depuis une page publique (score entry) sans redirect /login. Logique bye-aware conservée : si `sortedMatches.length < maxPosition + 1`, recalcule le seeding pour apparier bye-joueurs avec vainqueurs R1. |
+| 37 | Mai 2026 | Auto-avancement bracket depuis score.ts | `confirmWinner` et `markWinnerDirect` dans `score.ts` appellent `doAdvanceToNextRound(tournamentId, bracketRound)` après finalisation d'un match de phase finale (`bracketRound != null`). Si tous les matchs du tour sont FINISHED, le tour suivant est créé automatiquement. Erreur silencieusement ignorée si des matchs restent en cours (`.catch(() => null)`). `tryFinalizeMatch` retourne désormais `bracketRound` dans son résultat. |
+| 38 | Mai 2026 | BracketLive — alignement avec BracketView | `BracketLive` aligné sur `BracketView` : helpers `deriveR1Slots`, `expectedCount`, `slotHasCard` ajoutés, colonnes pour `totalRounds` (au lieu de `maxRound`), `PlaceholderCard` en thème sombre pour les positions vides en R2+, connecteurs SVG recalculés via `slotHasCard`. Le polling/SSE remplace les "?" par les vrais matchs dès qu'ils sont créés. |
+| 39 | Mai 2026 | Dashboard branché sur les vraies données | La page `/dashboard` affichait des compteurs codés en dur (0) et "Aucun tournoi". Branchée sur `dbListTournaments` : compteurs réels (total, ouvertes, en cours, terminés), liste des 5 tournois les plus récents avec lien "Voir tout" si plus de 5. |
+| 40 | Mai 2026 | Affichage places prises sur les listes de tournois | `dbListTournaments` inclut désormais un `_count` Prisma filtré sur `registrations.status = PAID`. Dashboard et "Mes tournois" affichent `{players_paid}/{max_players} joueurs` au lieu du seul max. |
 
 ---
 

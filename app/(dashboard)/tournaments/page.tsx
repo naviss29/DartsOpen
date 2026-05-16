@@ -15,6 +15,7 @@ type Tournament = {
   nb_pools: number;
   nb_boards: number;
   entry_fee: number;
+  players_paid: number;
 };
 
 export default async function TournamentsPage() {
@@ -59,7 +60,7 @@ export default async function TournamentsPage() {
                     📍 {t.location}
                   </p>
                   <div className="flex gap-4 mt-3 text-xs text-gray-500">
-                    <span>👤 {t.max_players} joueurs</span>
+                    <span>👤 {t.players_paid}/{t.max_players} joueurs</span>
                     <span>🔵 {t.nb_pools} poules</span>
                     <span>🎯 {t.nb_boards} cibles</span>
                     <span>💶 {(t.entry_fee / 100).toFixed(2)} €</span>

@@ -106,6 +106,26 @@ describe("seedBracket", () => {
     const positions = pairs.map(p => p.bracket_position).sort((a, b) => a - b);
     expect(positions).toEqual([0, 1]);
   });
+
+  it("10 joueurs → 8 paires (padde à 16), 6 byes aux positions 0-5, 2 matchs réels aux positions 6-7", () => {
+    const players = Array.from({ length: 10 }, (_, i) => `p${i + 1}`);
+    const pairs = seedBracket(players);
+    expect(pairs).toHaveLength(8);
+    const byePairs = pairs.filter(p => p.player2_id === null);
+    expect(byePairs).toHaveLength(6);
+    const byePositions = byePairs.map(p => p.bracket_position).sort((a, b) => a - b);
+    expect(byePositions).toEqual([0, 1, 2, 3, 4, 5]);
+    const realPositions = pairs.filter(p => p.player2_id !== null).map(p => p.bracket_position).sort((a, b) => a - b);
+    expect(realPositions).toEqual([6, 7]);
+  });
+
+  it("avec 10 joueurs, les matchs réels opposent les têtes de série 7 et 8 aux places 10 et 9", () => {
+    const players = ["p1","p2","p3","p4","p5","p6","p7","p8","p9","p10"];
+    const pairs = seedBracket(players);
+    const real = pairs.filter(p => p.player2_id !== null).sort((a, b) => a.bracket_position - b.bracket_position);
+    expect(real[0]).toMatchObject({ player1_id: "p7", player2_id: "p10" });
+    expect(real[1]).toMatchObject({ player1_id: "p8", player2_id: "p9" });
+  });
 });
 
 describe("roundLabel", () => {

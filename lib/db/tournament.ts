@@ -213,10 +213,16 @@ const roundSelect = {
 export async function dbListTournaments(userId: string) {
   const rows = await prisma.tournament.findMany({
     where: { userId },
-    include: { rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } } },
+    include: {
+      rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } },
+      _count: { select: { registrations: { where: { status: "PAID" } } } },
+    },
     orderBy: { createdAt: "desc" },
   });
-  return rows.map((t) => mapTournament({ ...t, rounds: t.rounds.map(mapRound) }));
+  return rows.map((t) => ({
+    ...mapTournament({ ...t, rounds: t.rounds.map(mapRound) }),
+    players_paid: t._count.registrations,
+  }));
 }
 
 export async function dbGetTournament(id: string) {
@@ -355,6 +361,7 @@ export async function dbAddRegistration(tournamentId: string, data: {
   playerPhone?: string | null;
   playerNames: string[];
   platformFeeCents: number;
+  status?: RegistrationStatus;
 }) {
   const r = await prisma.registration.create({
     data: {
@@ -364,6 +371,7 @@ export async function dbAddRegistration(tournamentId: string, data: {
       playerPhone: data.playerPhone ?? null,
       playerNames: data.playerNames,
       platformFeeCents: data.platformFeeCents,
+      ...(data.status ? { status: data.status } : {}),
     },
   });
   return mapRegistration(r);
@@ -584,7 +592,7 @@ export async function dbProposeWinner(
 export async function dbConfirmWinner(
   matchSetId: string,
   playerSide: 1 | 2
-): Promise<{ error?: string; disputed?: boolean; matchFinished?: boolean; match?: { id: string; tournamentId: string } }> {
+): Promise<{ error?: string; disputed?: boolean; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null } }> {
   const set = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
     include: {
@@ -638,7 +646,7 @@ export async function dbDisputeResult(matchSetId: string): Promise<{ error?: str
 export async function dbMarkWinnerDirect(
   matchSetId: string,
   winnerId: string
-): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string } }> {
+): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null } }> {
   const set = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
     include: {
@@ -669,14 +677,15 @@ async function tryFinalizeMatch(match: {
   id: string;
   player1Id: string;
   player2Id: string | null;
+  bracketRound: number | null;
   status: MatchStatus;
   sets: { winnerId: string | null; validatedP1: boolean; validatedP2: boolean }[];
   tournament: { id: string };
-}): Promise<{ matchFinished?: boolean; match?: { id: string; tournamentId: string } }> {
+}): Promise<{ matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null } }> {
   const confirmedSets = match.sets.filter((s) => s.validatedP1 && s.validatedP2 && s.winnerId !== null);
   const totalSets = match.sets.length;
 
-  if (confirmedSets.length < totalSets) return {};
+  if (totalSets === 0 || confirmedSets.length < totalSets) return {};
 
   const p1Wins = confirmedSets.filter((s) => s.winnerId === match.player1Id).length;
   const p2Wins = confirmedSets.filter((s) => s.winnerId === match.player2Id).length;
@@ -691,7 +700,7 @@ async function tryFinalizeMatch(match: {
 
   return {
     matchFinished: true,
-    match: { id: match.id, tournamentId: match.tournament.id },
+    match: { id: match.id, tournamentId: match.tournament.id, bracketRound: match.bracketRound },
   };
 }
 

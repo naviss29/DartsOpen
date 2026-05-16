@@ -7,6 +7,7 @@ import {
   dbDisputeResult,
   dbMarkWinnerDirect,
 } from "@/lib/db/tournament";
+import { doAdvanceToNextRound } from "@/lib/actions/bracket";
 
 export async function proposeWinner(
   matchSetId: string,
@@ -31,6 +32,10 @@ export async function confirmWinner(
   }));
   if (result.error) return { error: result.error };
 
+  if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
+    await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
+  }
+
   revalidatePath(`/t/${tournamentId}/score`);
   revalidatePath(`/t/${tournamentId}/live`);
   return {};
@@ -45,6 +50,10 @@ export async function markWinnerDirect(
     error: "Erreur lors de la saisie du score.",
   }));
   if (result.error) return { error: result.error };
+
+  if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
+    await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
+  }
 
   revalidatePath(`/t/${tournamentId}/score`);
   revalidatePath(`/t/${tournamentId}/live`);
