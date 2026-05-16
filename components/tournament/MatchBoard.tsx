@@ -5,6 +5,7 @@ import { NextMatchAlert } from "./NextMatchAlert";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
+const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
 
 interface Player { id: string; player_name: string }
 interface MatchSet { id: string; round_order: number; winner_id: string | null; validated_p1: boolean; validated_p2: boolean }
@@ -37,10 +38,13 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   const [nextMatchAlert, setNextMatchAlert] = useState<{ boardNumber: number; match: Match } | null>(null);
 
   useEffect(() => {
-    const poll = setInterval(async () => {
-      const next = await fetchActiveMatches(tournamentId);
+    let mounted = true;
+    let es: EventSource | null = null;
+    let poll: ReturnType<typeof setInterval> | null = null;
+
+    const applyNext = (next: Match[]) => {
+      if (!mounted) return;
       setMatches((prev) => {
-        // Detect when an IN_PROGRESS match disappears → show next PENDING alert
         for (const prevMatch of prev.filter((m) => m.status === "IN_PROGRESS")) {
           if (!next.find((m) => m.id === prevMatch.id)) {
             const nextPending = next.find(
@@ -54,10 +58,47 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
         }
         return next;
       });
-    }, 3000);
+    };
 
-    return () => clearInterval(poll);
-  }, [tournamentId]); // eslint-disable-line react-hooks/exhaustive-deps
+    const doFetch = async () => {
+      const next = await fetchActiveMatches(tournamentId);
+      applyNext(next);
+    };
+
+    const startPolling = () => {
+      poll = setInterval(doFetch, 3000);
+    };
+
+    const connect = async () => {
+      if (!MERCURE_URL) { startPolling(); return; }
+
+      const tokenRes = await fetch(
+        `${API_URL}/api/public/tournaments/${tournamentId}/mercure-token`,
+        { headers: { "X-Organization-Slug": ORG_SLUG } }
+      );
+      if (!tokenRes.ok) { startPolling(); return; }
+
+      const { token, topic } = await tokenRes.json() as { token: string; topic: string };
+      const url = new URL(MERCURE_URL);
+      url.searchParams.append("topic", topic);
+      url.searchParams.append("authorization", token);
+
+      es = new EventSource(url.toString());
+      es.onmessage = doFetch;
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (mounted && !poll) startPolling();
+      };
+    };
+
+    connect();
+    return () => {
+      mounted = false;
+      es?.close();
+      if (poll) clearInterval(poll);
+    };
+  }, [tournamentId]);
 
   const inProgress = matches.filter((m) => m.status === "IN_PROGRESS");
   const pending = matches.filter((m) => m.status === "PENDING");

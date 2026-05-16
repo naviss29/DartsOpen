@@ -5,6 +5,7 @@ import { roundLabel, computeTotalRounds } from "@/lib/utils/bracket";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
+const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
 
 interface BracketMatch {
   id: string;
@@ -40,12 +41,48 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
   const [matches, setMatches] = useState<BracketMatch[]>(initialMatches);
 
   useEffect(() => {
-    const poll = setInterval(async () => {
-      const next = await fetchBracketMatches(tournamentId);
-      if (next.length > 0) setMatches(next);
-    }, 5000);
+    let mounted = true;
+    let es: EventSource | null = null;
+    let poll: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(poll);
+    const doFetch = async () => {
+      const next = await fetchBracketMatches(tournamentId);
+      if (mounted && next.length > 0) setMatches(next);
+    };
+
+    const startPolling = () => {
+      poll = setInterval(doFetch, 5000);
+    };
+
+    const connect = async () => {
+      if (!MERCURE_URL) { startPolling(); return; }
+
+      const tokenRes = await fetch(
+        `${API_URL}/api/public/tournaments/${tournamentId}/mercure-token`,
+        { headers: { "X-Organization-Slug": ORG_SLUG } }
+      );
+      if (!tokenRes.ok) { startPolling(); return; }
+
+      const { token, topic } = await tokenRes.json() as { token: string; topic: string };
+      const url = new URL(MERCURE_URL);
+      url.searchParams.append("topic", topic);
+      url.searchParams.append("authorization", token);
+
+      es = new EventSource(url.toString());
+      es.onmessage = doFetch;
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (mounted && !poll) startPolling();
+      };
+    };
+
+    connect();
+    return () => {
+      mounted = false;
+      es?.close();
+      if (poll) clearInterval(poll);
+    };
   }, [tournamentId]);
 
   if (matches.length === 0) return null;
