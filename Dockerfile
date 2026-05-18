@@ -23,20 +23,18 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# node_modules complets depuis deps : symlinks .bin/ intacts, toutes les dépendances Prisma CLI disponibles
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+# Build Next.js + assets statiques
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Prisma : schema + migrations + packages pour migrate deploy au démarrage
+# Prisma : schema + migrations
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Appel direct au point d'entrée du package pour que __dirname = node_modules/prisma/build/
-# (le bundle .bin/prisma sur Alpine résout __dirname en .bin/ et ne trouve pas les .wasm)
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node_modules/.bin/next start"]
