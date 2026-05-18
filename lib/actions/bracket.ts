@@ -174,8 +174,8 @@ export async function doAdvanceToNextRound(
       const pair1 = pairsByPos.get(pos1);
 
       // Vainqueur : celui du match DB si réel, sinon le joueur bye du seeding
-      const p1 = m0 ? m0.winner_id! : pair0?.player1_id!;
-      const p2 = m1 ? m1.winner_id! : pair1?.player1_id!;
+      const p1 = m0 ? m0.winner_id! : pair0?.player1_id;
+      const p2 = m1 ? m1.winner_id! : pair1?.player1_id;
 
       if (!p1 || !p2) continue;
 
