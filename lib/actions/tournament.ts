@@ -33,32 +33,45 @@ const RoundSchema = z.object({
   finish_type: z.enum(["SINGLE", "DOUBLE", "TRIPLE", "MASTER"]),
 });
 
-export type TournamentState = { error?: string; errors?: Record<string, string[]> } | undefined;
+export type TournamentState = {
+  error?: string;
+  errors?: Record<string, string[]>;
+  fields?: Record<string, string>;
+  ts?: number;
+} | undefined;
+
+function extractTournamentRaw(formData: FormData): Record<string, string> {
+  return {
+    name: (formData.get("name") as string) ?? "",
+    date: (formData.get("date") as string) ?? "",
+    location: (formData.get("location") as string) ?? "",
+    max_players: (formData.get("max_players") as string) ?? "",
+    entry_fee: (formData.get("entry_fee") as string) ?? "",
+    nb_pools: (formData.get("nb_pools") as string) ?? "",
+    nb_boards: (formData.get("nb_boards") as string) ?? "",
+    advancement_per_pool: (formData.get("advancement_per_pool") as string) ?? "",
+    players_per_team: (formData.get("players_per_team") as string) ?? "",
+    registration_mode: (formData.get("registration_mode") as string) ?? "ONLINE",
+    scoring_mode: (formData.get("scoring_mode") as string) ?? "ELECTRONIC",
+  };
+}
 
 export async function createTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const parsed = TournamentSchema.safeParse({
-    name: formData.get("name"),
-    date: formData.get("date"),
-    location: formData.get("location"),
-    max_players: formData.get("max_players"),
-    entry_fee: formData.get("entry_fee"),
-    nb_pools: formData.get("nb_pools"),
-    nb_boards: formData.get("nb_boards"),
-    advancement_per_pool: formData.get("advancement_per_pool"),
-    players_per_team: formData.get("players_per_team"),
-    registration_mode: formData.get("registration_mode") ?? "ONLINE",
-    scoring_mode: formData.get("scoring_mode") ?? "ELECTRONIC",
-  });
+  const raw = extractTournamentRaw(formData);
+  const parsed = TournamentSchema.safeParse(raw);
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: raw, ts: Date.now() };
   }
 
-  const tournament = await dbCreateTournament(user.id, parsed.data).catch(() => null);
-  if (!tournament) return { error: "Erreur lors de la création du tournoi." };
+  const tournament = await dbCreateTournament(user.id, parsed.data).catch((err) => {
+    console.error('[createTournament]', err);
+    return null;
+  });
+  if (!tournament) return { error: "Erreur lors de la création du tournoi.", fields: raw };
 
   revalidatePath("/tournaments");
   redirect(`/tournaments/${tournament.id}/activate`);
@@ -67,26 +80,15 @@ export async function createTournament(prevState: TournamentState, formData: For
 export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
 
-  const parsed = TournamentSchema.safeParse({
-    name: formData.get("name"),
-    date: formData.get("date"),
-    location: formData.get("location"),
-    max_players: formData.get("max_players"),
-    entry_fee: formData.get("entry_fee"),
-    nb_pools: formData.get("nb_pools"),
-    nb_boards: formData.get("nb_boards"),
-    advancement_per_pool: formData.get("advancement_per_pool"),
-    players_per_team: formData.get("players_per_team"),
-    registration_mode: formData.get("registration_mode") ?? "ONLINE",
-    scoring_mode: formData.get("scoring_mode") ?? "ELECTRONIC",
-  });
+  const raw = extractTournamentRaw(formData);
+  const parsed = TournamentSchema.safeParse(raw);
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: raw, ts: Date.now() };
   }
 
   const ok = await dbUpdateTournament(tournamentId, parsed.data).catch(() => null);
-  if (!ok) return { error: "Erreur lors de la modification du tournoi." };
+  if (!ok) return { error: "Erreur lors de la modification du tournoi.", fields: raw, ts: Date.now() };
 
   revalidatePath(`/tournaments/${tournamentId}`);
 }
