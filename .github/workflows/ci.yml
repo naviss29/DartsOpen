@@ -22,6 +22,9 @@ jobs:
       - name: Installer les dépendances
         run: npm ci
 
+      - name: Générer le client Prisma
+        run: npx prisma generate
+
       - name: Lint
         run: npm run lint
 
@@ -31,11 +34,11 @@ jobs:
       - name: Build Next.js
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
-          # Variables runtime (non injectées au build, déclarées pour éviter les warnings)
-          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          NEXT_PUBLIC_API_URL: https://sterplatform.bichetapps.com
+          # Variables runtime (non injectées au build, déclarées pour éviter les warnings Next.js)
+          DATABASE_URL: placeholder
           STRIPE_SECRET_KEY: placeholder
           STRIPE_WEBHOOK_SECRET: placeholder
+          STER_API_TOKEN: placeholder
