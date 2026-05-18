@@ -832,3 +832,24 @@ export async function dbMarkRegistrationPaid(registrationId: string) {
     data: { status: "PAID", feeCollected: true },
   });
 }
+
+export async function dbGetRegistrationWithTournament(registrationId: string) {
+  const r = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    include: { tournament: true },
+  });
+  if (!r) return null;
+
+  const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const d = r.tournament.date;
+  const dateFr = `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+
+  return {
+    player_name: r.playerName,
+    player_email: r.playerEmail,
+    player_names: r.playerNames as string[],
+    tournament_name: r.tournament.name,
+    tournament_date: dateFr,
+    tournament_location: r.tournament.location,
+  };
+}

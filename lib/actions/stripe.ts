@@ -11,6 +11,7 @@ import {
   dbGetOrganization,
   dbUpsertOrganizationStripeAccount,
 } from "@/lib/db/tournament";
+import { sendEmail } from "@/lib/api/sterplatform";
 
 export async function createStripeOnboardingLink(): Promise<{ url?: string; error?: string }> {
   const user = await getUser();
@@ -75,6 +76,18 @@ export async function createRegistration(
   if (!registration) return { error: "Erreur lors de l'inscription." };
 
   if (tournament.entry_fee === 0) {
+    const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    const d = new Date(tournament.date);
+    const dateFr = `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+
+    await sendEmail('dartsopen_inscription_confirmation', contactEmail, {
+      nom_equipe: teamName,
+      tournoi: tournament.name,
+      date: dateFr,
+      lieu: tournament.location,
+      joueurs: playerNames.join(', '),
+    }).catch((err) => console.error('[email] Erreur envoi confirmation gratuite:', err));
+
     redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`);
   }
 

@@ -1,5 +1,6 @@
 import { stripe } from "@/lib/stripe";
-import { dbMarkRegistrationPaid } from "@/lib/db/tournament";
+import { dbMarkRegistrationPaid, dbGetRegistrationWithTournament } from "@/lib/db/tournament";
+import { sendEmail } from "@/lib/api/sterplatform";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -30,6 +31,17 @@ export async function POST(req: Request) {
     await dbMarkRegistrationPaid(registrationId).catch((err) => {
       console.error("[webhook] Erreur mise à jour registration:", err);
     });
+
+    const reg = await dbGetRegistrationWithTournament(registrationId).catch(() => null);
+    if (reg) {
+      await sendEmail('dartsopen_inscription_confirmation', reg.player_email, {
+        nom_equipe: reg.player_name,
+        tournoi: reg.tournament_name,
+        date: reg.tournament_date,
+        lieu: reg.tournament_location,
+        joueurs: reg.player_names.join(', '),
+      }).catch((err) => console.error('[webhook] Erreur envoi email confirmation:', err));
+    }
   }
 
   return NextResponse.json({ received: true });
