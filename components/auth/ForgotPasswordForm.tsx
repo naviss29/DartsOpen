@@ -24,7 +24,7 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <form action={action} className="space-y-5">
+    <form key={state?.ts} action={action} className="space-y-5">
       {isExpired && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
           Le lien de réinitialisation a expiré. Saisissez votre email pour en recevoir un nouveau.
@@ -50,6 +50,7 @@ export function ForgotPasswordForm() {
           type="email"
           autoComplete="email"
           required
+          defaultValue={state?.fields?.email}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
           placeholder="association@exemple.fr"
         />

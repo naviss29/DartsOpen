@@ -37,6 +37,16 @@ const FINISH_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Doubl
 export function ScoreForm({ match, rounds, scoringMode, tournamentId }: Props) {
   const sets = [...match.match_sets].sort((a, b) => a.round_order - b.round_order);
 
+  if (rounds.length === 0) {
+    return (
+      <div className="text-center py-16 space-y-3">
+        <p className="text-4xl">⚠️</p>
+        <p className="text-yellow-400 font-semibold">Aucune manche configurée</p>
+        <p className="text-gray-400 text-sm">L&apos;organisateur n&apos;a pas encore configuré les manches de ce tournoi.</p>
+      </div>
+    );
+  }
+
   if (scoringMode === "TRADITIONAL") {
     return <TraditionalScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />;
   }

@@ -16,7 +16,12 @@ const PlayerSchema = z.object({
     .optional(),
 });
 
-export type PlayerState = { error?: string; errors?: Record<string, string[]> } | undefined;
+export type PlayerState = {
+  error?: string;
+  errors?: Record<string, string[]>;
+  fields?: Record<string, string>;
+  ts?: number;
+} | undefined;
 
 export async function addPlayer(prevState: PlayerState, formData: FormData): Promise<PlayerState> {
   const playersPerTeam = Number(formData.get("players_per_team") ?? 1);
@@ -29,6 +34,15 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     ? (formData.get("player_name") as string)
     : playerNames[0] ?? "";
 
+  const rawFields: Record<string, string> = {
+    player_name: teamName,
+    player_email: (formData.get("player_email") as string) ?? "",
+    player_phone: (formData.get("player_phone") as string) ?? "",
+  };
+  for (let i = 0; i < playersPerTeam; i++) {
+    rawFields[`player_pseudo_${i}`] = (formData.get(`player_pseudo_${i}`) as string) ?? "";
+  }
+
   const parsed = PlayerSchema.safeParse({
     tournament_id: formData.get("tournament_id"),
     player_name: teamName,
@@ -37,7 +51,7 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   });
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: rawFields, ts: Date.now() };
   }
 
   const tournament = await dbGetTournament(parsed.data.tournament_id);
@@ -52,9 +66,10 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     playerPhone: parsed.data.player_phone ?? null,
     playerNames,
     platformFeeCents: PLATFORM_FEE_CENTS * playersPerTeam,
+    status: "PAID",
   }).catch(() => null);
 
-  if (!reg) return { error: "Erreur lors de l'inscription." };
+  if (!reg) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
 }

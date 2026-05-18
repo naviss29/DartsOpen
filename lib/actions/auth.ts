@@ -34,17 +34,25 @@ export type AuthState = {
   errors?: Record<string, string[]>;
   success?: boolean;
   email?: string;
+  fields?: Record<string, string>;
+  ts?: number;
 } | undefined;
 
 export async function register(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const parsed = RegisterSchema.safeParse({
-    name: formData.get("name"),
-    email: formData.get("email"),
-    password: formData.get("password"),
-  });
+  const raw = {
+    name: (formData.get("name") as string) ?? "",
+    email: (formData.get("email") as string) ?? "",
+    password: (formData.get("password") as string) ?? "",
+  };
+
+  const parsed = RegisterSchema.safeParse(raw);
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return {
+      errors: parsed.error.flatten().fieldErrors as Record<string, string[]>,
+      fields: { name: raw.name, email: raw.email },
+      ts: Date.now(),
+    };
   }
 
   const verifyRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verified`;
@@ -60,20 +68,22 @@ export async function register(prevState: AuthState, formData: FormData): Promis
 
   if (!res.ok && res.status !== 201) {
     const data = await res.json().catch(() => ({})) as Record<string, string>;
-    return { error: data.error ?? "Une erreur est survenue." };
+    return { error: data.error ?? "Une erreur est survenue.", fields: { name: raw.name, email: raw.email }, ts: Date.now() };
   }
 
   return { success: true, email: parsed.data.email };
 }
 
 export async function login(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const parsed = LoginSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
-  });
+  const raw = {
+    email: (formData.get("email") as string) ?? "",
+    password: (formData.get("password") as string) ?? "",
+  };
+
+  const parsed = LoginSchema.safeParse(raw);
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: { email: raw.email }, ts: Date.now() };
   }
 
   const res = await apiFetch('/api/auth/login', {
@@ -82,7 +92,7 @@ export async function login(prevState: AuthState, formData: FormData): Promise<A
   });
 
   if (!res.ok) {
-    return { error: "Identifiants incorrects." };
+    return { error: "Identifiants incorrects.", fields: { email: raw.email }, ts: Date.now() };
   }
 
   const data = await res.json() as { token: string; refresh_token: string };
@@ -107,10 +117,11 @@ export async function logout() {
 }
 
 export async function requestPasswordReset(prevState: AuthState, formData: FormData): Promise<AuthState> {
-  const parsed = ForgotPasswordSchema.safeParse({ email: formData.get("email") });
+  const email = (formData.get("email") as string) ?? "";
+  const parsed = ForgotPasswordSchema.safeParse({ email });
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: { email }, ts: Date.now() };
   }
 
   await apiFetch('/api/auth/forgot-password', {
