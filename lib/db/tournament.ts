@@ -703,7 +703,7 @@ async function tryFinalizeMatch(match: {
   if (match.boardNumber > 0) {
     const next = await prisma.match.findFirst({
       where: { tournamentId: match.tournament.id, boardNumber: match.boardNumber, status: "PENDING" },
-      orderBy: { createdAt: "asc" },
+      orderBy: { id: "asc" },
     });
     if (next) {
       await prisma.match.update({ where: { id: next.id }, data: { status: "IN_PROGRESS" } });
