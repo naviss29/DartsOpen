@@ -15,6 +15,7 @@ type Tournament = {
   max_players: number;
   players_per_team: number;
   entry_fee: number;
+  registration_mode: string;
   nb_pools: number;
   nb_boards: number;
   players_paid: number;
@@ -97,7 +98,8 @@ export default async function DashboardPage() {
                       }
                       <span>🔵 {t.nb_pools} poules</span>
                       <span>🎯 {t.nb_boards} cibles</span>
-                      <span>💶 {(t.entry_fee / 100).toFixed(2)} €</span>
+                      <span>💶 {(t.entry_fee / 100).toFixed(2)} €/j</span>
+                      <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
                     </div>
                   </div>
                   <StatusBadge status={t.status} />
