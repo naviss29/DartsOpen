@@ -13,6 +13,7 @@ type Tournament = {
   location: string;
   status: string;
   max_players: number;
+  players_per_team: number;
   entry_fee: number;
   nb_pools: number;
   nb_boards: number;
@@ -90,7 +91,10 @@ export default async function DashboardPage() {
                       📅 {new Date(t.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp; 📍 {t.location}
                     </p>
                     <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                      <span>👤 {t.players_paid}/{t.max_players} joueurs</span>
+                      {t.players_per_team > 1
+                        ? <span>👥 {Math.floor(t.players_paid / t.players_per_team)}/{Math.floor(t.max_players / t.players_per_team)} équipes</span>
+                        : <span>👤 {t.players_paid}/{t.max_players} joueurs</span>
+                      }
                       <span>🔵 {t.nb_pools} poules</span>
                       <span>🎯 {t.nb_boards} cibles</span>
                       <span>💶 {(t.entry_fee / 100).toFixed(2)} €</span>
