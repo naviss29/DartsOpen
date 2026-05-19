@@ -678,6 +678,7 @@ async function tryFinalizeMatch(match: {
   player1Id: string;
   player2Id: string | null;
   bracketRound: number | null;
+  boardNumber: number;
   status: MatchStatus;
   sets: { winnerId: string | null; validatedP1: boolean; validatedP2: boolean }[];
   tournament: { id: string };
@@ -697,6 +698,17 @@ async function tryFinalizeMatch(match: {
     where: { id: match.id },
     data: { status: "FINISHED", winnerId },
   });
+
+  // Démarrer le prochain match PENDING sur la même cible
+  if (match.boardNumber > 0) {
+    const next = await prisma.match.findFirst({
+      where: { tournamentId: match.tournament.id, boardNumber: match.boardNumber, status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+    });
+    if (next) {
+      await prisma.match.update({ where: { id: next.id }, data: { status: "IN_PROGRESS" } });
+    }
+  }
 
   return {
     matchFinished: true,

@@ -101,6 +101,16 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   const inProgress = matches.filter((m) => m.status === "IN_PROGRESS");
   const pending = matches.filter((m) => m.status === "PENDING");
 
+  // Matchs en cours sur leur dernière manche (pour annoncer la cible qui se libère)
+  const lastSetAlerts = inProgress
+    .filter((m) => {
+      const total = m.sets.length;
+      const played = m.sets.filter((s) => s.winner_id !== null).length;
+      return total > 1 && played === total - 1;
+    })
+    .map((m) => ({ board: m.board_number, next: pending.find((p) => p.board_number === m.board_number) }))
+    .filter((a) => a.next);
+
   return (
     <div className="space-y-6">
       {nextMatchAlert && (
@@ -109,6 +119,17 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
           match={nextMatchAlert.match}
         />
       )}
+
+      {lastSetAlerts.map(({ board, next }) => (
+        <div key={board} className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-center gap-3">
+          <span className="text-amber-400 text-lg">⚡</span>
+          <p className="text-sm text-amber-300">
+            <span className="font-semibold">Cible {board} — Dernière manche en cours.</span>
+            {" "}Prochain match :{" "}
+            <span className="font-semibold text-white">{next!.player1.player_name} vs {next!.player2.player_name}</span>
+          </p>
+        </div>
+      ))}
 
       {inProgress.length > 0 && (
         <div>
@@ -129,8 +150,8 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
             À venir ({pending.length})
           </h2>
           <div className="grid gap-2 md:grid-cols-3">
-            {pending.map((m, i) => (
-              <MatchCard key={m.id} match={m} compact index={i} />
+            {pending.map((m) => (
+              <MatchCard key={m.id} match={m} compact />
             ))}
           </div>
         </div>
@@ -145,18 +166,14 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   );
 }
 
-function MatchCard({ match, compact = false, index }: { match: Match; compact?: boolean; index?: number }) {
+function MatchCard({ match, compact = false }: { match: Match; compact?: boolean }) {
   const setsPlayed = match.sets.filter((s) => s.winner_id).length;
   const totalSets = match.sets.length;
 
   return (
     <div className={`rounded-xl bg-gray-800 border border-gray-700 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
       <div className="flex items-center justify-between mb-2">
-        {compact ? (
-          <span className="text-xs text-gray-500">#{(index ?? 0) + 1}</span>
-        ) : (
-          <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
-        )}
+        <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
         {!compact && totalSets > 0 && (
           <span className="text-xs text-gray-500">Manche {setsPlayed}/{totalSets}</span>
         )}

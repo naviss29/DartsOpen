@@ -44,20 +44,30 @@ export async function generatePools(
     status: string;
   }[] = [];
 
+  // Collecter tous les appariements de toutes les poules puis assigner les cibles globalement.
+  // (appeler assignBoards par poule repart du compteur 0 → tous les matchs se retrouvent cible 1 IN_PROGRESS)
+  const allPairings: [string, string][] = [];
+  const pairingPool: number[] = [];
+
   poolGroups.forEach((group: { id: string }[], poolIndex: number) => {
-    const playerIds = group.map(p => p.id);
-    const pairings = generateRoundRobin(playerIds);
-    const assigned = assignBoards(pairings, tournament.nb_boards);
-    assigned.forEach((m: { player1_id: string; player2_id: string; board_number: number; status: string }) => {
+    const playerIds = group.map((p: { id: string }) => p.id);
+    generateRoundRobin(playerIds).forEach((pair: [string, string]) => {
+      allPairings.push(pair);
+      pairingPool.push(poolIndex);
+    });
+  });
+
+  assignBoards(allPairings, tournament.nb_boards).forEach(
+    (m: { player1_id: string; player2_id: string; board_number: number; status: string }, index: number) => {
       matches.push({
-        poolIndex,
+        poolIndex: pairingPool[index],
         player1Id: m.player1_id,
         player2Id: m.player2_id,
         boardNumber: m.board_number,
         status: m.status,
       });
-    });
-  });
+    }
+  );
 
   const ok = await dbGeneratePools(tournamentId, pools, matches).catch(() => false);
   if (ok === false) return { error: "Erreur lors de la génération des poules." };
