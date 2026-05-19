@@ -34,7 +34,8 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 | Mode scoring électronique (clic sur le vainqueur — double validation) | ✅ |
 | Mode scoring traditionnel (saisie des scores par volée avec tableau de bord) | ✅ |
 | Tableau matchs en cours / à venir (temps réel) | ✅ |
-| Annonce visuelle du prochain match sur la cible | ✅ |
+| File d'attente par cible — 1 match actif par machine, démarrage auto du suivant | ✅ |
+| Annonce "Dernière manche" avec cible et prochain match | ✅ |
 | Tableau récapitulatif des scores par poule | ✅ |
 | Phases finales (bracket single-élimination, byes, avancement auto) | ✅ |
 | Accès spectateur (QR code salle) | ✅ |
@@ -159,6 +160,7 @@ npm run dev
 npm test              # Vitest (watch mode)
 npm run test:run      # Vitest (one-shot, CI)
 npm run test:coverage # Couverture de code
+npm run seed:players  # Remplir un tournoi avec des équipes fictives (interactif)
 ```
 
 **80 tests passants** — utils (bracket, pools, scores) + actions (tournament, score, bracket)
@@ -207,6 +209,7 @@ npm run test:coverage # Couverture de code
 - [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement automatique)
 - [x] Phase 6 — CI GitHub Actions + Coolify (déploiement staging + prod)
 - [x] Phase 7 — Emails transactionnels via SterPlatform (confirmation inscription gratuite + paiement)
+- [x] Phase 8 — Recette staging : migrations auto Docker, file d'attente cibles, corrections UX formulaires
 
 ---
 

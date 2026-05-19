@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.8
+> Version : 0.9
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 5 terminée — bracket complet avec auto-avancement, affichage temps réel**
+> Statut : **Phase 8 terminée — recette staging, file d'attente cibles, corrections UX**
 
 ---
 
@@ -19,6 +19,7 @@
 | 0.6 | Mai 2026 | Phases finales complètes — élimination directe 1-poule, auto-avancement depuis score.ts, BracketLive avec Realtime + polling, redesign visuel bracket (SVG), createServiceClient, 77 tests |
 | 0.7 | Mai 2026 | Bracket refactorisé — affichage toutes colonnes dès le départ (placeholders ?), byes gérés côté serveur, doAdvanceToNextRound sans auth, auto-avancement depuis score.ts, BracketLive aligné, 83 tests |
 | 0.8 | Mai 2026 | Dashboard branché sur les vraies données — compteurs réels, liste tournois récents, places prises/total via _count Prisma |
+| 0.9 | Mai 2026 | Phase 8 recette staging — migrations auto Docker, file d'attente cibles, corrections UX formulaires, emails transactionnels, script seed interactif |
 
 ---
 
@@ -293,6 +294,11 @@ Mesures :
 | 25 | `poolsPending` toujours false quand aucun match de poule n'existe | `[].some(m => m.status !== "FINISHED")` retourne `false` → le bouton "Générer phases finales" s'affiche même avant que les poules soient terminées | Condition correcte : `poolMatches.length === 0 \|\| poolMatches.some(m => m.status !== "FINISHED")` |
 | 26 | Dockerfile Node 20 incompatible Prisma 7 | `@prisma/streams-local` requiert Node ≥ 22 → build Docker échoue avec un `EBADENGINE` puis une erreur module introuvable | Utiliser `node:22-alpine` dans le Dockerfile |
 | 27 | Client Prisma généré absent du build Docker | `lib/generated/prisma/` est dans `.gitignore` → le client n'existe pas dans l'image → `Cannot find module` au build | Ajouter `RUN npx prisma generate` avant `RUN npm run build` dans le stage builder du Dockerfile |
+| 28 | P2021 — table `public.tournaments` inexistante au premier démarrage | DB PostgreSQL fraîchement provisionnée dans Coolify, aucune migration n'a jamais tourné → `PrismaClientKnownRequestError P2021` | Ajouter `prisma migrate deploy` dans le CMD Docker avant `next start`. Nécessite de copier `prisma/`, `prisma.config.ts`, et les `node_modules` complets (Prisma 7 a trop de dépendances transitives pour les copier individuellement depuis le stage standalone) |
+| 29 | `Failed to find Server Action` après redéploiement | Le navigateur a en cache des hashes de Server Actions de l'ancien build → `404 RSC` au premier appel après déploiement | Hard refresh (Ctrl+Shift+R) ou vider le cache navigateur |
+| 30 | VPS Hetzner CX23 gelé — SSH inaccessible | Build Docker concurrent + tous services actifs → pression mémoire → kernel OOM killer → VPS complètement gelé | Power cycle depuis la console Hetzner (Power → Power cycle). Éviter les builds parallèles (SterPlatform + DartsOpen simultanément) sur un CX23 4 Go RAM |
+| 31 | `assignBoards` par poule → tous les matchs sur Cible 1 IN_PROGRESS | `generatePools` appelait `assignBoards` pour chaque poule séparément → le compteur d'index repartait à 0 pour chaque poule → `(0 % nbBoards) + 1 = 1` et `0 < nbBoards = true` pour tous | Collecter tous les appariements de toutes les poules dans un tableau global, puis appeler `assignBoards` une seule fois sur ce tableau complet |
+| 32 | Compteur joueurs erroné sur dashboard (16 affiché au lieu de 32) | `players_paid` compte les lignes de la table `registrations` (une par équipe). Pour une doublette (`players_per_team=2`) : 16 inscriptions = 32 joueurs réels. Afficher `players_paid/max_players` comparait des pommes et des oranges | Afficher `players_paid × players_per_team / max_players` joueurs |
 
 ---
 
@@ -343,6 +349,12 @@ Mesures :
 | 39 | Mai 2026 | Dashboard branché sur les vraies données | La page `/dashboard` affichait des compteurs codés en dur (0) et "Aucun tournoi". Branchée sur `dbListTournaments` : compteurs réels (total, ouvertes, en cours, terminés), liste des 5 tournois les plus récents avec lien "Voir tout" si plus de 5. |
 | 40 | Mai 2026 | Affichage places prises sur les listes de tournois | `dbListTournaments` inclut désormais un `_count` Prisma filtré sur `registrations.status = PAID`. Dashboard et "Mes tournois" affichent `{players_paid}/{max_players} joueurs` au lieu du seul max. |
 | 41 | Mai 2026 | Fix Dockerfile — Node 22 + prisma generate | `node:20-alpine` → `node:22-alpine` (Prisma 7 / `@prisma/streams-local` requiert Node ≥ 22). Ajout de `npx prisma generate` avant `npm run build` dans le stage builder (le client généré est gitignored, il doit être régénéré à chaque build Docker). |
+| 42 | Mai 2026 | Dockerfile — prisma migrate deploy au démarrage | CMD modifié : `sh -c "node_modules/.bin/prisma migrate deploy && node_modules/.bin/next start"`. Stage runner copie les `node_modules` complets depuis `deps` (Prisma 7 CLI a trop de dépendances transitives pour cherry-pick), `prisma/`, `prisma.config.ts`, `scripts/`, `lib/generated/`, `tsconfig.json`. Abandonne le `output: standalone` au profit de `next start` avec node_modules complets. |
+| 43 | Mai 2026 | Emails transactionnels DartsOpen via SterPlatform | `lib/api/sterplatform.ts` : client `sendEmail(template, to, variables)` vers `POST /api/email/send` avec header `X-App-Token`. Envoi confirmation inscription gratuite dans `stripe.ts` (avant redirect). Envoi confirmation paiement Stripe dans `app/api/webhooks/stripe/route.ts` (après `dbMarkRegistrationPaid`). Template slug : `dartsopen_inscription_confirmation`. |
+| 44 | Mai 2026 | Préservation des champs de formulaire après erreur serveur | Tous les formulaires (`TournamentForm`, `EditTournamentForm`, `AddPlayerForm`, `LoginForm`, `RegisterForm`, `ForgotPasswordForm`) retournent `fields` + `ts` dans le state d'erreur. Suppression du `key={state?.ts}` sur `TournamentForm` (causait un remount React qui effaçait les inputs malgré `defaultValue`). `key` conservé sur les formulaires "reset after success" (auth, AddPlayer). |
+| 45 | Mai 2026 | File d'attente cibles — 1 match actif par cible | `assignBoards` désormais global (bug corrigé). `tryFinalizeMatch` démarre automatiquement le prochain match PENDING sur la même cible (`boardNumber`) à la fin de chaque match. `MatchBoard` : bannière ambre "Dernière manche — Prochain : X vs Y" quand `setsPlayed === totalSets - 1`. Numéro de cible affiché dans les cartes "À venir". |
+| 46 | Mai 2026 | Script seed interactif `npm run seed:players` | `scripts/seed-tournament.ts` reécrit en mode interactif (readline) : charge `.env.local` automatiquement (parsing manuel, sans modifier les env vars existantes), liste les tournois disponibles numérotés, demande le nombre d'équipes. Dépendances dev `tsx` + `dotenv` ajoutées. |
+| 47 | Mai 2026 | Affichage dashboard — corrections | Prix affiché `€/j` (par joueur). Icône mode inscription : `🌐 En ligne` / `🏠 Sur place`. Compteur joueurs corrigé : `players_paid × players_per_team / max_players`. |
 
 ---
 
