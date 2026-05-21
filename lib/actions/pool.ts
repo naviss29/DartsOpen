@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { distributePlayersIntoPools } from "@/lib/utils/pools";
-import { generateRoundRobin, assignBoards } from "@/lib/utils/bracket";
+import { generateRoundRobin } from "@/lib/utils/bracket";
 import { dbListRegistrations, dbGeneratePools, dbGetTournament } from "@/lib/db/tournament";
 
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -44,8 +44,8 @@ export async function generatePools(
     status: string;
   }[] = [];
 
-  // Collecter tous les appariements de toutes les poules puis assigner les cibles globalement.
-  // (appeler assignBoards par poule repart du compteur 0 → tous les matchs se retrouvent cible 1 IN_PROGRESS)
+  // Collecter tous les appariements. Les premiers nb_boards matchs démarrent immédiatement
+  // sur une cible assignée. Les suivants ont board=0 (non assigné) et attendent dans la queue.
   const allPairings: [string, string][] = [];
   const pairingPool: number[] = [];
 
@@ -57,17 +57,15 @@ export async function generatePools(
     });
   });
 
-  assignBoards(allPairings, tournament.nb_boards).forEach(
-    (m: { player1_id: string; player2_id: string; board_number: number; status: string }, index: number) => {
-      matches.push({
-        poolIndex: pairingPool[index],
-        player1Id: m.player1_id,
-        player2Id: m.player2_id,
-        boardNumber: m.board_number,
-        status: m.status,
-      });
-    }
-  );
+  allPairings.forEach((pair, index) => {
+    matches.push({
+      poolIndex: pairingPool[index],
+      player1Id: pair[0],
+      player2Id: pair[1],
+      boardNumber: index < tournament.nb_boards ? index + 1 : 0,
+      status: index < tournament.nb_boards ? "IN_PROGRESS" : "PENDING",
+    });
+  });
 
   const ok = await dbGeneratePools(tournamentId, pools, matches).catch(() => false);
   if (ok === false) return { error: "Erreur lors de la génération des poules." };

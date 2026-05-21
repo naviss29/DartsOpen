@@ -101,15 +101,15 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   const inProgress = matches.filter((m) => m.status === "IN_PROGRESS");
   const pending = matches.filter((m) => m.status === "PENDING");
 
-  // Matchs en cours sur leur dernière manche (pour annoncer la cible qui se libère)
-  const lastSetAlerts = inProgress
+  // Cibles sur leur dernière manche → annoncer qu'elles vont se libérer + les prochains en queue
+  const lastSetBoards = inProgress
     .filter((m) => {
       const total = m.sets.length;
       const played = m.sets.filter((s) => s.winner_id !== null).length;
       return total > 1 && played === total - 1;
     })
-    .map((m) => ({ board: m.board_number, next: pending.find((p) => p.board_number === m.board_number) }))
-    .filter((a) => a.next);
+    .map((m) => m.board_number);
+  const lastSetAlerts = lastSetBoards.map((board, i) => ({ board, next: pending[i] ?? null })).filter((a) => a.next);
 
   return (
     <div className="space-y-6">
@@ -146,30 +146,14 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
 
       {pending.length > 0 && (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-              À venir ({pending.length})
-            </h2>
-            <span className="text-xs text-gray-500">Lecture par cible — du haut vers le bas</span>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+            À venir ({pending.length})
+          </h2>
+          <div className="grid gap-2 md:grid-cols-3">
+            {pending.map((m, i) => (
+              <MatchCard key={m.id} match={m} compact position={i + 1} />
+            ))}
           </div>
-          {(() => {
-            const boards = [...new Set(pending.map((m) => m.board_number))].sort((a, b) => a - b);
-            return (
-              <div className={`grid gap-4 ${boards.length >= 2 ? "md:grid-cols-2" : ""}`}>
-                {boards.map((board) => {
-                  const queue = pending.filter((m) => m.board_number === board);
-                  return (
-                    <div key={board} className="space-y-2">
-                      <p className="text-xs font-medium text-green-400 uppercase tracking-wide">🎯 File Cible {board}</p>
-                      {queue.map((m, i) => (
-                        <MatchCard key={m.id} match={m} compact position={i + 1} />
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
         </div>
       )}
 

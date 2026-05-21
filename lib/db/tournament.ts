@@ -699,14 +699,17 @@ async function tryFinalizeMatch(match: {
     data: { status: "FINISHED", winnerId },
   });
 
-  // Démarrer le prochain match PENDING sur la même cible
+  // Prendre le prochain match en attente dans la queue globale (board=0) et lui assigner la cible libérée
   if (match.boardNumber > 0) {
     const next = await prisma.match.findFirst({
-      where: { tournamentId: match.tournament.id, boardNumber: match.boardNumber, status: "PENDING" },
+      where: { tournamentId: match.tournament.id, boardNumber: 0, status: "PENDING" },
       orderBy: { id: "asc" },
     });
     if (next) {
-      await prisma.match.update({ where: { id: next.id }, data: { status: "IN_PROGRESS" } });
+      await prisma.match.update({
+        where: { id: next.id },
+        data: { status: "IN_PROGRESS", boardNumber: match.boardNumber },
+      });
     }
   }
 
