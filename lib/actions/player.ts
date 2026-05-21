@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { dbAddRegistration, dbDeleteRegistration, dbGetTournament } from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
+import { sendEmail } from "@/lib/api/sterplatform";
 
 const PlayerSchema = z.object({
   tournament_id: z.string().uuid(),
@@ -70,6 +71,15 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   }).catch(() => null);
 
   if (!reg) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
+
+  const dateFormatted = new Date(tournament.date).toLocaleDateString("fr-FR");
+  await sendEmail("dartsopen_inscription_confirmation", reg.player_email, {
+    nom_equipe: reg.player_name,
+    tournoi: tournament.name,
+    date: dateFormatted,
+    lieu: tournament.location,
+    joueurs: reg.player_names.join(", "),
+  }).catch((err) => console.error("[addPlayer] Erreur envoi email confirmation:", err));
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
 }
