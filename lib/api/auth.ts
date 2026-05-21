@@ -56,14 +56,7 @@ export async function getUser(): Promise<SterUser | null> {
   const token = await getServerToken();
   if (!token) return null;
 
-  let res = await apiFetch('/api/auth/me', {}, token);
-
-  if (res.status === 401) {
-    const refreshed = await tryRefresh();
-    if (!refreshed) return null;
-    res = await apiFetch('/api/auth/me', {}, refreshed);
-  }
-
+  const res = await apiFetch('/api/auth/me', {}, token);
   if (!res.ok) return null;
   return res.json() as Promise<SterUser>;
 }
