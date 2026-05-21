@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 0.9
+> Version : 1.0
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 8 terminée — recette staging, file d'attente cibles, corrections UX**
+> Statut : **Phase 9 en cours — recette active, attribution dynamique des cibles, emails ONSITE, classement MG/MP**
 
 ---
 
@@ -20,6 +20,7 @@
 | 0.7 | Mai 2026 | Bracket refactorisé — affichage toutes colonnes dès le départ (placeholders ?), byes gérés côté serveur, doAdvanceToNextRound sans auth, auto-avancement depuis score.ts, BracketLive aligné, 83 tests |
 | 0.8 | Mai 2026 | Dashboard branché sur les vraies données — compteurs réels, liste tournois récents, places prises/total via _count Prisma |
 | 0.9 | Mai 2026 | Phase 8 recette staging — migrations auto Docker, file d'attente cibles, corrections UX formulaires, emails transactionnels, script seed interactif |
+| 1.0 | Mai 2026 | Phase 9 recette active — attribution dynamique des cibles, email ONSITE, sender_name SterPlatform, refresh token proxy.ts, classement MG/MP, document Recette.md |
 
 ---
 
@@ -355,6 +356,13 @@ Mesures :
 | 45 | Mai 2026 | File d'attente cibles — 1 match actif par cible | `assignBoards` désormais global (bug corrigé). `tryFinalizeMatch` démarre automatiquement le prochain match PENDING sur la même cible (`boardNumber`) à la fin de chaque match. `MatchBoard` : bannière ambre "Dernière manche — Prochain : X vs Y" quand `setsPlayed === totalSets - 1`. Numéro de cible affiché dans les cartes "À venir". |
 | 46 | Mai 2026 | Script seed interactif `npm run seed:players` | `scripts/seed-tournament.ts` reécrit en mode interactif (readline) : charge `.env.local` automatiquement (parsing manuel, sans modifier les env vars existantes), liste les tournois disponibles numérotés, demande le nombre d'équipes. Dépendances dev `tsx` + `dotenv` ajoutées. |
 | 47 | Mai 2026 | Affichage dashboard — corrections | Prix affiché `€/j` (par joueur). Icône mode inscription : `🌐 En ligne` / `🏠 Sur place`. Compteur joueurs corrigé : `players_paid × players_per_team / max_players`. |
+| 48 | Mai 2026 | Email confirmation inscription ONSITE | `addPlayer` envoie désormais un email de confirmation via `sendEmail` après création de l'inscription manuelle. Même template `dartsopen_inscription_confirmation`. La date est formatée `DD/MM/YYYY` (fr-FR). |
+| 49 | Mai 2026 | SterPlatform — champ `sender_name` sur EmailTemplate | Nouveau champ `sender_name VARCHAR(100) NULL` sur `email_templates`. Si renseigné, `MailerService::sendFromTemplate` utilise `Address(fromEmail, senderName)` comme expéditeur. Permet d'afficher "DartsOpen" au lieu de l'adresse email brute. Migration `Version20260520100000`. Visible dans EasyAdmin (champ "Nom expéditeur"). |
+| 50 | Mai 2026 | Fix auth — refresh token déplacé dans proxy.ts | `getUser()` ne tente plus de rafraîchir le token (appel `cookies().set()` interdit en rendu RSC → erreur 3414022698). Le refresh est désormais dans `proxy.ts` (Next.js 16 middleware) : si le access token est absent mais qu'un refresh token existe, appel `POST /api/auth/refresh` → nouveaux cookies posés sur la réponse avant rendu. |
+| 51 | Mai 2026 | Attribution dynamique des cibles | Nouvelle logique file d'attente : les matchs sont générés avec `boardNumber = 0` (non assigné) sauf les premiers `nb_boards` qui démarrent immédiatement sur les cibles 1..N. Quand un match se termine sur Cible X, `tryFinalizeMatch` prend le premier `PENDING / boardNumber=0` dans la queue globale (ordre `id asc`), lui assigne la Cible X et le passe `IN_PROGRESS`. `MatchBoard` affiche la queue plate numérotée #1, #2… sans cible. La bannière "Dernière manche" annonce quelle cible va se libérer et quel match est #1 en queue. |
+| 52 | Mai 2026 | Classement poules — colonnes MG / MP | `ScoreBoard` calcule désormais les vrais sets gagnés/perdus depuis les données de sets (`sets[].winner_id`) au lieu d'utiliser le nombre de victoires de match. Deux nouvelles colonnes **MG** (Manches Gagnées, bleu) et **MP** (Manches Perdues, gris) dans le tableau de classement. `computePoolStandings` utilisait déjà le différentiel MG-MP comme critère de départage. |
+| 53 | Mai 2026 | Document de recette — Recette.md | `docs/Recette.md` créé : 13 campagnes, 39 cas de test style Squash TM (préconditions, étapes, résultat attendu, ligne de test rapide), classés P1/P2/P3. Matrice de régression minimale : 11 tests (~20 min) à exécuter avant chaque déploiement prod. |
+| 54 | Mai 2026 | Brevo — DKIM + DMARC bichetapps.com | Enregistrements DNS ajoutés dans Cloudflare pour `bichetapps.com` : brevo-code (TXT), DKIM 1 + DKIM 2 (CNAME), DMARC (TXT). Domaine vérifié dans Brevo. Les emails transactionnels sont désormais authentifiés. |
 
 ---
 
