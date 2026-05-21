@@ -13,11 +13,13 @@ interface Pool {
   players: { id: string; player_name: string }[];
 }
 
+interface MatchSet { winner_id: string | null }
 interface FinishedMatch {
   player1_id: string;
   player2_id: string;
   winner_id: string | null;
   pool_id: string;
+  sets: MatchSet[];
 }
 
 interface Props {
@@ -29,10 +31,10 @@ interface Props {
 async function fetchFinishedPoolMatches(tournamentId: string): Promise<FinishedMatch[]> {
   const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
   if (!res.ok) return [];
-  const all = await res.json() as Array<{ player1_id: string; player2_id: string; winner_id: string | null; pool_id: string | null; status: string }>;
+  const all = await res.json() as Array<{ player1_id: string; player2_id: string; winner_id: string | null; pool_id: string | null; status: string; sets: MatchSet[] }>;
   return all
     .filter((m) => m.pool_id !== null && m.status === "FINISHED")
-    .map((m) => ({ player1_id: m.player1_id, player2_id: m.player2_id, winner_id: m.winner_id, pool_id: m.pool_id as string }));
+    .map((m) => ({ player1_id: m.player1_id, player2_id: m.player2_id, winner_id: m.winner_id, pool_id: m.pool_id as string, sets: m.sets ?? [] }));
 }
 
 export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatches }: Props) {
@@ -95,21 +97,18 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
 
           const standings = computePoolStandings(
             pool.players.map((p) => {
-              const wins = poolMatches.filter((m) => m.winner_id === p.id).length;
-              const losses = poolMatches.filter(
-                (m) =>
-                  (m.player1_id === p.id || m.player2_id === p.id) &&
-                  m.winner_id !== null &&
-                  m.winner_id !== p.id
-              ).length;
-              return {
-                registration_id: p.id,
-                player_name: p.player_name,
-                wins,
-                losses,
-                sets_won: wins,
-                sets_lost: losses,
-              };
+              const myMatches = poolMatches.filter(
+                (m) => m.player1_id === p.id || m.player2_id === p.id
+              );
+              const wins = myMatches.filter((m) => m.winner_id === p.id).length;
+              const losses = myMatches.filter((m) => m.winner_id !== null && m.winner_id !== p.id).length;
+              const sets_won = myMatches.reduce(
+                (acc, m) => acc + m.sets.filter((s) => s.winner_id === p.id).length, 0
+              );
+              const sets_lost = myMatches.reduce(
+                (acc, m) => acc + m.sets.filter((s) => s.winner_id !== null && s.winner_id !== p.id).length, 0
+              );
+              return { registration_id: p.id, player_name: p.player_name, wins, losses, sets_won, sets_lost };
             })
           );
 
@@ -123,8 +122,10 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
                   <tr className="text-xs text-gray-500">
                     <th className="px-4 py-2 text-left">#</th>
                     <th className="px-4 py-2 text-left">Joueur</th>
-                    <th className="px-3 py-2 text-center">V</th>
-                    <th className="px-3 py-2 text-center">D</th>
+                    <th className="px-3 py-2 text-center" title="Victoires">V</th>
+                    <th className="px-3 py-2 text-center" title="Défaites">D</th>
+                    <th className="px-3 py-2 text-center" title="Manches gagnées">MG</th>
+                    <th className="px-3 py-2 text-center" title="Manches perdues">MP</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
@@ -134,6 +135,8 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
                       <td className="px-4 py-2.5 font-medium text-white">{s.player_name}</td>
                       <td className="px-3 py-2.5 text-center text-green-400 font-medium">{s.wins}</td>
                       <td className="px-3 py-2.5 text-center text-red-400">{s.losses}</td>
+                      <td className="px-3 py-2.5 text-center text-blue-400">{s.sets_won}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-400">{s.sets_lost}</td>
                     </tr>
                   ))}
                 </tbody>

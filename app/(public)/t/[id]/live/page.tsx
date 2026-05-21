@@ -95,6 +95,7 @@ export default async function LivePage({ params }: Props) {
       player2_id: m.player2_id,
       winner_id: m.winner_id,
       pool_id: m.pool_id as string,
+      sets: m.sets.map((s) => ({ winner_id: s.winner_id })),
     }));
 
   const hasBracket = bracketMatches.length > 0;

@@ -146,14 +146,30 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
 
       {pending.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            À venir ({pending.length})
-          </h2>
-          <div className="grid gap-2 md:grid-cols-3">
-            {pending.map((m) => (
-              <MatchCard key={m.id} match={m} compact />
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+              À venir ({pending.length})
+            </h2>
+            <span className="text-xs text-gray-500">Lecture par cible — du haut vers le bas</span>
           </div>
+          {(() => {
+            const boards = [...new Set(pending.map((m) => m.board_number))].sort((a, b) => a - b);
+            return (
+              <div className={`grid gap-4 ${boards.length >= 2 ? "md:grid-cols-2" : ""}`}>
+                {boards.map((board) => {
+                  const queue = pending.filter((m) => m.board_number === board);
+                  return (
+                    <div key={board} className="space-y-2">
+                      <p className="text-xs font-medium text-green-400 uppercase tracking-wide">🎯 File Cible {board}</p>
+                      {queue.map((m, i) => (
+                        <MatchCard key={m.id} match={m} compact position={i + 1} />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -166,15 +182,22 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   );
 }
 
-function MatchCard({ match, compact = false }: { match: Match; compact?: boolean }) {
+function MatchCard({ match, compact = false, position }: { match: Match; compact?: boolean; position?: number }) {
   const setsPlayed = match.sets.filter((s) => s.winner_id).length;
   const totalSets = match.sets.length;
 
   return (
     <div className={`rounded-xl bg-gray-800 border border-gray-700 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
+        {compact ? (
+          <span className="text-xs text-gray-500">{position ? `#${position}` : ""}</span>
+        ) : (
+          <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
+        )}
         {!compact && totalSets > 0 && (
+          <span className="text-xs text-gray-500">Manche {setsPlayed}/{totalSets}</span>
+        )}
+        {compact && totalSets > 0 && (
           <span className="text-xs text-gray-500">Manche {setsPlayed}/{totalSets}</span>
         )}
       </div>
