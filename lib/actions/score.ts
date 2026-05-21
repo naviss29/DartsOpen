@@ -12,13 +12,17 @@ import { doAdvanceToNextRound } from "@/lib/actions/bracket";
 export async function proposeWinner(
   matchSetId: string,
   winnerId: string,
-  playerSide: 1 | 2
+  playerSide: 1 | 2,
+  tournamentId: string
 ): Promise<{ error?: string }> {
   const result = await dbProposeWinner(matchSetId, winnerId, playerSide).catch(() => ({
     error: "Erreur lors de la saisie du score.",
     set: null as never,
   }));
   if (result.error) return { error: result.error };
+
+  revalidatePath(`/t/${tournamentId}/score`);
+  revalidatePath(`/t/${tournamentId}/live`);
   return {};
 }
 

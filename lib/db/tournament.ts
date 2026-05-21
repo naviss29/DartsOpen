@@ -154,11 +154,13 @@ function mapMatchSet(s: {
   winnerId: string | null;
   validatedP1: boolean;
   validatedP2: boolean;
+  round?: { roundOrder: number } | null;
 }) {
   return {
     id: s.id,
     match_id: s.matchId,
     round_id: s.roundId,
+    round_order: s.round?.roundOrder ?? 0,
     score_p1: s.scoreP1,
     score_p2: s.scoreP2,
     winner_id: s.winnerId,
@@ -504,7 +506,7 @@ export async function dbListMatches(
       ...(params?.bracket_round ? { bracketRound: Number(params.bracket_round) } : {}),
     },
     include: {
-      sets: true,
+      sets: { include: { round: { select: { roundOrder: true } } } },
       player1: true,
       player2: true,
     },

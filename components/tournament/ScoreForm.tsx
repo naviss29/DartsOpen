@@ -152,7 +152,7 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
                       <button
                         key={player.id}
                         disabled={isPending}
-                        onClick={() => startTransition(() => void proposeWinner(set.id, player.id, side))}
+                        onClick={() => startTransition(() => void proposeWinner(set.id, player.id, side, tournamentId))}
                         className={`rounded-lg border py-3 px-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
                           player.id === me.id
                             ? "border-green-600 text-green-400 hover:bg-green-900/20"
