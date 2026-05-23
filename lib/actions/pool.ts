@@ -16,8 +16,8 @@ export async function generatePools(
   const tournament = await dbGetTournament(tournamentId);
 
   if (!tournament) return { error: "Tournoi introuvable." };
-  if (tournament.status !== "OPEN") {
-    return { error: "Les poules ne peuvent être générées que lorsque le tournoi est ouvert." };
+  if (tournament.status !== "OPEN" && tournament.status !== "IN_PROGRESS") {
+    return { error: "Les poules ne peuvent être générées que lorsque le tournoi est ouvert ou en cours." };
   }
 
   const players = await dbListRegistrations(tournamentId, "PAID");

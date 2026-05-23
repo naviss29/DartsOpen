@@ -629,7 +629,11 @@ export async function dbConfirmWinner(
     data: playerSide === 1 ? { validatedP1: true } : { validatedP2: true },
   });
 
-  return await tryFinalizeMatch(set.match);
+  // Reflect the just-applied validation in-memory before checking finalization
+  const updatedSets = set.match.sets.map((s) =>
+    s.id === matchSetId ? { ...s, ...(playerSide === 1 ? { validatedP1: true } : { validatedP2: true }) } : s
+  );
+  return await tryFinalizeMatch({ ...set.match, sets: updatedSets });
 }
 
 export async function dbDisputeResult(matchSetId: string): Promise<{ error?: string }> {
@@ -701,8 +705,9 @@ async function tryFinalizeMatch(match: {
     data: { status: "FINISHED", winnerId },
   });
 
-  // Prendre le prochain match en attente dans la queue globale (board=0) et lui assigner la cible libérée
+  // Prendre le prochain match en attente et lui assigner la cible libérée
   if (match.boardNumber > 0) {
+    // Nouveau format : board=0 = file d'attente globale
     const next = await prisma.match.findFirst({
       where: { tournamentId: match.tournament.id, boardNumber: 0, status: "PENDING" },
       orderBy: { id: "asc" },
@@ -712,6 +717,18 @@ async function tryFinalizeMatch(match: {
         where: { id: next.id },
         data: { status: "IN_PROGRESS", boardNumber: match.boardNumber },
       });
+    } else {
+      // Ancien format : matchs PENDING avec boardNumber déjà assigné (rétro-compatibilité)
+      const nextLegacy = await prisma.match.findFirst({
+        where: { tournamentId: match.tournament.id, status: "PENDING" },
+        orderBy: { id: "asc" },
+      });
+      if (nextLegacy) {
+        await prisma.match.update({
+          where: { id: nextLegacy.id },
+          data: { status: "IN_PROGRESS" },
+        });
+      }
     }
   }
 

@@ -49,7 +49,7 @@ export default async function PoolsPage({ params }: Props) {
   const registrationCount = registrations.length;
   const totalPlayers = registrationCount * tournament.players_per_team;
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
-  const canGenerate = tournament.status === "OPEN" && registrationCount >= 2 && tournament.nb_pools > 1;
+  const canGenerate = ["OPEN", "IN_PROGRESS"].includes(tournament.status) && registrationCount >= 2 && tournament.nb_pools > 1;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const showQRCodes = ["OPEN", "IN_PROGRESS", "FINISHED"].includes(tournament.status);
