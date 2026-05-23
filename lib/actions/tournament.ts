@@ -102,8 +102,9 @@ export async function updateTournamentStatus(
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
-export async function deleteTournament(tournamentId: string) {
-  await dbDeleteTournament(tournamentId);
+export async function deleteTournament(tournamentId: string): Promise<{ error?: string }> {
+  const ok = await dbDeleteTournament(tournamentId).catch(() => null);
+  if (ok === null) return { error: "Erreur lors de la suppression du tournoi." };
   revalidatePath("/tournaments");
   redirect("/tournaments");
 }
@@ -127,7 +128,9 @@ export async function addRound(prevState: TournamentState, formData: FormData): 
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
-export async function deleteRound(roundId: string, tournamentId: string) {
-  await dbDeleteRound(roundId);
+export async function deleteRound(roundId: string, tournamentId: string): Promise<{ error?: string }> {
+  const ok = await dbDeleteRound(roundId).catch(() => null);
+  if (ok === null) return { error: "Erreur lors de la suppression de la manche." };
   revalidatePath(`/tournaments/${tournamentId}`);
+  return {};
 }

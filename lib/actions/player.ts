@@ -82,15 +82,19 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   }).catch((err) => console.error("[addPlayer] Erreur envoi email confirmation:", err));
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
+  return {};
 }
 
-export async function removePlayer(registrationId: string, tournamentId: string) {
-  const tournament = await dbGetTournament(tournamentId);
-  if (!tournament) throw new Error("Tournoi introuvable.");
+export async function removePlayer(registrationId: string, tournamentId: string): Promise<{ error?: string }> {
+  const tournament = await dbGetTournament(tournamentId).catch(() => null);
+  if (!tournament) return { error: "Tournoi introuvable." };
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
-    throw new Error("Impossible de retirer un joueur une fois le tournoi démarré.");
+    return { error: "Impossible de retirer un joueur une fois le tournoi démarré." };
   }
 
-  await dbDeleteRegistration(registrationId);
+  const ok = await dbDeleteRegistration(registrationId).catch(() => null);
+  if (ok === null) return { error: "Erreur lors de la suppression du joueur." };
+
   revalidatePath(`/tournaments/${tournamentId}/players`);
+  return {};
 }
