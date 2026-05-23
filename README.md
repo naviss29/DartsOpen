@@ -33,7 +33,7 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 | QR Code pré-tournoi par cible (à scotcher sur les machines avant l'événement) | ✅ |
 | Mode scoring électronique (clic sur le vainqueur — double validation) | ✅ |
 | Mode scoring traditionnel (saisie des scores par volée avec tableau de bord) | ✅ |
-| Tableau matchs en cours / à venir (temps réel) | ✅ |
+| Tableau matchs en cours / à venir (temps réel) — code couleur vert/bleu/vert clair, Derniers résultats par cible | ✅ |
 | File d'attente globale — cible attribuée dynamiquement à la fin du match précédent | ✅ |
 | Annonce "Dernière manche" avec cible qui se libère et prochain match en queue | ✅ |
 | Tableau récapitulatif des scores par poule (V / D / MG / MP — départage manches) | ✅ |
@@ -211,6 +211,7 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 - [x] Phase 7 — Emails transactionnels via SterPlatform (confirmation inscription gratuite + paiement)
 - [x] Phase 8 — Recette staging : migrations auto Docker, file d'attente cibles, corrections UX formulaires
 - [x] Phase 9 — Recette active : attribution dynamique des cibles, emails ONSITE, classement MG/MP, authentification proxy.ts
+- [x] Phase 10 — Correction finalisation matchs (dbConfirmWinner), vue live enrichie (couleurs EN COURS/TERMINÉ/À VENIR, Derniers résultats par cible, pagination 20 matchs)
 
 ---
 

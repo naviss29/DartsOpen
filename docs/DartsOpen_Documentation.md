@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 1.0
+> Version : 1.1
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 9 en cours — recette active, attribution dynamique des cibles, emails ONSITE, classement MG/MP**
+> Statut : **Phase 10 en cours — correction finalisation matchs, vue live enrichie**
 
 ---
 
@@ -21,6 +21,7 @@
 | 0.8 | Mai 2026 | Dashboard branché sur les vraies données — compteurs réels, liste tournois récents, places prises/total via _count Prisma |
 | 0.9 | Mai 2026 | Phase 8 recette staging — migrations auto Docker, file d'attente cibles, corrections UX formulaires, emails transactionnels, script seed interactif |
 | 1.0 | Mai 2026 | Phase 9 recette active — attribution dynamique des cibles, email ONSITE, sender_name SterPlatform, refresh token proxy.ts, classement MG/MP, document Recette.md |
+| 1.1 | Mai 2026 | Phase 10 — correction finalisation matchs (sets stale dans dbConfirmWinner), rétro-compatibilité tryFinalizeMatch, régénération poules IN_PROGRESS, vue live enrichie (couleurs, Derniers résultats, pagination À venir) |
 
 ---
 
@@ -363,6 +364,12 @@ Mesures :
 | 52 | Mai 2026 | Classement poules — colonnes MG / MP | `ScoreBoard` calcule désormais les vrais sets gagnés/perdus depuis les données de sets (`sets[].winner_id`) au lieu d'utiliser le nombre de victoires de match. Deux nouvelles colonnes **MG** (Manches Gagnées, bleu) et **MP** (Manches Perdues, gris) dans le tableau de classement. `computePoolStandings` utilisait déjà le différentiel MG-MP comme critère de départage. |
 | 53 | Mai 2026 | Document de recette — Recette.md | `docs/Recette.md` créé : 13 campagnes, 39 cas de test style Squash TM (préconditions, étapes, résultat attendu, ligne de test rapide), classés P1/P2/P3. Matrice de régression minimale : 11 tests (~20 min) à exécuter avant chaque déploiement prod. |
 | 54 | Mai 2026 | Brevo — DKIM + DMARC bichetapps.com | Enregistrements DNS ajoutés dans Cloudflare pour `bichetapps.com` : brevo-code (TXT), DKIM 1 + DKIM 2 (CNAME), DMARC (TXT). Domaine vérifié dans Brevo. Les emails transactionnels sont désormais authentifiés. |
+| 55 | Mai 2026 | Fix critique — finalisation match (dbConfirmWinner) | `dbConfirmWinner` passait `set.match` (stale) à `tryFinalizeMatch` : la dernière validation du 2ème joueur n'était pas reflétée dans les sets en mémoire, donc `confirmedSets.length < totalSets` → match jamais finalisé. Fix : mise à jour de l'objet `sets` en mémoire avant l'appel (`updatedSets = set.match.sets.map(…)`). |
+| 56 | Mai 2026 | Fix — tryFinalizeMatch rétro-compatible | Anciens tournois générés avec l'ancien code avaient des matchs `PENDING` avec `boardNumber > 0`. `tryFinalizeMatch` ne cherchait que `boardNumber: 0`, ne trouvait rien, aucun match ne démarrait. Fix : fallback sur n'importe quel match `PENDING` si aucun `boardNumber=0` trouvé. |
+| 57 | Mai 2026 | Régénération des poules en IN_PROGRESS | `generatePools` et `canGenerate` (pools/page.tsx) n'autorisaient que `status = OPEN`. Autorisé pour `IN_PROGRESS` également pour permettre la correction d'erreur en cours de tournoi (reset complet des matchs et scores). |
+| 58 | Mai 2026 | Vue live — code couleur matchs | `MatchBoard` : EN COURS (manches restantes) → fond vert, barre gauche verte, point pulsant. TERMINÉ → fond bleu. À VENIR prochains (`nb_boards` matchs) → vert clair (emerald). File d'attente → gris. Matchs IN_PROGRESS toutes manches jouées → déplacés côté client dans "Derniers résultats" (statut FINISHED forcé). |
+| 59 | Mai 2026 | Vue live — section Derniers résultats | Nouveau bloc affiché au-dessus de "En cours" : 1 carte par cible physique (dernier match FINISHED par `board_number`), vainqueur en bleu clair, perdant grisé, score manches (ex. 2 — 1). Mis à jour à chaque polling/SSE. |
+| 60 | Mai 2026 | Vue live — pagination À venir | Maximum 20 matchs affichés dans la grille À venir. Si plus de 20, rotation automatique toutes les 10s avec indicateur de page (points cliquables). Page courante dérivée au rendu (`safePendingPage`) pour éviter le setState synchrone dans un effet (conformité règle ESLint `react-hooks/set-state-in-effect`). |
 
 ---
 
