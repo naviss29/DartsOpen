@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { dbAddRegistration, dbDeleteRegistration, dbGetTournament } from "@/lib/db/tournament";
+import { dbAddRegistration, dbDeleteRegistration, dbGetTournament, dbSetSeeded } from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
 import { sendEmail } from "@/lib/api/sterplatform";
 
@@ -82,6 +82,17 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   }).catch((err) => console.error("[addPlayer] Erreur envoi email confirmation:", err));
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
+  return {};
+}
+
+export async function setSeedStatus(
+  registrationId: string,
+  tournamentId: string,
+  seeded: boolean
+): Promise<{ error?: string }> {
+  const ok = await dbSetSeeded(registrationId, seeded).then(() => true).catch(() => null);
+  if (!ok) return { error: "Erreur lors de la mise à jour." };
+  revalidatePath(`/tournaments/${tournamentId}/players`);
   return {};
 }
 

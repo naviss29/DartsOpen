@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AddPlayerForm } from "@/components/tournament/AddPlayerForm";
 import { RemovePlayerButton } from "@/components/tournament/RemovePlayerButton";
+import { SeedToggleButton } from "@/components/tournament/SeedToggleButton";
 import { dbGetTournament, dbListRegistrations } from "@/lib/db/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -24,6 +25,7 @@ type Registration = {
   player_email: string;
   player_phone: string | null;
   player_names: string[] | null;
+  seeded: boolean;
   created_at: string;
 };
 
@@ -40,6 +42,7 @@ export default async function PlayersPage({ params }: Props) {
   const count = registrations.length;
   const playerCount = count * tournament.players_per_team;
   const canEdit = ["DRAFT", "OPEN"].includes(tournament.status);
+  const canSeed = ["DRAFT", "OPEN", "IN_PROGRESS"].includes(tournament.status);
   const isFull = playerCount >= tournament.max_players;
   const isTeam = tournament.players_per_team > 1;
 
@@ -107,6 +110,7 @@ export default async function PlayersPage({ params }: Props) {
                 )}
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">Téléphone</th>
+                {canSeed && <th className="px-4 py-3 text-left font-medium text-gray-600">Tête de série</th>}
                 {canEdit && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -122,6 +126,11 @@ export default async function PlayersPage({ params }: Props) {
                   )}
                   <td className="px-4 py-3 text-gray-600">{reg.player_email}</td>
                   <td className="px-4 py-3 text-gray-500">{reg.player_phone ?? "—"}</td>
+                  {canSeed && (
+                    <td className="px-4 py-3">
+                      <SeedToggleButton registrationId={reg.id} tournamentId={id} seeded={reg.seeded} />
+                    </td>
+                  )}
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
                       <RemovePlayerButton registrationId={reg.id} tournamentId={id} />

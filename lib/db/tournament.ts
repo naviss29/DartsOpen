@@ -72,6 +72,7 @@ function mapRegistration(r: {
   entryFeeCents: number;
   platformFeeCents: number;
   feeCollected: boolean;
+  seeded: boolean;
   createdAt: Date;
 }) {
   return {
@@ -88,6 +89,7 @@ function mapRegistration(r: {
     entry_fee_cents: r.entryFeeCents,
     platform_fee_cents: r.platformFeeCents,
     fee_collected: r.feeCollected,
+    seeded: r.seeded,
     created_at: r.createdAt.toISOString(),
   };
 }
@@ -111,6 +113,7 @@ function mapPool(p: {
       entryFeeCents: number;
       platformFeeCents: number;
       feeCollected: boolean;
+      seeded: boolean;
       createdAt: Date;
       tournamentId: string;
     };
@@ -387,6 +390,10 @@ export async function dbAddRegistration(tournamentId: string, data: {
 
 export async function dbDeleteRegistration(registrationId: string) {
   await prisma.registration.delete({ where: { id: registrationId } });
+}
+
+export async function dbSetSeeded(registrationId: string, seeded: boolean) {
+  await prisma.registration.update({ where: { id: registrationId }, data: { seeded } });
 }
 
 export async function dbCountRegistrations(tournamentId: string, status?: string) {

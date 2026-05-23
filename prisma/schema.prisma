@@ -95,6 +95,7 @@ model Registration {
   entryFeeCents    Int                @default(0) @map("entry_fee_cents")
   platformFeeCents Int                @default(0) @map("platform_fee_cents")
   feeCollected     Boolean            @default(false) @map("fee_collected")
+  seeded           Boolean            @default(false)
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tournament  Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

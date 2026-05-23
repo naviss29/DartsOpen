@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { distributePlayersIntoPools } from "@/lib/utils/pools";
+import { distributeWithSeeding } from "@/lib/utils/pools";
 import { generateRoundRobin } from "@/lib/utils/bracket";
 import { dbListRegistrations, dbGeneratePools, dbGetTournament } from "@/lib/db/tournament";
 
@@ -26,10 +26,10 @@ export async function generatePools(
     return { error: "Il faut au moins 2 équipes inscrites pour générer les poules." };
   }
 
-  // Algorithm stays in TypeScript
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(players.length / 2));
-  const shuffled = [...players].sort(() => Math.random() - 0.5);
-  const poolGroups = distributePlayersIntoPools(shuffled, effectivePools);
+  const seeded = players.filter((p) => p.seeded);
+  const unseeded = players.filter((p) => !p.seeded).sort(() => Math.random() - 0.5);
+  const poolGroups = distributeWithSeeding(seeded, unseeded, effectivePools);
 
   const pools = poolGroups.map((group, i) => ({
     name: `Poule ${POOL_NAMES[i]}`,
