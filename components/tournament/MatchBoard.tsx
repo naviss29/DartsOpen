@@ -117,7 +117,9 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
 
   const pending = matches.filter((m) => m.status === "PENDING");
   const totalPendingPages = Math.ceil(pending.length / PAGE_SIZE);
-  const displayedPending = pending.slice(pendingPage * PAGE_SIZE, (pendingPage + 1) * PAGE_SIZE);
+  // Clamp au rendu plutôt que setState synchrone dans un effet
+  const safePendingPage = pending.length <= PAGE_SIZE ? 0 : pendingPage % totalPendingPages;
+  const displayedPending = pending.slice(safePendingPage * PAGE_SIZE, (safePendingPage + 1) * PAGE_SIZE);
 
   // Combine FINISHED DB + matchs effectivement terminés pour "Derniers résultats"
   const allFinished = [
@@ -127,7 +129,7 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
 
   // Rotation automatique des pages À venir toutes les 10s
   useEffect(() => {
-    if (pending.length <= PAGE_SIZE) { setPendingPage(0); return; }
+    if (pending.length <= PAGE_SIZE) return;
     const interval = setInterval(() => {
       setPendingPage((p) => (p + 1) % Math.ceil(pending.length / PAGE_SIZE));
     }, 10000);
@@ -196,8 +198,8 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
                 {Array.from({ length: totalPendingPages }).map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => setPendingPage(i)}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === pendingPage ? "bg-gray-300" : "bg-gray-600"}`}
+                    onClick={() => { setPendingPage(i); }}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === safePendingPage ? "bg-gray-300" : "bg-gray-600"}`}
                   />
                 ))}
               </div>

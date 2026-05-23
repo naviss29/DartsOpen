@@ -28,22 +28,6 @@ export async function clearAuthCookies(): Promise<void> {
   store.delete(REFRESH_COOKIE);
 }
 
-async function tryRefresh(): Promise<string | null> {
-  const store = await cookies();
-  const refresh = store.get(REFRESH_COOKIE)?.value;
-  if (!refresh) return null;
-
-  const res = await apiFetch('/api/auth/refresh', {
-    method: 'POST',
-    body: JSON.stringify({ refresh_token: refresh }),
-  });
-
-  if (!res.ok) return null;
-
-  const data = await res.json();
-  await setAuthCookies(data.token, data.refresh_token);
-  return data.token;
-}
 
 export type SterUser = {
   id: string;
