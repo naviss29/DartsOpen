@@ -207,7 +207,7 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
           </div>
           <div className="grid gap-2 md:grid-cols-3">
             {displayedPending.map((m, i) => {
-              const globalIndex = pendingPage * PAGE_SIZE + i;
+              const globalIndex = safePendingPage * PAGE_SIZE + i;
               return (
                 <MatchCard
                   key={m.id}
