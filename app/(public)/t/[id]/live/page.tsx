@@ -71,8 +71,27 @@ export default async function LivePage({ params }: Props) {
       status: m.status,
       player1: m.player1,
       player2: m.player2,
+      winner_id: m.winner_id,
       sets: m.sets,
     }));
+
+  // Last finished match per board
+  const lastFinishedByBoard = new Map<number, SterMatch>();
+  for (const m of allMatches) {
+    if (m.status === "FINISHED" && m.board_number > 0) {
+      const existing = lastFinishedByBoard.get(m.board_number);
+      if (!existing || m.id > existing.id) lastFinishedByBoard.set(m.board_number, m);
+    }
+  }
+  const lastFinishedMatches = Array.from(lastFinishedByBoard.values()).map((m) => ({
+    id: m.id,
+    board_number: m.board_number,
+    status: m.status,
+    player1: m.player1,
+    player2: m.player2,
+    winner_id: m.winner_id,
+    sets: m.sets,
+  }));
 
   // Bracket matches
   const bracketMatches = allMatches
@@ -117,6 +136,7 @@ export default async function LivePage({ params }: Props) {
       <MatchBoard
         tournamentId={id}
         initialMatches={activeMatches}
+        initialFinishedMatches={lastFinishedMatches}
         nbBoards={tournament.nb_boards}
       />
 
