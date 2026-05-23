@@ -224,7 +224,9 @@ export default async function PoolsPage({ params }: Props) {
                   <ul className="space-y-1">
                     {pool.matches.map((m) => (
                       <li key={m.id} className="text-sm flex items-center gap-2">
-                        <span className="text-xs text-gray-400 w-16">Cible {m.board_number}</span>
+                        <span className="text-xs text-gray-400 w-16">
+                          {m.board_number > 0 ? `Cible ${m.board_number}` : "—"}
+                        </span>
                         <span className="text-gray-700">
                           {m.player1.player_name} vs {m.player2.player_name}
                         </span>
