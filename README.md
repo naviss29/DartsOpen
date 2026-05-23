@@ -8,7 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)
 ![Stripe](https://img.shields.io/badge/Stripe-Connect-635BFF)
-![Tests](https://img.shields.io/badge/tests-80%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
 
 ---
@@ -41,6 +41,9 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 | Accès spectateur (QR code salle) | ✅ |
 | Reversement automatique à l'association organisatrice | ✅ |
 | Emails transactionnels (inscription en ligne + ONSITE, via SterPlatform / Brevo) | ✅ |
+| Têtes de série — dispatch équilibré dans les poules (serpentin) | ✅ |
+| Arbitrage admin — modification des résultats par manche avec recalcul automatique | ✅ |
+| Dashboard multi-utilisateur — voir tous les opens, s'inscrire en un clic | ✅ |
 | Conformité RGPD | 🔲 |
 
 ---
@@ -116,7 +119,7 @@ DartsOpen/
 | QR Code | `qrcode` npm |
 | Tests | Vitest |
 | Containerisation | Docker + Docker Compose |
-| Déploiement | Coolify (Hetzner CX23) |
+| Déploiement | Coolify (OVH VPS-2) |
 | CI/CD | GitHub Actions |
 
 ---
@@ -163,7 +166,7 @@ npm run test:coverage # Couverture de code
 npm run seed:players  # Remplir un tournoi avec des équipes fictives (interactif)
 ```
 
-**80 tests passants** — utils (bracket, pools, scores) + actions (tournament, score, bracket)
+**103 tests passants** — utils (bracket, pools, scores, seeding) + actions (tournament, score, bracket, pools avec seeds, arbitrage)
 
 ---
 
@@ -212,6 +215,7 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 - [x] Phase 8 — Recette staging : migrations auto Docker, file d'attente cibles, corrections UX formulaires
 - [x] Phase 9 — Recette active : attribution dynamique des cibles, emails ONSITE, classement MG/MP, authentification proxy.ts
 - [x] Phase 10 — Correction finalisation matchs (dbConfirmWinner), vue live enrichie (couleurs EN COURS/TERMINÉ/À VENIR, Derniers résultats par cible, pagination 20 matchs)
+- [x] Phase 11 — Têtes de série (dispatch serpentin), arbitrage admin par manche, dashboard multi-utilisateur, fix Derniers résultats (updated_at), migration OVH VPS-2
 
 ---
 

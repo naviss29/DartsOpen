@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { distributePlayersIntoPools } from "@/lib/utils/pools";
+import { distributePlayersIntoPools, distributeWithSeeding } from "@/lib/utils/pools";
 import { generateRoundRobin } from "@/lib/utils/bracket";
 
 // Simule la logique de génération des matchs de generatePools
@@ -82,6 +82,38 @@ describe("Génération des poules", () => {
     const matches = buildMatches(small, 4, 2);
     const poolIndexes = new Set(matches.map((m) => m.poolIndex));
     expect(poolIndexes.size).toBe(1);
+  });
+});
+
+describe("Génération avec têtes de série", () => {
+  it("les têtes de série ne se retrouvent pas dans la même poule (1 seed/poule)", () => {
+    const seeded = [{ id: "S1", seeded: true }, { id: "S2", seeded: true }, { id: "S3", seeded: true }];
+    const unseeded = Array.from({ length: 9 }, (_, i) => ({ id: `p${i+1}`, seeded: false }));
+    const pools = distributeWithSeeding(seeded, unseeded, 3);
+    pools.forEach((pool, i) => {
+      const seedsInPool = pool.filter(p => seeded.some(s => s.id === p.id));
+      expect(seedsInPool).toHaveLength(1);
+      expect(seedsInPool[0].id).toBe(seeded[i].id);
+    });
+  });
+
+  it("le total de joueurs est conservé après distribution avec seeds", () => {
+    const seeded = [{ id: "S1" }, { id: "S2" }];
+    const unseeded = Array.from({ length: 6 }, (_, i) => ({ id: `p${i+1}` }));
+    const pools = distributeWithSeeding(seeded, unseeded, 2);
+    const total = pools.reduce((sum, p) => sum + p.length, 0);
+    expect(total).toBe(8);
+  });
+
+  it("génère le bon nombre de matchs round-robin avec seeds", () => {
+    // 2 poules de 4 (2 seeds + 6 non-seeds) → 2 × C(4,2) = 12 matchs
+    const seeded = [{ id: "S1" }, { id: "S2" }];
+    const unseeded = Array.from({ length: 6 }, (_, i) => ({ id: `p${i+1}` }));
+    const pools = distributeWithSeeding(seeded, unseeded, 2);
+    const matches = pools.flatMap((group, poolIndex) =>
+      generateRoundRobin(group.map(p => p.id)).map(pair => ({ poolIndex, pair }))
+    );
+    expect(matches).toHaveLength(12);
   });
 });
 
