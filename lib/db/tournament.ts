@@ -449,9 +449,10 @@ export async function dbGeneratePools(
   });
 
   await prisma.$transaction(async (tx) => {
-    // Delete pool matches first — deleting pools first would trigger ON DELETE SET NULL
-    // and the subsequent match delete would find nothing (poolId already null).
-    await tx.match.deleteMany({ where: { tournamentId, poolId: { not: null } } });
+    // Delete all pool matches (bracketRound = null identifies pool matches vs bracket matches).
+    // Using poolId filter alone is unreliable: a previous failed regen may have left orphaned
+    // matches with poolId = null (set by ON DELETE SET NULL) that would be missed.
+    await tx.match.deleteMany({ where: { tournamentId, bracketRound: null } });
     await tx.pool.deleteMany({ where: { tournamentId } });
 
     const createdPools = await Promise.all(
