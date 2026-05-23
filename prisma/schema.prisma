@@ -143,6 +143,7 @@ model Match {
   player1Id       String      @map("player1_id")
   player2Id       String?     @map("player2_id")
   winnerId        String?     @map("winner_id")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
 
   tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   pool       Pool?        @relation(fields: [poolId], references: [id])

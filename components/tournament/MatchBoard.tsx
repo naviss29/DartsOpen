@@ -17,6 +17,7 @@ interface Match {
   player1: Player;
   player2: Player;
   winner_id?: string | null;
+  updated_at?: string;
   sets: MatchSet[];
 }
 
@@ -38,7 +39,9 @@ async function fetchMatches(tournamentId: string): Promise<{ active: Match[]; fi
   for (const m of all) {
     if (m.status === "FINISHED" && m.board_number > 0) {
       const existing = finishedByBoard.get(m.board_number);
-      if (!existing || m.id > existing.id) finishedByBoard.set(m.board_number, m);
+      const mTime = m.updated_at ?? m.id;
+      const eTime = existing?.updated_at ?? existing?.id ?? "";
+      if (!existing || mTime > eTime) finishedByBoard.set(m.board_number, m);
     }
   }
 

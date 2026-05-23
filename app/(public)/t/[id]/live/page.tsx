@@ -21,6 +21,7 @@ type SterMatch = {
   player1: { id: string; player_name: string };
   player2: { id: string; player_name: string };
   winner_id: string | null;
+  updated_at: string;
   sets: { id: string; round_order: number; winner_id: string | null; validated_p1: boolean; validated_p2: boolean }[];
 };
 
@@ -75,12 +76,12 @@ export default async function LivePage({ params }: Props) {
       sets: m.sets,
     }));
 
-  // Last finished match per board
+  // Last finished match per board — most recently updated wins
   const lastFinishedByBoard = new Map<number, SterMatch>();
   for (const m of allMatches) {
     if (m.status === "FINISHED" && m.board_number > 0) {
       const existing = lastFinishedByBoard.get(m.board_number);
-      if (!existing || m.id > existing.id) lastFinishedByBoard.set(m.board_number, m);
+      if (!existing || m.updated_at > existing.updated_at) lastFinishedByBoard.set(m.board_number, m);
     }
   }
   const lastFinishedMatches = Array.from(lastFinishedByBoard.values()).map((m) => ({

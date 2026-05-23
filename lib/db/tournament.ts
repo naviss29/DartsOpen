@@ -189,6 +189,7 @@ function mapMatch(m: {
   player1Id: string;
   player2Id: string | null;
   winnerId: string | null;
+  updatedAt: Date;
   sets: Parameters<typeof mapMatchSet>[0][];
   player1?: Parameters<typeof mapRegistration>[0] | null;
   player2?: Parameters<typeof mapRegistration>[0] | null;
@@ -204,6 +205,7 @@ function mapMatch(m: {
     player1_id: m.player1Id,
     player2_id: m.player2Id,
     winner_id: m.winnerId,
+    updated_at: m.updatedAt.toISOString(),
     sets: m.sets.map(mapMatchSet),
     player1: m.player1 ? mapRegistration(m.player1) : undefined,
     player2: m.player2 ? mapRegistration(m.player2) : undefined,
