@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { roundLabel } from "@/lib/utils/bracket";
+import { ArbitrateMatchButton } from "./ArbitrateMatchModal";
 
 interface BracketMatch {
   id: string;
@@ -9,11 +10,13 @@ interface BracketMatch {
   player1: { id: string; player_name: string } | null;
   player2: { id: string; player_name: string } | null;
   winner_id: string | null;
+  sets?: { id: string; round_order: number; winner_id: string | null }[];
 }
 
 interface Props {
   matches: BracketMatch[];
   maxRound: number;
+  tournamentId?: string;
 }
 
 const CARD_H = 72;
@@ -42,7 +45,7 @@ function slotHasCard(round: number, pos: number, roundMap: Map<number, BracketMa
   return pos < expectedCount(r1Slots, round);
 }
 
-export function BracketView({ matches, maxRound }: Props) {
+export function BracketView({ matches, maxRound, tournamentId }: Props) {
   if (matches.length === 0) return null;
 
   const r1Slots = deriveR1Slots(matches);
@@ -119,7 +122,7 @@ export function BracketView({ matches, maxRound }: Props) {
                         const top = match.bracket_position * slotH + (slotH - CARD_H) / 2;
                         return (
                           <div key={match.id} style={{ position: "absolute", top, left: 0, right: 0 }}>
-                            <BracketCard match={match} />
+                            <BracketCard match={match} tournamentId={tournamentId} />
                           </div>
                         );
                       })
@@ -129,7 +132,7 @@ export function BracketView({ matches, maxRound }: Props) {
                       const top = j * slotH + (slotH - CARD_H) / 2;
                       return (
                         <div key={match?.id ?? `ph-${round}-${j}`} style={{ position: "absolute", top, left: 0, right: 0 }}>
-                          {match ? <BracketCard match={match} /> : <PlaceholderCard />}
+                          {match ? <BracketCard match={match} tournamentId={tournamentId} /> : <PlaceholderCard />}
                         </div>
                       );
                     })
@@ -157,7 +160,7 @@ function PlaceholderCard() {
   );
 }
 
-function BracketCard({ match }: { match: BracketMatch }) {
+function BracketCard({ match, tournamentId }: { match: BracketMatch; tournamentId?: string }) {
   const isBye = match.player2 === null;
   if (isBye) {
     return (
@@ -186,6 +189,14 @@ function BracketCard({ match }: { match: BracketMatch }) {
         isLoser={hasResult && match.winner_id !== match.player2?.id}
         inProgress={match.status === "IN_PROGRESS"}
       />
+      {tournamentId && match.player1 && match.player2 && match.sets && match.sets.length > 0 && (
+        <div className="border-t border-gray-100 px-2 py-1 flex justify-end">
+          <ArbitrateMatchButton
+            match={{ ...match, player1: match.player1, player2: match.player2, sets: match.sets }}
+            tournamentId={tournamentId}
+          />
+        </div>
+      )}
     </div>
   );
 }

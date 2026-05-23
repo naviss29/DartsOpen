@@ -560,6 +560,57 @@ export async function dbDeleteBracketMatches(tournamentId: string) {
   await prisma.match.deleteMany({ where: { tournamentId, poolId: null } });
 }
 
+export async function dbArbitrateMatch(
+  matchId: string,
+  setWinners: { setId: string; winnerId: string | null }[]
+): Promise<{ error?: string }> {
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { sets: true },
+  });
+  if (!match) return { error: "Match introuvable." };
+  if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
+
+  await prisma.$transaction(async (tx) => {
+    for (const { setId, winnerId } of setWinners) {
+      await tx.matchSet.update({
+        where: { id: setId },
+        data: {
+          winnerId,
+          validatedP1: winnerId !== null,
+          validatedP2: winnerId !== null,
+        },
+      });
+    }
+
+    // Recompute match winner from updated sets
+    const p1Wins = setWinners.filter((s) => s.winnerId === match.player1Id).length;
+    const p2Wins = setWinners.filter((s) => s.winnerId === match.player2Id).length;
+    const total = match.sets.length;
+    const allPlayed = setWinners.every((s) => s.winnerId !== null);
+
+    let newWinnerId: string | null = null;
+    if (p1Wins > p2Wins && (allPlayed || p1Wins > Math.floor(total / 2))) newWinnerId = match.player1Id;
+    else if (p2Wins > p1Wins && (allPlayed || p2Wins > Math.floor(total / 2))) newWinnerId = match.player2Id;
+
+    const newStatus: MatchStatus = allPlayed && newWinnerId ? "FINISHED" : "IN_PROGRESS";
+
+    await tx.match.update({
+      where: { id: matchId },
+      data: { winnerId: newWinnerId, status: newStatus },
+    });
+
+    // If bracket match and winner changed: drop all subsequent rounds so admin can regenerate
+    if (match.bracketRound !== null && newWinnerId !== match.winnerId) {
+      await tx.match.deleteMany({
+        where: { tournamentId: match.tournamentId, poolId: null, bracketRound: { gt: match.bracketRound } },
+      });
+    }
+  });
+
+  return {};
+}
+
 // ── Match sets — scoring business logic ───────────────────────────────────────
 
 export async function dbGetMatchSet(matchSetId: string) {

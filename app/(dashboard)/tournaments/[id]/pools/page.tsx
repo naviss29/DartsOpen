@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 import { PrintButton } from "@/components/tournament/PrintButton";
+import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
 import { dbGetTournament, dbListPools, dbListRegistrations } from "@/lib/db/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -25,6 +26,7 @@ type PoolMatch = {
   status: string;
   player1: { id: string; player_name: string };
   player2: { id: string; player_name: string };
+  sets: { id: string; round_order: number; winner_id: string | null }[];
 };
 
 type Pool = {
@@ -227,10 +229,11 @@ export default async function PoolsPage({ params }: Props) {
                         <span className="text-xs text-gray-400 w-16">
                           {m.board_number > 0 ? `Cible ${m.board_number}` : "—"}
                         </span>
-                        <span className="text-gray-700">
+                        <span className="text-gray-700 flex-1">
                           {m.player1.player_name} vs {m.player2.player_name}
                         </span>
                         <StatusDot status={m.status} />
+                        <ArbitrateMatchButton match={m} tournamentId={id} />
                       </li>
                     ))}
                   </ul>

@@ -27,6 +27,7 @@ type BracketMatch = {
   pool_id: string | null;
   player1: { id: string; player_name: string };
   player2: { id: string; player_name: string };
+  sets: { id: string; round_order: number; winner_id: string | null }[];
 };
 
 export default async function BracketPage({ params }: Props) {
@@ -168,6 +169,7 @@ export default async function BracketPage({ params }: Props) {
           <BracketView
             matches={bracketMatches}
             maxRound={maxRound}
+            tournamentId={id}
           />
         </div>
       ) : (
