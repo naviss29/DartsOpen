@@ -238,6 +238,36 @@ export async function dbListTournaments(userId: string) {
   }));
 }
 
+export async function dbListAllTournaments(currentUserId: string) {
+  const rows = await prisma.tournament.findMany({
+    where: {
+      OR: [
+        { userId: currentUserId },
+        { status: { in: ["OPEN", "IN_PROGRESS", "FINISHED"] } },
+      ],
+    },
+    include: {
+      _count: { select: { registrations: { where: { status: "PAID" } } } },
+    },
+    orderBy: [{ status: "asc" }, { date: "asc" }],
+  });
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    date: t.date.toISOString().split("T")[0],
+    location: t.location,
+    status: t.status as string,
+    max_players: t.maxPlayers,
+    players_per_team: t.playersPerTeam,
+    entry_fee: t.entryFee,
+    registration_mode: t.registrationMode as string,
+    nb_pools: t.nbPools,
+    nb_boards: t.nbBoards,
+    players_paid: t._count.registrations,
+    is_mine: t.userId === currentUserId,
+  }));
+}
+
 export async function dbGetTournament(id: string) {
   const t = await prisma.tournament.findUnique({
     where: { id },
