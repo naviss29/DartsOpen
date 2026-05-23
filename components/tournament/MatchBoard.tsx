@@ -163,17 +163,6 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
         </div>
       ))}
 
-      {inProgress.length > 0 && (
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            En cours ({inProgress.length})
-          </h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            {inProgress.map((m) => <MatchCard key={m.id} match={m} />)}
-          </div>
-        </div>
-      )}
-
       {allFinished.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
@@ -183,6 +172,17 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
             {[...allFinished].sort((a, b) => a.board_number - b.board_number).map((m) => (
               <MatchCard key={m.id} match={m} />
             ))}
+          </div>
+        </div>
+      )}
+
+      {inProgress.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+            En cours ({inProgress.length})
+          </h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {inProgress.map((m) => <MatchCard key={m.id} match={m} />)}
           </div>
         </div>
       )}
