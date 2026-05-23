@@ -28,7 +28,7 @@ interface Props {
 export function ArbitrateMatchButton({ match, tournamentId }: Props) {
   const [open, setOpen] = useState(false);
 
-  if (match.sets.length === 0) return null;
+  if (!match.sets?.length) return null;
 
   return (
     <>

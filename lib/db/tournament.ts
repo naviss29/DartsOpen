@@ -121,6 +121,7 @@ function mapPool(p: {
     status: MatchStatus;
     player1: { id: string; playerName: string } | null;
     player2: { id: string; playerName: string } | null;
+    sets?: { id: string; roundId: string; winnerId: string | null; round?: { roundOrder: number } | null }[];
   }[];
 }) {
   return {
@@ -141,6 +142,11 @@ function mapPool(p: {
       status: m.status,
       player1: m.player1 ? { id: m.player1.id, player_name: m.player1.playerName } : null,
       player2: m.player2 ? { id: m.player2.id, player_name: m.player2.playerName } : null,
+      sets: (m.sets ?? []).map((s) => ({
+        id: s.id,
+        round_order: s.round?.roundOrder ?? 0,
+        winner_id: s.winnerId,
+      })),
     })),
   };
 }
@@ -422,6 +428,7 @@ export async function dbListPools(tournamentId: string) {
         include: {
           player1: { select: { id: true, playerName: true } },
           player2: { select: { id: true, playerName: true } },
+          sets: { include: { round: { select: { roundOrder: true } } } },
         },
         orderBy: { boardNumber: "asc" },
       },
