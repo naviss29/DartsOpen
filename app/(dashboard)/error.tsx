@@ -1,13 +1,15 @@
 "use client";
 
-export default function DashboardError({ reset }: { error: Error; reset: () => void }) {
+export default function DashboardError({ error, reset }: { error: Error; reset: () => void }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-8 text-center space-y-4">
-      <p className="text-amber-700 font-medium">Cette page est en cours de migration vers SterPlatform.</p>
-      <p className="text-sm text-amber-600">Disponible à partir de la Phase 5c.</p>
+    <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center space-y-4">
+      <p className="text-red-700 font-medium">Une erreur est survenue.</p>
+      {error?.message && (
+        <p className="text-sm text-red-600 font-mono">{error.message}</p>
+      )}
       <button
         onClick={reset}
-        className="rounded-lg border border-amber-300 px-4 py-2 text-sm text-amber-700 hover:bg-amber-100 transition-colors"
+        className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-100 transition-colors"
       >
         Réessayer
       </button>

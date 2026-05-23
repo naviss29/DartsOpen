@@ -40,7 +40,11 @@ export async function getUser(): Promise<SterUser | null> {
   const token = await getServerToken();
   if (!token) return null;
 
-  const res = await apiFetch('/api/auth/me', {}, token);
-  if (!res.ok) return null;
-  return res.json() as Promise<SterUser>;
+  try {
+    const res = await apiFetch('/api/auth/me', {}, token);
+    if (!res.ok) return null;
+    return res.json() as Promise<SterUser>;
+  } catch {
+    return null;
+  }
 }
