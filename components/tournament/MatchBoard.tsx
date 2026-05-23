@@ -102,10 +102,28 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
     return () => { mounted = false; es?.close(); if (poll) clearInterval(poll); };
   }, [tournamentId]);
 
-  const inProgress = matches.filter((m) => m.status === "IN_PROGRESS");
+  // Matchs dont toutes les manches sont jouées → traités comme FINISHED côté client
+  const effectivelyDone = matches.filter((m) => {
+    if (m.status !== "IN_PROGRESS") return false;
+    const total = m.sets.length;
+    return total > 0 && m.sets.filter((s) => s.winner_id !== null).length >= total;
+  });
+
+  const inProgress = matches.filter((m) => {
+    if (m.status !== "IN_PROGRESS") return false;
+    const total = m.sets.length;
+    return total === 0 || m.sets.filter((s) => s.winner_id !== null).length < total;
+  });
+
   const pending = matches.filter((m) => m.status === "PENDING");
   const totalPendingPages = Math.ceil(pending.length / PAGE_SIZE);
   const displayedPending = pending.slice(pendingPage * PAGE_SIZE, (pendingPage + 1) * PAGE_SIZE);
+
+  // Combine FINISHED DB + matchs effectivement terminés pour "Derniers résultats"
+  const allFinished = [
+    ...finishedMatches,
+    ...effectivelyDone.map((m) => ({ ...m, status: "FINISHED" })),
+  ];
 
   // Rotation automatique des pages À venir toutes les 10s
   useEffect(() => {
@@ -154,13 +172,13 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
         </div>
       )}
 
-      {finishedMatches.length > 0 && (
+      {allFinished.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
             Derniers résultats
           </h2>
           <div className="grid gap-2 md:grid-cols-2">
-            {[...finishedMatches].sort((a, b) => a.board_number - b.board_number).map((m) => (
+            {[...allFinished].sort((a, b) => a.board_number - b.board_number).map((m) => (
               <MatchCard key={m.id} match={m} />
             ))}
           </div>
@@ -228,8 +246,6 @@ function MatchCard({
   const p2SetsWon = match.sets.filter((s) => s.winner_id === match.player2.id).length;
   const p1Won = match.winner_id === match.player1.id;
   const p2Won = match.winner_id === match.player2.id;
-  // Match effectivement terminé (toutes les manches jouées) mais pas encore finalisé en base
-  const effectivelyDone = match.status === "IN_PROGRESS" && totalSets > 0 && setsPlayed >= totalSets;
 
   // ── TERMINÉ ──────────────────────────────────────────────────────────────────
   if (match.status === "FINISHED") {
@@ -248,30 +264,7 @@ function MatchCard({
     );
   }
 
-  // ── EN COURS — toutes manches jouées (en attente de finalisation) ─────────────
-  if (effectivelyDone) {
-    return (
-      <div className="rounded-xl bg-blue-950/40 border border-blue-600/50 px-5 py-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 bottom-0 w-1 rounded-l-xl bg-blue-500" />
-        <div className="flex items-center justify-between mb-2 pl-2">
-          <span className="text-xs font-medium text-blue-400 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
-            Cible {match.board_number}
-          </span>
-          {totalSets > 0 && (
-            <span className="text-xs text-blue-400/70">Manche {setsPlayed}/{totalSets}</span>
-          )}
-        </div>
-        <div className="font-semibold text-base pl-2">
-          <span className="text-white">{match.player1.player_name}</span>
-          <span className="text-gray-500 mx-2">vs</span>
-          <span className="text-white">{match.player2.player_name}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // ── EN COURS — manches restantes ──────────────────────────────────────────────
+  // ── EN COURS ──────────────────────────────────────────────────────────────────
   if (match.status === "IN_PROGRESS") {
     return (
       <div className="rounded-xl bg-green-950/40 border border-green-600/50 px-5 py-4 relative overflow-hidden">
