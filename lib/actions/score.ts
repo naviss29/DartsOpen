@@ -6,8 +6,10 @@ import {
   dbConfirmWinner,
   dbDisputeResult,
   dbMarkWinnerDirect,
+  dbGetTournament,
 } from "@/lib/db/tournament";
 import { doAdvanceToNextRound } from "@/lib/actions/bracket";
+import { getUser } from "@/lib/api/auth";
 
 export async function proposeWinner(
   matchSetId: string,
@@ -15,6 +17,9 @@ export async function proposeWinner(
   playerSide: 1 | 2,
   tournamentId: string
 ): Promise<{ error?: string }> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
   const result = await dbProposeWinner(matchSetId, winnerId, playerSide).catch(() => ({
     error: "Erreur lors de la saisie du score.",
     set: null as never,
@@ -31,6 +36,9 @@ export async function confirmWinner(
   playerSide: 1 | 2,
   tournamentId: string
 ): Promise<{ error?: string; disputed?: boolean }> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
   const result = await dbConfirmWinner(matchSetId, playerSide).catch(
     (): Awaited<ReturnType<typeof dbConfirmWinner>> => ({ error: "Erreur lors de la confirmation." })
   );
@@ -50,6 +58,14 @@ export async function markWinnerDirect(
   winnerId: string,
   tournamentId: string
 ): Promise<{ error?: string }> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.association_id !== user.id) {
+    return { error: "Accès refusé." };
+  }
+
   const result = await dbMarkWinnerDirect(matchSetId, winnerId).catch(
     (): Awaited<ReturnType<typeof dbMarkWinnerDirect>> => ({ error: "Erreur lors de la saisie du score." })
   );
@@ -68,6 +84,9 @@ export async function disputeResult(
   matchSetId: string,
   tournamentId: string
 ): Promise<{ error?: string }> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
   const result = await dbDisputeResult(matchSetId).catch(() => ({
     error: "Erreur lors de la contestation.",
   }));

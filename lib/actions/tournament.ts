@@ -11,6 +11,7 @@ import {
   dbDeleteTournament,
   dbAddRound,
   dbDeleteRound,
+  dbGetTournament,
 } from "@/lib/db/tournament";
 
 const TournamentSchema = z.object({
@@ -78,7 +79,15 @@ export async function createTournament(prevState: TournamentState, formData: For
 }
 
 export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
+  const user = await getUser();
+  if (!user) redirect("/login");
+
   const tournamentId = formData.get("tournament_id") as string;
+
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.association_id !== user.id) {
+    return { error: "Accès refusé.", ts: Date.now() };
+  }
 
   const raw = extractTournamentRaw(formData);
   const parsed = TournamentSchema.safeParse(raw);
@@ -97,12 +106,28 @@ export async function updateTournamentStatus(
   tournamentId: string,
   status: string
 ): Promise<{ error?: string } | void> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.association_id !== user.id) {
+    return { error: "Accès refusé." };
+  }
+
   const ok = await dbUpdateTournamentStatus(tournamentId, status).catch(() => null);
   if (!ok) return { error: "Impossible de mettre à jour le statut." };
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
 export async function deleteTournament(tournamentId: string): Promise<{ error?: string }> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.association_id !== user.id) {
+    return { error: "Accès refusé." };
+  }
+
   const ok = await dbDeleteTournament(tournamentId).catch(() => null);
   if (ok === null) return { error: "Erreur lors de la suppression du tournoi." };
   revalidatePath("/tournaments");
@@ -110,7 +135,15 @@ export async function deleteTournament(tournamentId: string): Promise<{ error?: 
 }
 
 export async function addRound(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
+  const user = await getUser();
+  if (!user) redirect("/login");
+
   const tournamentId = formData.get("tournament_id") as string;
+
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.association_id !== user.id) {
+    return { error: "Accès refusé." };
+  }
 
   const parsed = RoundSchema.safeParse({
     game_type: formData.get("game_type"),
@@ -129,6 +162,14 @@ export async function addRound(prevState: TournamentState, formData: FormData): 
 }
 
 export async function deleteRound(roundId: string, tournamentId: string): Promise<{ error?: string }> {
+  const user = await getUser();
+  if (!user) return { error: "Non authentifié." };
+
+  const tournament = await dbGetTournament(tournamentId);
+  if (!tournament || tournament.association_id !== user.id) {
+    return { error: "Accès refusé." };
+  }
+
   const ok = await dbDeleteRound(roundId).catch(() => null);
   if (ok === null) return { error: "Erreur lors de la suppression de la manche." };
   revalidatePath(`/tournaments/${tournamentId}`);
