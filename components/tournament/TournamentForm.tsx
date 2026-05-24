@@ -26,6 +26,7 @@ export function TournamentForm() {
             name="name"
             type="text"
             required
+            defaultValue={state?.fields?.name}
             placeholder="Open de fléchettes d'Orléans 2026"
             className={inputCn}
           />
@@ -33,10 +34,10 @@ export function TournamentForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Date" error={state?.errors?.date?.[0]}>
-            <input name="date" type="date" required min={today} className={inputCn} />
+            <input name="date" type="date" required min={today} defaultValue={state?.fields?.date} className={inputCn} />
           </Field>
           <Field label="Lieu" error={state?.errors?.location?.[0]}>
-            <input name="location" type="text" required placeholder="Salle des fêtes" className={inputCn} />
+            <input name="location" type="text" required defaultValue={state?.fields?.location} placeholder="Salle des fêtes" className={inputCn} />
           </Field>
         </div>
       </section>
@@ -47,30 +48,30 @@ export function TournamentForm() {
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nombre de joueurs max" error={state?.errors?.max_players?.[0]}>
-            <input name="max_players" type="number" min="2" max="512" defaultValue="32" required className={inputCn} />
+            <input name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required className={inputCn} />
           </Field>
           <Field label="Droits d'inscription (€ / joueur)" error={state?.errors?.entry_fee?.[0]}>
-            <input name="entry_fee" type="number" min="0" defaultValue="10" required className={inputCn} />
+            <input name="entry_fee" type="number" min="0" defaultValue={state?.fields?.entry_fee ?? "10"} required className={inputCn} />
             <p className="mt-1 text-xs text-gray-400">Le total facturé = ce montant × nb de joueurs par équipe</p>
           </Field>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nombre de poules" error={state?.errors?.nb_pools?.[0]}>
-            <input name="nb_pools" type="number" min="1" max="64" defaultValue="8" required className={inputCn} />
+            <input name="nb_pools" type="number" min="1" max="64" defaultValue={state?.fields?.nb_pools ?? "8"} required className={inputCn} />
           </Field>
           <Field label="Nombre de cibles disponibles" error={state?.errors?.nb_boards?.[0]}>
-            <input name="nb_boards" type="number" min="1" max="32" defaultValue="4" required className={inputCn} />
+            <input name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "4"} required className={inputCn} />
           </Field>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Joueurs par équipe" error={state?.errors?.players_per_team?.[0]}>
-            <input name="players_per_team" type="number" min="1" max="10" defaultValue="2" required className={inputCn} />
+            <input name="players_per_team" type="number" min="1" max="10" defaultValue={state?.fields?.players_per_team ?? "2"} required className={inputCn} />
             <p className="mt-1 text-xs text-gray-400">Ex : 1 = solo, 2 = doublette</p>
           </Field>
           <Field label="Qualifiés par poule" error={state?.errors?.advancement_per_pool?.[0]}>
-            <input name="advancement_per_pool" type="number" min="1" max="8" defaultValue="1" required className={inputCn} />
+            <input name="advancement_per_pool" type="number" min="1" max="8" defaultValue={state?.fields?.advancement_per_pool ?? "1"} required className={inputCn} />
             <p className="mt-1 text-xs text-gray-400">Ex : 8 poules × 2 = 16 finalistes</p>
           </Field>
         </div>
@@ -78,14 +79,14 @@ export function TournamentForm() {
         <div className="rounded-lg border border-gray-200 p-4 space-y-2">
           <p className="text-sm font-medium text-gray-700">Mode d&apos;inscription</p>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input type="radio" name="registration_mode" value="ONLINE" defaultChecked className="mt-0.5" />
+            <input type="radio" name="registration_mode" value="ONLINE" defaultChecked={(state?.fields?.registration_mode ?? "ONLINE") === "ONLINE"} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium text-gray-900">En ligne</p>
               <p className="text-xs text-gray-500">Les joueurs peuvent s&apos;inscrire et payer directement depuis la page publique du tournoi.</p>
             </div>
           </label>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input type="radio" name="registration_mode" value="ONSITE" className="mt-0.5" />
+            <input type="radio" name="registration_mode" value="ONSITE" defaultChecked={state?.fields?.registration_mode === "ONSITE"} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium text-gray-900">Sur place uniquement</p>
               <p className="text-xs text-gray-500">Pas d&apos;inscription en ligne. Les visiteurs verront un message d&apos;information. Vous gérez les inscriptions manuellement.</p>
@@ -96,14 +97,14 @@ export function TournamentForm() {
         <div className="rounded-lg border border-gray-200 p-4 space-y-2">
           <p className="text-sm font-medium text-gray-700">Mode de saisie des scores</p>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked className="mt-0.5" />
+            <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked={(state?.fields?.scoring_mode ?? "ELECTRONIC") !== "TRADITIONAL"} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium text-gray-900">Électronique</p>
               <p className="text-xs text-gray-500">Chaque équipe scanne le QR code et désigne le gagnant de la manche. L&apos;adversaire confirme.</p>
             </div>
           </label>
           <label className="flex items-start gap-3 cursor-pointer">
-            <input type="radio" name="scoring_mode" value="TRADITIONAL" className="mt-0.5" />
+            <input type="radio" name="scoring_mode" value="TRADITIONAL" defaultChecked={state?.fields?.scoring_mode === "TRADITIONAL"} className="mt-0.5" />
             <div>
               <p className="text-sm font-medium text-gray-900">Traditionnel</p>
               <p className="text-xs text-gray-500">Un marqueur saisit les scores volée par volée sur un seul appareil. Le compte à rebours est géré automatiquement.</p>

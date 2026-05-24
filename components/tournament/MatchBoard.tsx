@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { NextMatchAlert } from "./NextMatchAlert";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
+const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
+const PAGE_SIZE = 20;
 
 interface Player { id: string; player_name: string }
 interface MatchSet { id: string; round_order: number; winner_id: string | null; validated_p1: boolean; validated_p2: boolean }
@@ -12,122 +16,211 @@ interface Match {
   status: string;
   player1: Player;
   player2: Player;
-  match_sets: MatchSet[];
+  winner_id?: string | null;
+  updated_at?: string;
+  sets: MatchSet[];
 }
 
 interface Props {
   tournamentId: string;
   initialMatches: Match[];
+  initialFinishedMatches: Match[];
   nbBoards: number;
 }
 
-export function MatchBoard({ tournamentId, initialMatches }: Props) {
+async function fetchMatches(tournamentId: string): Promise<{ active: Match[]; finished: Match[] }> {
+  const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
+  if (!res.ok) return { active: [], finished: [] };
+  const all = await res.json() as Match[];
+
+  const active = all.filter((m) => ["IN_PROGRESS", "PENDING"].includes(m.status));
+
+  const finishedByBoard = new Map<number, Match>();
+  for (const m of all) {
+    if (m.status === "FINISHED" && m.board_number > 0) {
+      const existing = finishedByBoard.get(m.board_number);
+      const mTime = m.updated_at ?? m.id;
+      const eTime = existing?.updated_at ?? existing?.id ?? "";
+      if (!existing || mTime > eTime) finishedByBoard.set(m.board_number, m);
+    }
+  }
+
+  return { active, finished: Array.from(finishedByBoard.values()) };
+}
+
+export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatches, nbBoards }: Props) {
   const [matches, setMatches] = useState<Match[]>(initialMatches);
+  const [finishedMatches, setFinishedMatches] = useState<Match[]>(initialFinishedMatches);
   const [nextMatchAlert, setNextMatchAlert] = useState<{ boardNumber: number; match: Match } | null>(null);
+  const [pendingPage, setPendingPage] = useState(0);
 
   useEffect(() => {
-    const supabase = createClient();
+    let mounted = true;
+    let es: EventSource | null = null;
+    let poll: ReturnType<typeof setInterval> | null = null;
 
-    const channel = supabase
-      .channel(`live-matches-${tournamentId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "matches", filter: `tournament_id=eq.${tournamentId}` },
-        () => {
-          // Re-fetch on any match change
-          supabase
-            .from("matches")
-            .select(`
-              id, board_number, status,
-              player1:registrations!matches_player1_id_fkey(id, player_name),
-              player2:registrations!matches_player2_id_fkey(id, player_name),
-              match_sets(id, round_order, winner_id, validated_p1, validated_p2)
-            `)
-            .eq("tournament_id", tournamentId)
-            .in("status", ["IN_PROGRESS", "PENDING"])
-            .order("board_number")
-            .order("created_at")
-            .then(({ data }) => {
-              if (data) {
-                const normalized = data.map((m) => ({
-                  ...m,
-                  player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-                  player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-                })) as Match[];
-                setMatches(normalized);
-              }
-            });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_sets" },
-        (payload) => {
-          // Détecter la dernière manche en cours → annoncer prochain match
-          const updatedSet = payload.new as MatchSet & { match_id: string };
-          setMatches((prev) => {
-            const match = prev.find((m) => m.match_sets.some((s) => s.id === updatedSet.id));
-            if (match && match.match_sets.length > 0) {
-              const lastRound = Math.max(...match.match_sets.map((s) => s.round_order));
-              const isLastSet = updatedSet.round_order === lastRound;
-              const hasOneValidation = updatedSet.validated_p1 || updatedSet.validated_p2;
-
-              if (isLastSet && hasOneValidation) {
-                // Trouver le prochain PENDING sur la même cible
-                const nextPending = prev.find(
-                  (m) => m.status === "PENDING" && m.board_number === match.board_number
-                );
-                if (nextPending) {
-                  setNextMatchAlert({ boardNumber: match.board_number, match: nextPending });
-                  setTimeout(() => setNextMatchAlert(null), 12000);
-                }
-              }
+    const applyNext = (active: Match[], finished: Match[]) => {
+      if (!mounted) return;
+      setMatches((prev) => {
+        for (const prevMatch of prev.filter((m) => m.status === "IN_PROGRESS")) {
+          if (!active.find((m) => m.id === prevMatch.id)) {
+            const nextPending = active.find(
+              (m) => m.status === "PENDING" && m.board_number === prevMatch.board_number
+            );
+            if (nextPending) {
+              setNextMatchAlert({ boardNumber: prevMatch.board_number, match: nextPending });
+              setTimeout(() => setNextMatchAlert(null), 12000);
             }
-            return prev;
-          });
+          }
         }
-      )
-      .subscribe();
+        return active;
+      });
+      setFinishedMatches(finished);
+    };
 
-    return () => { supabase.removeChannel(channel); };
+    const doFetch = async () => {
+      const { active, finished } = await fetchMatches(tournamentId);
+      applyNext(active, finished);
+    };
+
+    const startPolling = () => { poll = setInterval(doFetch, 3000); };
+
+    const connect = async () => {
+      if (!MERCURE_URL) { startPolling(); return; }
+      const tokenRes = await fetch(
+        `${API_URL}/api/public/tournaments/${tournamentId}/mercure-token`,
+        { headers: { "X-Organization-Slug": ORG_SLUG } }
+      );
+      if (!tokenRes.ok) { startPolling(); return; }
+      const { token, topic } = await tokenRes.json() as { token: string; topic: string };
+      const url = new URL(MERCURE_URL);
+      url.searchParams.append("topic", topic);
+      url.searchParams.append("authorization", token);
+      es = new EventSource(url.toString());
+      es.onmessage = doFetch;
+      es.onerror = () => { es?.close(); es = null; if (mounted && !poll) startPolling(); };
+    };
+
+    connect();
+    return () => { mounted = false; es?.close(); if (poll) clearInterval(poll); };
   }, [tournamentId]);
 
-  const inProgress = matches.filter((m) => m.status === "IN_PROGRESS");
+  // Matchs dont toutes les manches sont jouées → traités comme FINISHED côté client
+  const effectivelyDone = matches.filter((m) => {
+    if (m.status !== "IN_PROGRESS") return false;
+    const total = m.sets.length;
+    return total > 0 && m.sets.filter((s) => s.winner_id !== null).length >= total;
+  });
+
+  const inProgress = matches.filter((m) => {
+    if (m.status !== "IN_PROGRESS") return false;
+    const total = m.sets.length;
+    return total === 0 || m.sets.filter((s) => s.winner_id !== null).length < total;
+  });
+
   const pending = matches.filter((m) => m.status === "PENDING");
+  const totalPendingPages = Math.ceil(pending.length / PAGE_SIZE);
+  // Clamp au rendu plutôt que setState synchrone dans un effet
+  const safePendingPage = pending.length <= PAGE_SIZE ? 0 : pendingPage % totalPendingPages;
+  const displayedPending = pending.slice(safePendingPage * PAGE_SIZE, (safePendingPage + 1) * PAGE_SIZE);
+
+  // Combine FINISHED DB + matchs effectivement terminés pour "Derniers résultats"
+  const allFinished = [
+    ...finishedMatches,
+    ...effectivelyDone.map((m) => ({ ...m, status: "FINISHED" })),
+  ];
+
+  // Rotation automatique des pages À venir toutes les 10s
+  useEffect(() => {
+    if (pending.length <= PAGE_SIZE) return;
+    const interval = setInterval(() => {
+      setPendingPage((p) => (p + 1) % Math.ceil(pending.length / PAGE_SIZE));
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [pending.length]);
+
+  // Alerte "dernière manche" pour les cibles qui vont se libérer
+  const lastSetBoards = inProgress
+    .filter((m) => {
+      const total = m.sets.length;
+      const played = m.sets.filter((s) => s.winner_id !== null).length;
+      return total > 1 && played === total - 1;
+    })
+    .map((m) => m.board_number);
+  const lastSetAlerts = lastSetBoards.map((board, i) => ({ board, next: pending[i] ?? null })).filter((a) => a.next);
 
   return (
     <div className="space-y-6">
       {nextMatchAlert && (
-        <NextMatchAlert
-          boardNumber={nextMatchAlert.boardNumber}
-          match={nextMatchAlert.match}
-        />
+        <NextMatchAlert boardNumber={nextMatchAlert.boardNumber} match={nextMatchAlert.match} />
       )}
 
-      {/* Matchs en cours */}
-      {inProgress.length > 0 && (
+      {lastSetAlerts.map(({ board, next }) => (
+        <div key={board} className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-center gap-3">
+          <span className="text-amber-400 text-lg">⚡</span>
+          <p className="text-sm text-amber-300">
+            <span className="font-semibold">Cible {board} — Dernière manche en cours.</span>
+            {" "}Prochain match :{" "}
+            <span className="font-semibold text-white">{next!.player1.player_name} vs {next!.player2.player_name}</span>
+          </p>
+        </div>
+      ))}
+
+      {allFinished.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            En cours ({inProgress.length})
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">
+            Derniers résultats
           </h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            {inProgress.map((m) => (
+          <div className="grid gap-2 md:grid-cols-2">
+            {[...allFinished].sort((a, b) => a.board_number - b.board_number).map((m) => (
               <MatchCard key={m.id} match={m} />
             ))}
           </div>
         </div>
       )}
 
-      {/* Matchs à venir */}
-      {pending.length > 0 && (
+      {inProgress.length > 0 && (
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-            À venir ({pending.length})
+            En cours ({inProgress.length})
           </h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {inProgress.map((m) => <MatchCard key={m.id} match={m} />)}
+          </div>
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+              À venir ({pending.length})
+            </h2>
+            {totalPendingPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: totalPendingPages }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setPendingPage(i); }}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === safePendingPage ? "bg-gray-300" : "bg-gray-600"}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
           <div className="grid gap-2 md:grid-cols-3">
-            {pending.map((m, i) => (
-              <MatchCard key={m.id} match={m} compact index={i} />
-            ))}
+            {displayedPending.map((m, i) => {
+              const globalIndex = safePendingPage * PAGE_SIZE + i;
+              return (
+                <MatchCard
+                  key={m.id}
+                  match={m}
+                  compact
+                  position={globalIndex + 1}
+                  nextUp={globalIndex < nbBoards}
+                />
+              );
+            })}
           </div>
         </div>
       )}
@@ -141,21 +234,87 @@ export function MatchBoard({ tournamentId, initialMatches }: Props) {
   );
 }
 
-function MatchCard({ match, compact = false, index }: { match: Match; compact?: boolean; index?: number }) {
-  const setsPlayed = match.match_sets.filter((s) => s.winner_id).length;
-  const totalSets = match.match_sets.length;
+function MatchCard({
+  match,
+  compact = false,
+  position,
+  nextUp = false,
+}: {
+  match: Match;
+  compact?: boolean;
+  position?: number;
+  nextUp?: boolean;
+}) {
+  const setsPlayed = match.sets.filter((s) => s.winner_id).length;
+  const totalSets = match.sets.length;
+  const p1SetsWon = match.sets.filter((s) => s.winner_id === match.player1.id).length;
+  const p2SetsWon = match.sets.filter((s) => s.winner_id === match.player2.id).length;
+  const p1Won = match.winner_id === match.player1.id;
+  const p2Won = match.winner_id === match.player2.id;
 
+  // ── TERMINÉ ──────────────────────────────────────────────────────────────────
+  if (match.status === "FINISHED") {
+    return (
+      <div className="rounded-xl bg-blue-950/30 border border-blue-700/40 px-5 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-blue-400">✓ Cible {match.board_number}</span>
+          <span className="text-xs font-mono text-blue-300/70">{p1SetsWon} — {p2SetsWon}</span>
+        </div>
+        <div className="font-semibold text-base flex items-center gap-2">
+          <span className={p1Won ? "text-blue-300" : "text-gray-500"}>{match.player1.player_name}</span>
+          <span className="text-gray-600 text-sm">vs</span>
+          <span className={p2Won ? "text-blue-300" : "text-gray-500"}>{match.player2.player_name}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── EN COURS ──────────────────────────────────────────────────────────────────
+  if (match.status === "IN_PROGRESS") {
+    return (
+      <div className="rounded-xl bg-green-950/40 border border-green-600/50 px-5 py-4 relative overflow-hidden">
+        <div className="absolute top-0 left-0 bottom-0 w-1 rounded-l-xl bg-green-500" />
+        <div className="flex items-center justify-between mb-2 pl-2">
+          <span className="text-xs font-medium text-green-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+            Cible {match.board_number}
+          </span>
+          {totalSets > 0 && (
+            <span className="text-xs text-gray-400">Manche {setsPlayed}/{totalSets}</span>
+          )}
+        </div>
+        <div className="font-semibold text-base pl-2">
+          <span className="text-white">{match.player1.player_name}</span>
+          <span className="text-gray-500 mx-2">vs</span>
+          <span className="text-white">{match.player2.player_name}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── À VENIR — prochains sur cible (vert clair) ────────────────────────────────
+  if (nextUp) {
+    return (
+      <div className={`rounded-xl bg-emerald-950/30 border border-emerald-700/40 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-emerald-500 font-medium">{position ? `#${position}` : ""}</span>
+          {totalSets > 0 && <span className="text-xs text-emerald-600/70">Manche 0/{totalSets}</span>}
+        </div>
+        <div className={`font-semibold ${compact ? "text-sm" : "text-base"}`}>
+          <span className="text-emerald-100">{match.player1.player_name}</span>
+          <span className="text-emerald-800 mx-2">vs</span>
+          <span className="text-emerald-100">{match.player2.player_name}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── À VENIR — file d'attente ──────────────────────────────────────────────────
   return (
     <div className={`rounded-xl bg-gray-800 border border-gray-700 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
       <div className="flex items-center justify-between mb-2">
-        {compact ? (
-          <span className="text-xs text-gray-500">#{(index ?? 0) + 1}</span>
-        ) : (
-          <span className="text-xs font-medium text-green-400">🎯 Cible {match.board_number}</span>
-        )}
-        {!compact && totalSets > 0 && (
-          <span className="text-xs text-gray-500">Manche {setsPlayed}/{totalSets}</span>
-        )}
+        <span className="text-xs text-gray-500">{position ? `#${position}` : ""}</span>
+        {totalSets > 0 && <span className="text-xs text-gray-500">Manche 0/{totalSets}</span>}
       </div>
       <div className={`font-semibold ${compact ? "text-sm" : "text-base"}`}>
         <span className="text-white">{match.player1.player_name}</span>

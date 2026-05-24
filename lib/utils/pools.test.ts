@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { distributePlayersIntoPools, computePoolStandings } from "./pools";
+import { distributePlayersIntoPools, distributeWithSeeding, computePoolStandings } from "./pools";
 import type { Registration } from "@/types";
 
 const makePlayer = (id: string): Registration => ({
@@ -54,6 +54,51 @@ describe("distributePlayersIntoPools — cas limites", () => {
     expect(Math.min(4, Math.floor(8 / 2))).toBe(4);
     // 2 équipes, 1 poule → effectivePools = 1
     expect(Math.min(1, Math.floor(2 / 2))).toBe(1);
+  });
+});
+
+describe("distributeWithSeeding", () => {
+  const p = (id: string) => ({ id });
+
+  it("1 tête de série par poule quand #seeds = #poules", () => {
+    const seeded = [p("S1"), p("S2"), p("S3")];
+    const unseeded = [p("A"), p("B"), p("C"), p("D"), p("E"), p("F")];
+    const pools = distributeWithSeeding(seeded, unseeded, 3);
+    expect(pools[0][0].id).toBe("S1");
+    expect(pools[1][0].id).toBe("S2");
+    expect(pools[2][0].id).toBe("S3");
+  });
+
+  it("distribution serpentine : 6 seeds, 3 poules → S1→A, S2→B, S3→C, S4→C, S5→B, S6→A", () => {
+    const seeded = ["S1","S2","S3","S4","S5","S6"].map(p);
+    const pools = distributeWithSeeding(seeded, [], 3);
+    expect(pools[0].map(x => x.id)).toEqual(["S1", "S6"]);
+    expect(pools[1].map(x => x.id)).toEqual(["S2", "S5"]);
+    expect(pools[2].map(x => x.id)).toEqual(["S3", "S4"]);
+  });
+
+  it("sans têtes de série : même comportement que distributePlayersIntoPools", () => {
+    const players = ["A","B","C","D"].map(p);
+    const withSeeding = distributeWithSeeding([], players, 2);
+    const withoutSeeding = distributePlayersIntoPools(players, 2);
+    expect(withSeeding[0].map(x => x.id)).toEqual(withoutSeeding[0].map(x => x.id));
+    expect(withSeeding[1].map(x => x.id)).toEqual(withoutSeeding[1].map(x => x.id));
+  });
+
+  it("tous les joueurs sont présents exactement une fois", () => {
+    const seeded = ["S1","S2"].map(p);
+    const unseeded = ["A","B","C","D","E","F"].map(p);
+    const pools = distributeWithSeeding(seeded, unseeded, 3);
+    const all = pools.flat().map(x => x.id).sort();
+    expect(all).toEqual(["A","B","C","D","E","F","S1","S2"].sort());
+  });
+
+  it("2 seeds, 3 poules → poule 0 et poule 1 ont une tête de série, poule 2 n'en a pas", () => {
+    const seeded = ["S1","S2"].map(p);
+    const pools = distributeWithSeeding(seeded, [], 3);
+    expect(pools[0]).toHaveLength(1);
+    expect(pools[1]).toHaveLength(1);
+    expect(pools[2]).toHaveLength(0);
   });
 });
 

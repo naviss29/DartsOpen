@@ -1,21 +1,28 @@
-import { createClient } from "@/lib/supabase/server";
+import { dbListTournaments } from "@/lib/db/tournament";
+import { getUser } from "@/lib/api/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Mes tournois — DartsOpen" };
 
+type Tournament = {
+  id: string;
+  name: string;
+  date: string;
+  location: string;
+  status: string;
+  max_players: number;
+  players_per_team: number;
+  entry_fee: number;
+  registration_mode: string;
+  nb_pools: number;
+  nb_boards: number;
+  players_paid: number;
+};
+
 export default async function TournamentsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const { data: tournaments } = await supabase
-    .from("tournaments")
-    .select("id, name, date, location, status, max_players, nb_pools, nb_boards, entry_fee")
-    .eq("association_id", user!.id)
-    .or(`date.gte.${today},status.in.(IN_PROGRESS,FINISHED)`)
-    .order("date", { ascending: false });
+  const user = await getUser();
+  const tournaments = user ? await dbListTournaments(user.id).catch(() => []) as Tournament[] : [];
 
   return (
     <div className="space-y-6">
@@ -55,10 +62,11 @@ export default async function TournamentsPage() {
                     📍 {t.location}
                   </p>
                   <div className="flex gap-4 mt-3 text-xs text-gray-500">
-                    <span>👤 {t.max_players} joueurs</span>
+                    <span>👤 {t.players_paid * t.players_per_team}/{t.max_players} joueurs</span>
                     <span>🔵 {t.nb_pools} poules</span>
                     <span>🎯 {t.nb_boards} cibles</span>
-                    <span>💶 {(t.entry_fee / 100).toFixed(2)} €</span>
+                    <span>💶 {(t.entry_fee / 100).toFixed(2)} €/j</span>
+                    <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
                   </div>
                 </div>
                 <StatusBadge status={t.status} />

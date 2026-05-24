@@ -1,7 +1,7 @@
-import { createClient } from "@/lib/supabase/server";
 import { notFound, redirect } from "next/navigation";
 import { generateBracket, advanceToNextRound } from "@/lib/actions/bracket";
 import { BracketView } from "@/components/tournament/BracketView";
+import { dbGetTournament, dbListMatches } from "@/lib/db/tournament";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -9,73 +9,61 @@ interface Props { params: Promise<{ id: string }> }
 
 export const metadata: Metadata = { title: "Phases finales — DartsOpen" };
 
+type Tournament = {
+  id: string;
+  name: string;
+  status: string;
+  nb_pools: number;
+  advancement_per_pool: number;
+  nb_boards: number;
+};
+
+type BracketMatch = {
+  id: string;
+  bracket_round: number;
+  bracket_position: number;
+  status: string;
+  winner_id: string | null;
+  pool_id: string | null;
+  player1: { id: string; player_name: string };
+  player2: { id: string; player_name: string };
+  sets: { id: string; round_order: number; winner_id: string | null }[];
+};
+
 export default async function BracketPage({ params }: Props) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, name, status, nb_pools, advancement_per_pool, nb_boards")
-    .eq("id", id)
-    .eq("association_id", user!.id)
-    .single();
-
+  const tournament = await dbGetTournament(id).catch(() => null) as Tournament | null;
   if (!tournament) notFound();
   if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
     redirect(`/tournaments/${id}/pools`);
   }
 
-  // Matchs de bracket
-  const { data: bracketMatches } = await supabase
-    .from("matches")
-    .select(`
-      id, bracket_round, bracket_position, status, winner_id,
-      player1:registrations!matches_player1_id_fkey(id, player_name),
-      player2:registrations!matches_player2_id_fkey(id, player_name)
-    `)
-    .eq("tournament_id", id)
-    .is("pool_id", null)
-    .order("bracket_round")
-    .order("bracket_position");
+  const allMatches = await dbListMatches(id).catch(() => []) as BracketMatch[];
+  const bracketMatches = allMatches.filter((m) => m.pool_id === null && m.bracket_round !== null);
+  const poolMatches = allMatches.filter((m) => m.pool_id !== null);
 
-  // Vérifier si les poules sont toutes terminées
-  const { count: pendingPoolCount } = await supabase
-    .from("matches")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", id)
-    .not("pool_id", "is", null)
-    .neq("status", "FINISHED");
+  const poolsPending = tournament.nb_pools === 1
+    ? false
+    : poolMatches.length === 0 || poolMatches.some((m) => m.status !== "FINISHED");
 
-  // Format 1 poule = élimination directe : pas de phase de poule
-  const poolsPending = tournament.nb_pools === 1 ? false : (pendingPoolCount ?? 0) > 0;
-
-  // Tournoi à 1 seule poule : génération automatique dès que la poule est terminée
+  // Single-pool format: auto-generate bracket on first load
   if (
     tournament.nb_pools === 1 &&
     tournament.status === "IN_PROGRESS" &&
-    !poolsPending &&
-    (bracketMatches ?? []).length === 0
+    bracketMatches.length === 0
   ) {
     const result = await generateBracket(id);
     if (!result.error) redirect(`/tournaments/${id}/bracket`);
   }
 
-  // Supabase retourne les joins FK comme tableaux — on normalise en objets
-  const normalizedMatches = (bracketMatches ?? []).map((m) => ({
-    ...m,
-    player1: Array.isArray(m.player1) ? m.player1[0] : m.player1,
-    player2: Array.isArray(m.player2) ? m.player2[0] : m.player2,
-  }));
-
-  const hasBracket = normalizedMatches.length > 0;
-
+  const hasBracket = bracketMatches.length > 0;
   const maxRound = hasBracket
-    ? Math.max(...normalizedMatches.map((m) => m.bracket_round))
+    ? Math.max(...bracketMatches.map((m) => m.bracket_round))
     : 0;
 
   const currentRoundMatches = hasBracket
-    ? normalizedMatches.filter((m) => m.bracket_round === maxRound)
+    ? bracketMatches.filter((m) => m.bracket_round === maxRound)
     : [];
 
   const currentRoundFinished =
@@ -84,49 +72,25 @@ export default async function BracketPage({ params }: Props) {
   const tournamentFinished =
     hasBracket && currentRoundMatches.length === 1 && currentRoundFinished;
 
-  // Élimination directe : auto-avancement au tour suivant dès que le tour est terminé
-  if (hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS") {
-    const { count: nextRoundExists } = await supabase
-      .from("matches")
-      .select("id", { count: "exact", head: true })
-      .eq("tournament_id", id)
-      .is("pool_id", null)
-      .eq("bracket_round", maxRound + 1);
-
-    if ((nextRoundExists ?? 0) === 0) {
-      const result = await advanceToNextRound(id, maxRound);
-      if (!result.error) redirect(`/tournaments/${id}/bracket`);
-    }
-  }
-
-  // Finale terminée : marquer le tournoi comme FINISHED
-  if (tournamentFinished && tournament.status === "IN_PROGRESS") {
-    await supabase
-      .from("tournaments")
-      .update({ status: "FINISHED" })
-      .eq("id", id)
-      .eq("association_id", user!.id);
-  }
-
-  const winner = tournamentFinished
-    ? currentRoundMatches[0].winner_id
-    : null;
-
+  const winner = tournamentFinished ? currentRoundMatches[0].winner_id : null;
   const winnerName = winner
     ? (currentRoundMatches[0].player1?.id === winner
         ? currentRoundMatches[0].player1?.player_name
         : currentRoundMatches[0].player2?.player_name)
     : null;
 
-  // Inline server actions (void) pour les formulaires — capturent id par closure
   async function doGenerateBracket() {
     "use server";
     await generateBracket(id);
   }
 
+  async function doAdvanceToNextRound() {
+    "use server";
+    await advanceToNextRound(id, maxRound);
+  }
+
   return (
     <div className="space-y-6">
-      {/* Breadcrumb + onglets */}
       <div className="space-y-3">
         <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
@@ -149,7 +113,6 @@ export default async function BracketPage({ params }: Props) {
         </nav>
       </div>
 
-      {/* En-tête + actions */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Phases finales</h1>
@@ -159,7 +122,6 @@ export default async function BracketPage({ params }: Props) {
           </p>
         </div>
 
-        {/* Bouton générer les phases finales (multi-poules uniquement) */}
         {tournament.status === "IN_PROGRESS" && !hasBracket && (
           <div className="flex flex-col items-end gap-2">
             <form action={doGenerateBracket}>
@@ -174,14 +136,26 @@ export default async function BracketPage({ params }: Props) {
             </form>
             {poolsPending && (
               <p className="text-xs text-orange-600">
-                {pendingPoolCount} match(s) de poule encore en cours
+                Des matchs de poule sont encore en cours.
               </p>
             )}
           </div>
         )}
       </div>
 
-      {/* Vainqueur */}
+      {hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS" && (
+        <div className="flex justify-end">
+          <form action={doAdvanceToNextRound}>
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+            >
+              Tour suivant →
+            </button>
+          </form>
+        </div>
+      )}
+
       {tournamentFinished && winnerName && (
         <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-6 text-center space-y-2">
           <p className="text-4xl">🏆</p>
@@ -190,12 +164,12 @@ export default async function BracketPage({ params }: Props) {
         </div>
       )}
 
-      {/* Bracket */}
       {hasBracket ? (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <BracketView
-            matches={normalizedMatches}
+            matches={bracketMatches}
             maxRound={maxRound}
+            tournamentId={id}
           />
         </div>
       ) : (

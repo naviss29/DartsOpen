@@ -44,7 +44,7 @@ export function EditTournamentForm({ tournament }: Props) {
       </button>
 
       {isOpen && (
-    <form action={action} className="space-y-4">
+    <form key={state?.ts ?? "initial"} action={action} className="space-y-4">
       <input type="hidden" name="tournament_id" value={tournament.id} />
 
       {state?.error && (
@@ -60,7 +60,7 @@ export function EditTournamentForm({ tournament }: Props) {
             name="name"
             type="text"
             required
-            defaultValue={tournament.name}
+            defaultValue={state?.fields?.name ?? tournament.name}
             className={inputCn}
           />
           {state?.errors?.name && <p className="mt-1 text-xs text-red-600">{state.errors.name[0]}</p>}
@@ -72,7 +72,7 @@ export function EditTournamentForm({ tournament }: Props) {
             name="date"
             type="date"
             required
-            defaultValue={tournament.date.split("T")[0]}
+            defaultValue={state?.fields?.date ?? tournament.date.split("T")[0]}
             className={inputCn}
           />
           {state?.errors?.date && <p className="mt-1 text-xs text-red-600">{state.errors.date[0]}</p>}
@@ -84,7 +84,7 @@ export function EditTournamentForm({ tournament }: Props) {
             name="location"
             type="text"
             required
-            defaultValue={tournament.location}
+            defaultValue={state?.fields?.location ?? tournament.location}
             className={inputCn}
           />
           {state?.errors?.location && <p className="mt-1 text-xs text-red-600">{state.errors.location[0]}</p>}
@@ -98,7 +98,7 @@ export function EditTournamentForm({ tournament }: Props) {
             min="2"
             max="512"
             required
-            defaultValue={tournament.max_players}
+            defaultValue={state?.fields?.max_players ?? tournament.max_players}
             className={inputCn}
           />
           {state?.errors?.max_players && <p className="mt-1 text-xs text-red-600">{state.errors.max_players[0]}</p>}
@@ -111,7 +111,7 @@ export function EditTournamentForm({ tournament }: Props) {
             type="number"
             min="0"
             required
-            defaultValue={tournament.entry_fee / 100}
+            defaultValue={state?.fields?.entry_fee ?? tournament.entry_fee / 100}
             className={inputCn}
           />
           {state?.errors?.entry_fee && <p className="mt-1 text-xs text-red-600">{state.errors.entry_fee[0]}</p>}
@@ -125,7 +125,7 @@ export function EditTournamentForm({ tournament }: Props) {
             min="1"
             max="64"
             required
-            defaultValue={tournament.nb_pools}
+            defaultValue={state?.fields?.nb_pools ?? tournament.nb_pools}
             className={inputCn}
           />
           {state?.errors?.nb_pools && <p className="mt-1 text-xs text-red-600">{state.errors.nb_pools[0]}</p>}
@@ -139,7 +139,7 @@ export function EditTournamentForm({ tournament }: Props) {
             min="1"
             max="32"
             required
-            defaultValue={tournament.nb_boards}
+            defaultValue={state?.fields?.nb_boards ?? tournament.nb_boards}
             className={inputCn}
           />
           {state?.errors?.nb_boards && <p className="mt-1 text-xs text-red-600">{state.errors.nb_boards[0]}</p>}
@@ -153,7 +153,7 @@ export function EditTournamentForm({ tournament }: Props) {
             min="1"
             max="8"
             required
-            defaultValue={tournament.advancement_per_pool}
+            defaultValue={state?.fields?.advancement_per_pool ?? tournament.advancement_per_pool}
             className={inputCn}
           />
           {state?.errors?.advancement_per_pool && <p className="mt-1 text-xs text-red-600">{state.errors.advancement_per_pool[0]}</p>}
@@ -167,7 +167,7 @@ export function EditTournamentForm({ tournament }: Props) {
             min="1"
             max="10"
             required
-            defaultValue={tournament.players_per_team}
+            defaultValue={state?.fields?.players_per_team ?? tournament.players_per_team}
             className={inputCn}
           />
           {state?.errors?.players_per_team && <p className="mt-1 text-xs text-red-600">{state.errors.players_per_team[0]}</p>}
@@ -177,14 +177,14 @@ export function EditTournamentForm({ tournament }: Props) {
       <div className="rounded-lg border border-gray-200 p-4 space-y-2">
         <p className="text-sm font-medium text-gray-700">Mode d&apos;inscription</p>
         <label className="flex items-start gap-3 cursor-pointer">
-          <input type="radio" name="registration_mode" value="ONLINE" defaultChecked={tournament.registration_mode === "ONLINE"} className="mt-0.5" />
+          <input type="radio" name="registration_mode" value="ONLINE" defaultChecked={(state?.fields?.registration_mode ?? tournament.registration_mode) === "ONLINE"} className="mt-0.5" />
           <div>
             <p className="text-sm font-medium text-gray-900">En ligne</p>
             <p className="text-xs text-gray-500">Les joueurs s&apos;inscrivent depuis la page publique.</p>
           </div>
         </label>
         <label className="flex items-start gap-3 cursor-pointer">
-          <input type="radio" name="registration_mode" value="ONSITE" defaultChecked={tournament.registration_mode === "ONSITE"} className="mt-0.5" />
+          <input type="radio" name="registration_mode" value="ONSITE" defaultChecked={(state?.fields?.registration_mode ?? tournament.registration_mode) === "ONSITE"} className="mt-0.5" />
           <div>
             <p className="text-sm font-medium text-gray-900">Sur place uniquement</p>
             <p className="text-xs text-gray-500">Pas d&apos;inscription en ligne. Gestion manuelle uniquement.</p>
@@ -195,14 +195,14 @@ export function EditTournamentForm({ tournament }: Props) {
       <div className="rounded-lg border border-gray-200 p-4 space-y-2">
         <p className="text-sm font-medium text-gray-700">Mode de saisie des scores</p>
         <label className="flex items-start gap-3 cursor-pointer">
-          <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked={tournament.scoring_mode !== "TRADITIONAL"} className="mt-0.5" />
+          <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked={(state?.fields?.scoring_mode ?? tournament.scoring_mode) !== "TRADITIONAL"} className="mt-0.5" />
           <div>
             <p className="text-sm font-medium text-gray-900">Électronique</p>
             <p className="text-xs text-gray-500">Chaque équipe désigne le gagnant depuis son téléphone, l&apos;adversaire confirme.</p>
           </div>
         </label>
         <label className="flex items-start gap-3 cursor-pointer">
-          <input type="radio" name="scoring_mode" value="TRADITIONAL" defaultChecked={tournament.scoring_mode === "TRADITIONAL"} className="mt-0.5" />
+          <input type="radio" name="scoring_mode" value="TRADITIONAL" defaultChecked={(state?.fields?.scoring_mode ?? tournament.scoring_mode) === "TRADITIONAL"} className="mt-0.5" />
           <div>
             <p className="text-sm font-medium text-gray-900">Traditionnel</p>
             <p className="text-xs text-gray-500">Un marqueur saisit les scores volée par volée. Compte à rebours automatique.</p>

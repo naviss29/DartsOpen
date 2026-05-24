@@ -42,3 +42,5 @@ next-env.d.ts
 
 # notes personnelles
 todofile.txt
+
+/lib/generated/prisma

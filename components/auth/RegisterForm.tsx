@@ -33,7 +33,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form action={action} className="space-y-5">
+    <form key={state?.ts} action={action} className="space-y-5">
       {state?.error && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {state.error}
@@ -49,6 +49,7 @@ export function RegisterForm() {
           name="name"
           type="text"
           required
+          defaultValue={state?.fields?.name}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
           placeholder="Fléchettes Club d'Orléans"
         />
@@ -66,6 +67,7 @@ export function RegisterForm() {
           name="email"
           type="email"
           required
+          defaultValue={state?.fields?.email}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
           placeholder="contact@monclub.fr"
         />

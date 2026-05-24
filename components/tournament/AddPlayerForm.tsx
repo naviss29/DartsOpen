@@ -13,7 +13,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
   const isTeam = playersPerTeam > 1;
 
   return (
-    <form action={action} className="space-y-4">
+    <form key={state?.ts} action={action} className="space-y-4">
       <input type="hidden" name="tournament_id" value={tournamentId} />
       <input type="hidden" name="players_per_team" value={playersPerTeam} />
 
@@ -31,6 +31,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
               name="player_name"
               type="text"
               required
+              defaultValue={state?.fields?.player_name}
               placeholder="Les Flèches d'Or"
               className={inputCn}
             />
@@ -52,6 +53,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
                 type="text"
                 required
                 minLength={2}
+                defaultValue={state?.fields?.[`player_pseudo_${i}`]}
                 placeholder={isTeam ? `Joueur ${i + 1}` : "Jean Dupont"}
                 className={inputCn}
               />
@@ -65,6 +67,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
             name="player_email"
             type="email"
             required
+            defaultValue={state?.fields?.player_email}
             placeholder="jean@exemple.fr"
             className={inputCn}
           />
@@ -78,6 +81,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
           <input
             name="player_phone"
             type="tel"
+            defaultValue={state?.fields?.player_phone}
             placeholder="0612345678"
             className={inputCn}
           />

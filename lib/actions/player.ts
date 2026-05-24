@@ -1,38 +1,28 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
+import { dbAddRegistration, dbDeleteRegistration, dbGetTournament, dbSetSeeded } from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
+import { sendEmail } from "@/lib/api/sterplatform";
 
 const PlayerSchema = z.object({
   tournament_id: z.string().uuid(),
   player_name: z.string().trim().min(2, "Le nom doit contenir au moins 2 caractères."),
   player_email: z.string().trim().email("Email invalide."),
-  player_phone: z.string().trim()
-    .refine(v => !v || /^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(v),
-      "Numéro de téléphone invalide (ex : 0612345678).")
+  player_phone: z
+    .string()
+    .trim()
+    .refine(v => !v || /^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(v), "Numéro invalide.")
     .optional(),
 });
 
-export type PlayerState = { error?: string; errors?: Record<string, string[]> } | undefined;
-
-async function getAuthenticatedAssociation(tournamentId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: tournament } = await supabase
-    .from("tournaments")
-    .select("id, association_id, status")
-    .eq("id", tournamentId)
-    .eq("association_id", user.id)
-    .single();
-
-  if (!tournament) throw new Error("Tournoi introuvable ou accès refusé.");
-  return { supabase, tournament };
-}
+export type PlayerState = {
+  error?: string;
+  errors?: Record<string, string[]>;
+  fields?: Record<string, string>;
+  ts?: number;
+} | undefined;
 
 export async function addPlayer(prevState: PlayerState, formData: FormData): Promise<PlayerState> {
   const playersPerTeam = Number(formData.get("players_per_team") ?? 1);
@@ -42,8 +32,17 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   ).filter(Boolean);
 
   const teamName = playersPerTeam > 1
-    ? formData.get("player_name") as string
+    ? (formData.get("player_name") as string)
     : playerNames[0] ?? "";
+
+  const rawFields: Record<string, string> = {
+    player_name: teamName,
+    player_email: (formData.get("player_email") as string) ?? "",
+    player_phone: (formData.get("player_phone") as string) ?? "",
+  };
+  for (let i = 0; i < playersPerTeam; i++) {
+    rawFields[`player_pseudo_${i}`] = (formData.get(`player_pseudo_${i}`) as string) ?? "";
+  }
 
   const parsed = PlayerSchema.safeParse({
     tournament_id: formData.get("tournament_id"),
@@ -53,46 +52,60 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   });
 
   if (!parsed.success) {
-    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]> };
+    return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: rawFields, ts: Date.now() };
   }
 
-  const { supabase, tournament } = await getAuthenticatedAssociation(parsed.data.tournament_id);
-
+  const tournament = await dbGetTournament(parsed.data.tournament_id);
+  if (!tournament) return { error: "Tournoi introuvable ou accès refusé." };
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     return { error: "Les inscriptions sont fermées pour ce tournoi." };
   }
 
-  const { error } = await supabase.from("registrations").insert({
-    tournament_id: parsed.data.tournament_id,
-    player_name: parsed.data.player_name,
-    player_email: parsed.data.player_email,
-    player_phone: parsed.data.player_phone ?? null,
-    player_names: playerNames,
-    platform_fee_cents: PLATFORM_FEE_CENTS * playersPerTeam,
-    fee_collected: false,
+  const reg = await dbAddRegistration(parsed.data.tournament_id, {
+    playerName: parsed.data.player_name,
+    playerEmail: parsed.data.player_email,
+    playerPhone: parsed.data.player_phone ?? null,
+    playerNames,
+    platformFeeCents: PLATFORM_FEE_CENTS * playersPerTeam,
     status: "PAID",
-  });
+  }).catch(() => null);
 
-  if (error) {
-    return { error: "Erreur lors de l'inscription." };
-  }
+  if (!reg) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
+
+  const dateFormatted = new Date(tournament.date).toLocaleDateString("fr-FR");
+  await sendEmail("dartsopen_inscription_confirmation", reg.player_email, {
+    nom_equipe: reg.player_name,
+    tournoi: tournament.name,
+    date: dateFormatted,
+    lieu: tournament.location,
+    joueurs: reg.player_names.join(", "),
+  }).catch((err) => console.error("[addPlayer] Erreur envoi email confirmation:", err));
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
+  return {};
 }
 
-export async function removePlayer(registrationId: string, tournamentId: string) {
-  const { supabase, tournament } = await getAuthenticatedAssociation(tournamentId);
+export async function setSeedStatus(
+  registrationId: string,
+  tournamentId: string,
+  seeded: boolean
+): Promise<{ error?: string }> {
+  const ok = await dbSetSeeded(registrationId, seeded).then(() => true).catch(() => null);
+  if (!ok) return { error: "Erreur lors de la mise à jour." };
+  revalidatePath(`/tournaments/${tournamentId}/players`);
+  return {};
+}
 
+export async function removePlayer(registrationId: string, tournamentId: string): Promise<{ error?: string }> {
+  const tournament = await dbGetTournament(tournamentId).catch(() => null);
+  if (!tournament) return { error: "Tournoi introuvable." };
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
-    throw new Error("Impossible de retirer un joueur une fois le tournoi démarré.");
+    return { error: "Impossible de retirer un joueur une fois le tournoi démarré." };
   }
 
-  const { error } = await supabase
-    .from("registrations")
-    .delete()
-    .eq("id", registrationId);
-
-  if (error) throw new Error("Impossible de retirer le joueur.");
+  const ok = await dbDeleteRegistration(registrationId).catch(() => null);
+  if (ok === null) return { error: "Erreur lors de la suppression du joueur." };
 
   revalidatePath(`/tournaments/${tournamentId}/players`);
+  return {};
 }

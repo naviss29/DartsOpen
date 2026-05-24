@@ -1,5 +1,6 @@
 import { stripe } from "@/lib/stripe";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { dbMarkRegistrationPaid, dbGetRegistrationWithTournament } from "@/lib/db/tournament";
+import { sendEmail } from "@/lib/api/sterplatform";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -27,17 +28,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "registration_id manquant." }, { status: 400 });
     }
 
-    const supabase = createAdminClient();
+    await dbMarkRegistrationPaid(registrationId).catch((err) => {
+      console.error("[webhook] Erreur mise à jour registration:", err);
+    });
 
-    const { error } = await supabase
-      .from("registrations")
-      .update({ status: "PAID", fee_collected: true })
-      .eq("id", registrationId)
-      .eq("status", "PENDING");
-
-    if (error) {
-      console.error("[webhook] Erreur mise à jour registration:", error.message);
-      return NextResponse.json({ error: "Erreur base de données." }, { status: 500 });
+    const reg = await dbGetRegistrationWithTournament(registrationId).catch(() => null);
+    if (reg) {
+      await sendEmail('dartsopen_inscription_confirmation', reg.player_email, {
+        nom_equipe: reg.player_name,
+        tournoi: reg.tournament_name,
+        date: reg.tournament_date,
+        lieu: reg.tournament_location,
+        joueurs: reg.player_names.join(', '),
+      }).catch((err) => console.error('[webhook] Erreur envoi email confirmation:', err));
     }
   }
 

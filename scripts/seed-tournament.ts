@@ -1,14 +1,35 @@
 /**
  * Remplit un tournoi avec des équipes fictives pour les tests.
- * Usage : npx tsx scripts/seed-tournament.ts <tournament_id> [nb_equipes]
+ * Usage : npm run seed:players
+ * Charge .env.local automatiquement — aucune modification de fichier requise.
  */
 
-import { createClient } from "@supabase/supabase-js";
+import * as fs from "fs";
+import * as path from "path";
+import * as readline from "readline/promises";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../lib/generated/prisma/client";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Charge .env.local si présent (sans écraser les vars déjà définies)
+const envPath = path.resolve(process.cwd(), ".env.local");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    const match = line.match(/^([^#=\s][^=]*)=(.*)$/);
+    if (match) {
+      const [, key, val] = match;
+      if (!(key in process.env)) process.env[key] = val.replace(/^["']|["']$/g, "");
+    }
+  }
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL introuvable. Vérifie ton .env.local.");
+  process.exit(1);
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 const PRENOMS = [
   "Enzo", "Lucas", "Léo", "Hugo", "Tom", "Mathis", "Axel", "Théo", "Noah", "Ethan",
@@ -34,85 +55,100 @@ function randomEmail(name: string, i: number): string {
 }
 
 async function main() {
-  const tournamentId = process.argv[2];
-  const nbEquipes = parseInt(process.argv[3] ?? "0");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-  if (!tournamentId) {
-    console.error("Usage : npx tsx scripts/seed-tournament.ts <tournament_id> [nb_equipes]");
-    process.exit(1);
-  }
+  // Liste des tournois
+  const tournaments = await prisma.tournament.findMany({
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, maxPlayers: true, playersPerTeam: true, status: true },
+  });
 
-  const { data: tournament, error } = await supabase
-    .from("tournaments")
-    .select("id, name, max_players, players_per_team, registration_mode")
-    .eq("id", tournamentId)
-    .single();
-
-  if (error || !tournament) {
-    console.error("Tournoi introuvable :", error?.message);
-    process.exit(1);
-  }
-
-  const { count: existing } = await supabase
-    .from("registrations")
-    .select("id", { count: "exact", head: true })
-    .eq("tournament_id", tournamentId)
-    .eq("status", "PAID");
-
-  const playersRegistered = (existing ?? 0) * tournament.players_per_team;
-  const slotsLeft = tournament.max_players - playersRegistered;
-  const teamsLeft = Math.floor(slotsLeft / tournament.players_per_team);
-  const teamsToCreate = nbEquipes > 0 ? Math.min(nbEquipes, teamsLeft) : teamsLeft;
-
-  console.log(`\n🎯 Tournoi : ${tournament.name}`);
-  console.log(`👥 ${tournament.players_per_team} joueur(s) par équipe`);
-  console.log(`📊 Places restantes : ${slotsLeft} joueurs (${teamsLeft} équipes)`);
-  console.log(`➕ Équipes à créer : ${teamsToCreate}\n`);
-
-  if (teamsToCreate === 0) {
-    console.log("✅ Tournoi déjà complet.");
+  if (tournaments.length === 0) {
+    console.log("Aucun tournoi trouvé dans la base.");
+    await cleanup(rl);
     return;
   }
 
+  console.log("\nTournois disponibles :\n");
+  tournaments.forEach((t, i) => {
+    console.log(`  ${i + 1}. ${t.name}  [${t.status}]  (${t.playersPerTeam} joueur/équipe, max ${t.maxPlayers})`);
+  });
+
+  const choixStr = await rl.question("\nNuméro du tournoi : ");
+  const choix = parseInt(choixStr.trim()) - 1;
+  if (isNaN(choix) || choix < 0 || choix >= tournaments.length) {
+    console.error("Choix invalide.");
+    await cleanup(rl);
+    return;
+  }
+
+  const tournament = tournaments[choix];
+
+  const existing = await prisma.registration.count({
+    where: { tournamentId: tournament.id, status: "PAID" },
+  });
+  const slotsLeft = tournament.maxPlayers - existing * tournament.playersPerTeam;
+  const teamsLeft = Math.floor(slotsLeft / tournament.playersPerTeam);
+
+  console.log(`\nPlaces restantes : ${slotsLeft} joueurs (${teamsLeft} équipes)`);
+
+  const nbStr = await rl.question(`Nombre d'équipes à créer (max ${teamsLeft}) : `);
+  const nbEquipes = parseInt(nbStr.trim());
+  if (isNaN(nbEquipes) || nbEquipes <= 0) {
+    console.error("Nombre invalide.");
+    await cleanup(rl);
+    return;
+  }
+
+  const teamsToCreate = Math.min(nbEquipes, teamsLeft);
+  if (teamsToCreate === 0) {
+    console.log("Tournoi déjà complet.");
+    await cleanup(rl);
+    return;
+  }
+
+  console.log(`\nCréation de ${teamsToCreate} équipe(s)...\n`);
+
   const usedNames = new Set<string>();
-  const registrations = [];
 
   for (let i = 0; i < teamsToCreate; i++) {
     let teamName = randomPick(NOMS_EQUIPE);
-    while (usedNames.has(teamName)) {
-      teamName = `${randomPick(NOMS_EQUIPE)} ${i + 1}`;
-    }
+    while (usedNames.has(teamName)) teamName = `${randomPick(NOMS_EQUIPE)} ${i + 1}`;
     usedNames.add(teamName);
 
-    const playerNames = Array.from({ length: tournament.players_per_team }, () =>
-      randomPick(PRENOMS)
-    );
+    const playerNames = Array.from({ length: tournament.playersPerTeam }, () => randomPick(PRENOMS));
+    const playerName = tournament.playersPerTeam > 1 ? teamName : playerNames[0];
+    const email = randomEmail(playerNames[0], i + 1);
 
-    const contactName = playerNames[0];
-
-    registrations.push({
-      tournament_id: tournamentId,
-      player_name: tournament.players_per_team > 1 ? teamName : playerNames[0],
-      player_email: randomEmail(contactName, i + 1),
-      player_phone: null,
-      player_names: playerNames,
-      platform_fee_cents: 10 * tournament.players_per_team,
-      fee_collected: false,
-      status: "PAID",
+    await prisma.registration.create({
+      data: {
+        tournamentId: tournament.id,
+        playerName,
+        playerEmail: email,
+        playerPhone: null,
+        playerNames,
+        platformFeeCents: 10 * tournament.playersPerTeam,
+        feeCollected: false,
+        status: "PAID",
+      },
     });
+
+    console.log(`  ${i + 1}. ${playerName} (${playerNames.join(", ")})`);
   }
 
-  const { error: insertError } = await supabase.from("registrations").insert(registrations);
-
-  if (insertError) {
-    console.error("❌ Erreur lors de l'insertion :", insertError.message);
-    process.exit(1);
-  }
-
-  console.log(`✅ ${teamsToCreate} équipe(s) insérée(s) avec succès !\n`);
-  registrations.forEach((r, i) => {
-    console.log(`  ${i + 1}. ${r.player_name} (${r.player_names.join(", ")}) — ${r.player_email}`);
-  });
+  console.log(`\n${teamsToCreate} équipe(s) insérée(s) avec succès !\n`);
+  await cleanup(rl);
 }
 
-main();
+async function cleanup(rl: readline.Interface) {
+  rl.close();
+  await prisma.$disconnect();
+  await pool.end();
+}
+
+main().catch(async (e) => {
+  console.error(e);
+  await prisma.$disconnect();
+  await pool.end();
+  process.exit(1);
+});
