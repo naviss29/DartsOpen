@@ -8,7 +8,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)
 ![Stripe](https://img.shields.io/badge/Stripe-Connect-635BFF)
-![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-120%20passing-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
 
 ---
@@ -44,6 +44,8 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 | Têtes de série — dispatch équilibré dans les poules (serpentin) | ✅ |
 | Arbitrage admin — modification des résultats par manche avec recalcul automatique | ✅ |
 | Dashboard multi-utilisateur — voir tous les opens, s'inscrire en un clic | ✅ |
+| Validation 501 (scores impossibles, bust double out, fermetures impossibles) | ✅ |
+| Historique des volées en temps réel (saisie mobile) | ✅ |
 | Conformité RGPD | 🔲 |
 
 ---
@@ -166,7 +168,7 @@ npm run test:coverage # Couverture de code
 npm run seed:players  # Remplir un tournoi avec des équipes fictives (interactif)
 ```
 
-**103 tests passants** — utils (bracket, pools, scores, seeding) + actions (tournament, score, bracket, pools avec seeds, arbitrage)
+**120 tests passants** — utils (bracket, pools, scores 501, seeding) + actions (tournament, score, bracket, pools avec seeds, arbitrage)
 
 ---
 
@@ -216,6 +218,7 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 - [x] Phase 9 — Recette active : attribution dynamique des cibles, emails ONSITE, classement MG/MP, authentification proxy.ts
 - [x] Phase 10 — Correction finalisation matchs (dbConfirmWinner), vue live enrichie (couleurs EN COURS/TERMINÉ/À VENIR, Derniers résultats par cible, pagination 20 matchs)
 - [x] Phase 11 — Têtes de série (dispatch serpentin), arbitrage admin par manche, dashboard multi-utilisateur, fix Derniers résultats (updated_at), migration OVH VPS-2
+- [x] Phase 12 — Validation 501 (scores impossibles, bust double out, fermetures impossibles), historique des volées
 
 ---
 

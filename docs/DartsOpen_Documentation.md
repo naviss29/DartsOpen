@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 1.1
+> Version : 1.3
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 10 en cours — correction finalisation matchs, vue live enrichie**
+> Statut : **Phase 12 active — validation 501, historique des volées**
 
 ---
 
@@ -22,6 +22,8 @@
 | 0.9 | Mai 2026 | Phase 8 recette staging — migrations auto Docker, file d'attente cibles, corrections UX formulaires, emails transactionnels, script seed interactif |
 | 1.0 | Mai 2026 | Phase 9 recette active — attribution dynamique des cibles, email ONSITE, sender_name SterPlatform, refresh token proxy.ts, classement MG/MP, document Recette.md |
 | 1.1 | Mai 2026 | Phase 10 — correction finalisation matchs (sets stale dans dbConfirmWinner), rétro-compatibilité tryFinalizeMatch, régénération poules IN_PROGRESS, vue live enrichie (couleurs, Derniers résultats, pagination À venir) |
+| 1.2 | Mai 2026 | Phase 11 — têtes de série (dispatch serpentin), arbitrage admin par manche, dashboard multi-utilisateur, fix "Derniers résultats" (updated_at), migration OVH VPS-2, 103 tests |
+| 1.3 | Mai 2026 | Phase 12 — validation 501 (scores impossibles, bust double out, positions de fermeture impossibles), historique des volées, 120 tests |
 
 ---
 
@@ -110,6 +112,7 @@ Registration (inscription joueur)
 ├── player_phone
 ├── stripe_payment_intent_id
 ├── status (PENDING | PAID | CANCELLED)
+├── seeded (boolean — tête de série, dispatch serpentin dans les poules)
 └── qr_code_token (accès mobile joueur)
 
 Pool (poule)
@@ -131,6 +134,7 @@ Match
 ├── status (PENDING | IN_PROGRESS | FINISHED)
 ├── player1_id → Registration
 ├── player2_id → Registration
+├── updated_at (@updatedAt — timestamp de dernière modification, utilisé pour trier les "Derniers résultats")
 └── sets: MatchSet[]
 
 MatchSet (score par manche)
@@ -370,10 +374,78 @@ Mesures :
 | 58 | Mai 2026 | Vue live — code couleur matchs | `MatchBoard` : EN COURS (manches restantes) → fond vert, barre gauche verte, point pulsant. TERMINÉ → fond bleu. À VENIR prochains (`nb_boards` matchs) → vert clair (emerald). File d'attente → gris. Matchs IN_PROGRESS toutes manches jouées → déplacés côté client dans "Derniers résultats" (statut FINISHED forcé). |
 | 59 | Mai 2026 | Vue live — section Derniers résultats | Nouveau bloc affiché au-dessus de "En cours" : 1 carte par cible physique (dernier match FINISHED par `board_number`), vainqueur en bleu clair, perdant grisé, score manches (ex. 2 — 1). Mis à jour à chaque polling/SSE. |
 | 60 | Mai 2026 | Vue live — pagination À venir | Maximum 20 matchs affichés dans la grille À venir. Si plus de 20, rotation automatique toutes les 10s avec indicateur de page (points cliquables). Page courante dérivée au rendu (`safePendingPage`) pour éviter le setState synchrone dans un effet (conformité règle ESLint `react-hooks/set-state-in-effect`). |
+| 61 | Mai 2026 | Fix crash ArbitrateMatchButton — `sets` absent | `dbListPools` n'incluait pas les sets dans la requête matchs → `match.sets` était `undefined` → crash au rendu de la page poules. Fix : ajout de `sets: { include: { round: … } }` dans `dbListPools`, guard défensif `!match.sets?.length` dans `ArbitrateMatchModal`. |
+| 62 | Mai 2026 | Têtes de série — champ `seeded` + dispatch serpentin | Migration `add_seeded_to_registration` : champ `seeded BOOLEAN DEFAULT false` sur `registrations`. `SeedToggleButton` (Client Component) appelle la server action `setSeedStatus`. `distributeWithSeeding` (lib/utils/pools.ts) : seeds dispatchés en serpentin (S1→pool0, S2→pool1, …, SN→poolN, SN+1→poolN en retour), non-seeds en round-robin. `generatePools` utilise `distributeWithSeeding` à la place de `distributePlayersIntoPools`. Colonne "Tête de série" sur la page joueurs (uniquement si DRAFT/OPEN/IN_PROGRESS). |
+| 63 | Mai 2026 | Arbitrage admin par manche | `dbArbitrateMatch` : server action admin qui reçoit un tableau `{ setId, winnerId }`, met à jour chaque set, recalcule le vainqueur global du match et son statut (majoritaire avant dernière manche ou toutes manches jouées). `ArbitrateMatchModal` : dialog de correction avec un sélecteur de gagnant par manche. Accessible depuis la page poules (admin uniquement). |
+| 64 | Mai 2026 | Dashboard multi-utilisateur | `dbListAllTournaments(currentUserId)` : retourne tous les tournois OPEN/IN_PROGRESS/FINISHED + tous les DRAFT de l'utilisateur courant, avec flag `is_mine`. Dashboard page réécrite : stats (mes tournois) + liste globale triée par statut (OPEN → IN_PROGRESS → FINISHED → DRAFT). Routage intelligent : `is_mine` → admin, OPEN autre → inscription, IN_PROGRESS/FINISHED autre → live, DRAFT autre → non cliquable. Badge "Mon tournoi" sur les propres tournois. |
+| 65 | Mai 2026 | Fix "Derniers résultats" — tri par updated_at | `m.id > existing.id` comparait des UUID v4 (aléatoires, aucune sémantique temporelle) → dernier résultat par cible figé au premier match aléatoirement. Fix : champ `updated_at @updatedAt` ajouté sur `Match` (migration `add_updated_at_to_match`). `MatchBoard` et vue live comparent désormais les ISO strings `updated_at` pour identifier le dernier match terminé par cible. |
+| 66 | Mai 2026 | Migration OVH VPS-2 | Serveur Hetzner CX23 abandonné (SSH inaccessible, passphrase et mot de passe root perdus). Nouveau serveur : OVH VPS-2 (6 vCores, 12 Go RAM, 100 Go NVMe, Ubuntu 25.04, datacenter US). Clé SSH ED25519 créée sans passphrase (`C:\Users\yveno\.ssh\dartsopen_ovh`). Coolify à installer sur le nouveau serveur après réception de l'IP OVH. |
+| 67 | Mai 2026 | Fix migration P3009 — DEFAULT NOW() obligatoire | La migration `add_updated_at_to_match` générée par Prisma contenait `ADD COLUMN "updated_at" TIMESTAMP(3) NOT NULL` sans DEFAULT → échoue sur une table non vide (PostgreSQL rejette l'ajout d'une colonne NOT NULL sans valeur par défaut). Fix : SQL modifié manuellement → `ADD COLUMN "updated_at" TIMESTAMP(3) NOT NULL DEFAULT NOW()`. Règle : toute migration ajoutant une colonne NOT NULL sur une table en production doit inclure un DEFAULT. |
+| 68 | Mai 2026 | Validation 501 + historique des volées | `ScoreForm.tsx` — `SetScoreTracker` enrichi : (1) **Scores impossibles** : 9 valeurs physiquement inaccessibles en une volée (163, 166, 169, 172, 173, 175, 176, 178, 179) sont rejetées avec message d'erreur. (2) **Bust double/master out** : si le restant tomberait à 1, la volée est annulée (impossible de finir depuis 1 en double out). (3) **Warning fermeture impossible** : si le restant après saisie est dans {159, 162, 163, 165, 166, 168, 169}, avertissement jaune non bloquant. (4) **Historique** : état `throws[]` (joueur, score, restant, bust) — les 10 dernières volées s'affichent sous les scores, busts en rouge. 17 nouveaux tests dans `lib/utils/score501.test.ts`. |
 
 ---
 
-## 9. Checklist mise en production
+## 9. Commandes utiles — référence rapide
+
+### Développement local
+
+| Commande | Description |
+|---|---|
+| `docker compose up -d` | Démarre PostgreSQL local (port 5433) |
+| `docker compose down` | Arrête PostgreSQL local |
+| `npm run dev` | Lance Next.js en mode développement → http://localhost:3000 |
+| `npm run build` | Build de production (vérifie TypeScript + compilation) |
+| `npm start` | Lance le serveur Next.js en mode production (après build) |
+| `npm run lint` | Vérifie le code avec ESLint |
+
+### Tests
+
+| Commande | Description |
+|---|---|
+| `npm test` | Vitest en mode watch (relance à chaque modification) |
+| `npm run test:run` | Vitest one-shot — CI / vérification avant commit |
+| `npm run test:coverage` | Rapport de couverture de code |
+
+### Prisma / Base de données
+
+| Commande | Description |
+|---|---|
+| `npx prisma migrate dev` | Crée et applique une migration en développement (interactif — demande un nom) |
+| `npx prisma migrate dev --name <nom>` | Crée et applique une migration avec un nom précis |
+| `npx prisma migrate deploy` | Applique les migrations en attente (production / staging, non-interactif) |
+| `npx prisma migrate resolve --rolled-back <nom>` | Marque une migration échouée comme annulée (débloque P3009) |
+| `npx prisma generate` | Régénère le client Prisma (après modification du schéma) |
+| `npx prisma migrate reset --force` | Réinitialise complètement la base locale (⚠️ efface toutes les données) |
+| `npx prisma studio` | Interface web pour parcourir et modifier les données en local |
+
+### Données de test
+
+| Commande | Description |
+|---|---|
+| `npm run seed:players` | Remplit un tournoi avec des équipes fictives (interactif : choisir le tournoi + nombre d'équipes). Génère des noms bretons aléatoires. Nécessite un tournoi existant en base. |
+
+### Staging (via SSH ou terminal Coolify)
+
+| Commande | Description |
+|---|---|
+| `docker exec <container-app> npx prisma migrate deploy` | Applique les migrations en attente sur la base staging |
+| `docker exec <container-postgres> psql -U dartsopen -d dartsopen` | Ouvre un shell PostgreSQL dans le conteneur |
+| `TRUNCATE TABLE tournaments CASCADE;` | Vide toutes les données du tournoi (⚠️ irréversible — en psql) |
+| `docker system prune -af --volumes` | Libère l'espace Docker (images, conteneurs arrêtés, volumes inutilisés — ⚠️ à utiliser avec précaution) |
+
+### Git — workflow habituel
+
+| Commande | Description |
+|---|---|
+| `git checkout develop` | Se placer sur la branche de développement |
+| `git add <fichiers>` | Stager les fichiers modifiés |
+| `git commit -m "feat/fix/chore: description"` | Créer un commit (convention : feat / fix / chore / test / docs) |
+| `git push origin develop` | Pousser sur staging (Coolify se redéploie automatiquement si configuré) |
+| `git merge develop` | Merger develop → main pour la mise en production (depuis la branche main) |
+
+---
+
+## 10. Checklist mise en production
 
 > À valider dans l'ordre avant chaque merge `develop` → `main`.
 
@@ -421,7 +493,13 @@ Ne pas oublier de mettre à jour `APP_FROM_EMAIL` dans Coolify (ex: `noreply@dar
 - [x] Phase 4 — Inscriptions en ligne par équipe + paiement Stripe Connect
 - [x] Phase 5 — Phases finales (bracket single-élimination, byes, avancement automatique, BracketLive temps réel)
 - [x] Phase 6 — Pipeline CI/CD (GitHub Actions lint+tests+build, Coolify production sur Hetzner) + recette validée
-- [ ] Phase 7 — Recette avec associations (tests terrain, domaine personnalisé)
+- [x] Phase 7 — Emails transactionnels via SterPlatform (confirmation inscription gratuite + paiement)
+- [x] Phase 8 — Recette staging : migrations auto Docker, file d'attente cibles, corrections UX formulaires
+- [x] Phase 9 — Recette active : attribution dynamique des cibles, emails ONSITE, classement MG/MP, authentification proxy.ts
+- [x] Phase 10 — Correction finalisation matchs (dbConfirmWinner), vue live enrichie (couleurs, Derniers résultats, pagination)
+- [x] Phase 11 — Têtes de série (dispatch serpentin), arbitrage admin par manche, dashboard multi-utilisateur, migration OVH VPS-2
+- [x] Phase 12 — Validation 501 (scores impossibles, bust double out, fermetures impossibles), historique des volées
+- [ ] Phase 13 — Déploiement OVH VPS-2 + recette terrain
 
 ---
 
