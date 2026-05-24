@@ -1,6 +1,11 @@
 "use client";
 
 import { useTransition, useState } from "react";
+
+const IMPOSSIBLE_VOLEE = new Set([163, 166, 169, 172, 173, 175, 176, 178, 179]);
+const IMPOSSIBLE_CHECKOUT = new Set([159, 162, 163, 165, 166, 168, 169]);
+
+type ThrowEntry = { player: "p1" | "p2"; score: number; remaining: number; bust: boolean };
 import { proposeWinner, confirmWinner, disputeResult, markWinnerDirect } from "@/lib/actions/score";
 
 interface Player { id: string; player_name: string }
@@ -250,30 +255,57 @@ function SetScoreTracker({
   const [isPending, startTransition] = useTransition();
   const isCricket = round?.game_type === "CRICKET";
   const startScore = isCricket ? 0 : parseInt(round?.game_type ?? "501");
+  const isDoubleOrMasterOut = round?.finish_type === "DOUBLE" || round?.finish_type === "MASTER";
 
   const [rp1, setRp1] = useState(startScore);
   const [rp2, setRp2] = useState(startScore);
   const [inputP1, setInputP1] = useState("");
   const [inputP2, setInputP2] = useState("");
   const [bustMsg, setBustMsg] = useState<string | null>(null);
+  const [warnMsg, setWarnMsg] = useState<string | null>(null);
+  const [throws, setThrows] = useState<ThrowEntry[]>([]);
 
   function handleVolee(player: "p1" | "p2") {
     const raw = player === "p1" ? inputP1 : inputP2;
     const voleeScore = parseInt(raw);
     if (isNaN(voleeScore) || voleeScore < 0 || voleeScore > 180) return;
 
+    setWarnMsg(null);
+
+    if (IMPOSSIBLE_VOLEE.has(voleeScore)) {
+      setBustMsg(`${voleeScore} est impossible à réaliser en une volée.`);
+      if (player === "p1") setInputP1(""); else setInputP2("");
+      setTimeout(() => setBustMsg(null), 3000);
+      return;
+    }
+
     const remaining = player === "p1" ? rp1 : rp2;
     const newRemaining = remaining - voleeScore;
 
     if (newRemaining < 0) {
-      setBustMsg(`Bust ! Score de ${player === "p1" ? p1.player_name : p2.player_name} inchangé.`);
+      setBustMsg(`Bust ! ${player === "p1" ? p1.player_name : p2.player_name} reste à ${remaining}.`);
       if (player === "p1") setInputP1(""); else setInputP2("");
+      setThrows(prev => [...prev, { player, score: voleeScore, remaining, bust: true }]);
+      setTimeout(() => setBustMsg(null), 2500);
+      return;
+    }
+
+    if (isDoubleOrMasterOut && newRemaining === 1) {
+      setBustMsg(`Bust ! Impossible de laisser 1 en ${round?.finish_type === "MASTER" ? "master" : "double"} out.`);
+      if (player === "p1") setInputP1(""); else setInputP2("");
+      setThrows(prev => [...prev, { player, score: voleeScore, remaining, bust: true }]);
       setTimeout(() => setBustMsg(null), 2500);
       return;
     }
 
     if (player === "p1") { setRp1(newRemaining); setInputP1(""); }
     else { setRp2(newRemaining); setInputP2(""); }
+
+    setThrows(prev => [...prev, { player, score: voleeScore, remaining: newRemaining, bust: false }]);
+
+    if (newRemaining > 0 && IMPOSSIBLE_CHECKOUT.has(newRemaining)) {
+      setWarnMsg(`${newRemaining} : fermeture impossible en une volée.`);
+    }
 
     if (newRemaining === 0) {
       const winnerId = player === "p1" ? p1.id : p2.id;
@@ -284,6 +316,8 @@ function SetScoreTracker({
   function forceWinner(winnerId: string) {
     startTransition(() => void markWinnerDirect(set.id, winnerId, tournamentId));
   }
+
+  const recentThrows = throws.slice(-10).reverse();
 
   return (
     <div className="rounded-xl bg-gray-800 border border-gray-700 p-5 space-y-5">
@@ -301,6 +335,12 @@ function SetScoreTracker({
       {bustMsg && (
         <div className="rounded-lg bg-red-900/30 border border-red-700 px-4 py-2 text-sm text-red-400 text-center">
           {bustMsg}
+        </div>
+      )}
+
+      {warnMsg && !bustMsg && (
+        <div className="rounded-lg bg-yellow-900/30 border border-yellow-700 px-4 py-2 text-sm text-yellow-400 text-center">
+          ⚠ {warnMsg}
         </div>
       )}
 
@@ -379,6 +419,33 @@ function SetScoreTracker({
               </div>
             </div>
           </div>
+
+          {/* Historique des volées */}
+          {recentThrows.length > 0 && (
+            <div className="border-t border-gray-700 pt-3">
+              <p className="text-xs text-gray-500 mb-2">Volées</p>
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {recentThrows.map((t, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg ${
+                      t.bust ? "bg-red-900/20 text-red-400" : "bg-gray-900/60 text-gray-300"
+                    }`}
+                  >
+                    <span className="font-medium truncate max-w-[100px]">
+                      {t.player === "p1" ? p1.player_name : p2.player_name}
+                    </span>
+                    <span className={`font-mono font-bold ${t.bust ? "" : "text-white"}`}>
+                      {t.bust ? `${t.score} — Bust` : `+${t.score}`}
+                    </span>
+                    <span className="font-mono text-gray-500 w-10 text-right">
+                      {t.bust ? "" : t.remaining}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Override manuel */}
           <div className="border-t border-gray-700 pt-4">
