@@ -22,9 +22,11 @@ async function getAdvancingPlayerIds(
     return registrations.map((r) => r.id);
   }
 
-  const allMatches = await dbListMatches(tournamentId);
+  const [allMatches, pools] = await Promise.all([
+    dbListMatches(tournamentId),
+    dbListPools(tournamentId),
+  ]);
   const poolMatches = allMatches.filter((m) => m.pool_id !== null);
-  const pools = await dbListPools(tournamentId);
   if (!pools.length) return [];
 
   const advancing: string[] = [];
@@ -129,10 +131,11 @@ export async function doAdvanceToNextRound(
   tournamentId: string,
   currentBracketRound: number
 ): Promise<{ error?: string; finished?: boolean }> {
-  const tournament = await dbGetTournament(tournamentId);
+  const [tournament, allMatches] = await Promise.all([
+    dbGetTournament(tournamentId),
+    dbListMatches(tournamentId),
+  ]);
   if (!tournament) return { error: "Tournoi introuvable." };
-
-  const allMatches = await dbListMatches(tournamentId);
   const bracketMatches = allMatches.filter(
     (m) => m.pool_id === null && m.bracket_round === currentBracketRound
   );

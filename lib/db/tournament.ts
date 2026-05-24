@@ -250,6 +250,7 @@ export async function dbListAllTournaments(currentUserId: string) {
       _count: { select: { registrations: { where: { status: "PAID" } } } },
     },
     orderBy: [{ status: "asc" }, { date: "asc" }],
+    take: 100,
   });
   return rows.map((t) => ({
     id: t.id,

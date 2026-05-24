@@ -65,6 +65,7 @@ model Tournament {
   pools         Pool[]
   matches       Match[]
 
+  @@index([userId])
   @@map("tournaments")
 }
 
@@ -79,6 +80,7 @@ model Round {
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   matchSets  MatchSet[]
 
+  @@index([tournamentId])
   @@map("rounds")
 }
 
@@ -105,6 +107,8 @@ model Registration {
   matchesWon  Match[]      @relation("MatchWinner")
   setsWon     MatchSet[]
 
+  @@index([tournamentId])
+  @@index([tournamentId, status])
   @@map("registrations")
 }
 
@@ -117,6 +121,7 @@ model Pool {
   players    PoolPlayer[]
   matches    Match[]
 
+  @@index([tournamentId])
   @@map("pools")
 }
 
@@ -129,6 +134,7 @@ model PoolPlayer {
   registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@id([poolId, registrationId])
+  @@index([registrationId])
   @@map("pool_players")
 }
 
@@ -152,6 +158,10 @@ model Match {
   winner     Registration? @relation("MatchWinner", fields: [winnerId], references: [id])
   sets       MatchSet[]
 
+  @@index([tournamentId])
+  @@index([tournamentId, bracketRound])
+  @@index([tournamentId, poolId, status])
+  @@index([poolId])
   @@map("matches")
 }
 
@@ -169,5 +179,6 @@ model MatchSet {
   round  Round        @relation(fields: [roundId], references: [id])
   winner Registration? @relation(fields: [winnerId], references: [id])
 
+  @@index([matchId])
   @@map("match_sets")
 }

@@ -17,7 +17,11 @@ export async function generatePools(
   const user = await getUser();
   if (!user) return { error: "Non authentifié." };
 
-  const tournament = await dbGetTournament(tournamentId);
+  const [tournament, players] = await Promise.all([
+    dbGetTournament(tournamentId),
+    dbListRegistrations(tournamentId, "PAID"),
+  ]);
+
   if (!tournament || tournament.association_id !== user.id) {
     return { error: "Accès refusé." };
   }
@@ -25,8 +29,6 @@ export async function generatePools(
   if (tournament.status !== "OPEN" && tournament.status !== "IN_PROGRESS") {
     return { error: "Les poules ne peuvent être générées que lorsque le tournoi est ouvert ou en cours." };
   }
-
-  const players = await dbListRegistrations(tournamentId, "PAID");
 
   if (!players || players.length < 2) {
     return { error: "Il faut au moins 2 équipes inscrites pour générer les poules." };
