@@ -4,6 +4,16 @@
 
 ---
 
+## Modèle économique
+
+- **Frais plateforme (0,10 €/joueur) — actuellement sur bonne volonté** : pas de blocage au lancement. Si de grandes associations utilisent la plateforme sans payer, envisager un seuil : gratuit jusqu'à N joueurs (ex. 32), paiement obligatoire au-delà. À implémenter dans `createTournament` ou au démarrage du tournoi (`IN_PROGRESS`).
+- **Traçabilité PayPal** : les relevés mensuels PayPal (compte SEProduct) servent de justificatif comptable pour l'association. Webhooks PayPal à implémenter plus tard si le volume rend la vérification manuelle chronophage.
+
+## Dépendances SterPlatform (à implémenter après SterPlatform)
+
+- **Google OAuth** : login "Continuer avec Google" pour les organisateurs — disponible une fois SterPlatform Phase 7a terminée. Endpoint côté DartsOpen : bouton sur la page login → redirect `/api/auth/google` SterPlatform → callback → JWT.
+- **SSO** : vision long terme — un compte unique pour DartsOpen + FestManager + autres apps. Architecture déjà compatible.
+
 ## Idées fonctionnelles
 
 - **Statistiques joueur** : historique des tournois, moyenne de points par visite, meilleure serie
