@@ -24,7 +24,7 @@
 | 1.1 | Mai 2026 | Phase 10 — correction finalisation matchs (sets stale dans dbConfirmWinner), rétro-compatibilité tryFinalizeMatch, régénération poules IN_PROGRESS, vue live enrichie (couleurs, Derniers résultats, pagination À venir) |
 | 1.2 | Mai 2026 | Phase 11 — têtes de série (dispatch serpentin), arbitrage admin par manche, dashboard multi-utilisateur, fix "Derniers résultats" (updated_at), migration OVH VPS-2, 103 tests |
 | 1.3 | Mai 2026 | Phase 12 — validation 501 (scores impossibles, bust double out, positions de fermeture impossibles), historique des volées, 120 tests |
-| 1.4 | Mai 2026 | Audit sécurité + performance — 12 index Prisma (Tournament, Round, Registration, Pool, PoolPlayer, Match, MatchSet), waterfalls → Promise.all (bracket + pool), take:100 dbListAllTournaments, vérification ownership sur toutes les Server Actions |
+| 1.4 | Mai 2026 | Audit sécurité + performance — 12 index Prisma (Tournament, Round, Registration, Pool, PoolPlayer, Match, MatchSet), waterfalls → Promise.all (bracket + pool), take:100 dbListAllTournaments, vérification ownership sur toutes les Server Actions, next@16.2.6 (GHSA-36qx-fr4f-26g5 bypass middleware) |
 
 ---
 
