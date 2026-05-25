@@ -151,14 +151,24 @@ export default async function TournamentDetailPage({ params }: Props) {
         )}
 
         {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
-          <Link
-            href={`/t/${id}/live`}
-            target="_blank"
-            className="flex items-center gap-2 rounded-lg border border-green-500 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
-          >
-            🎯 Vue Live
-            <span className="text-xs opacity-70">↗</span>
-          </Link>
+          <>
+            <Link
+              href={`/t/${id}/live`}
+              target="_blank"
+              className="flex items-center gap-2 rounded-lg border border-green-500 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+            >
+              🎯 Vue Live
+              <span className="text-xs opacity-70">↗</span>
+            </Link>
+            <Link
+              href={`/t/${id}/tv`}
+              target="_blank"
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              📺 Mode TV
+              <span className="text-xs opacity-70">↗</span>
+            </Link>
+          </>
         )}
       </nav>
 

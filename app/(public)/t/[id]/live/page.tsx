@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { MatchBoard } from "@/components/tournament/MatchBoard";
 import { ScoreBoard } from "@/components/tournament/ScoreBoard";
 import { BracketLive } from "@/components/tournament/BracketLive";
@@ -127,11 +128,19 @@ export default async function LivePage({ params }: Props) {
           <h1 className="text-2xl font-bold">🎯 {tournament.name}</h1>
           <p className="text-gray-400 text-sm mt-1">Tableau de bord en direct</p>
         </div>
-        {tournament.status === "IN_PROGRESS" && (
-          <span className="rounded-full bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1 text-xs font-medium animate-pulse">
-            ● EN DIRECT
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {tournament.status === "IN_PROGRESS" && (
+            <span className="rounded-full bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1 text-xs font-medium animate-pulse">
+              ● EN DIRECT
+            </span>
+          )}
+          <Link
+            href={`/t/${id}/tv`}
+            className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
+          >
+            📺 Mode TV
+          </Link>
+        </div>
       </div>
 
       <MatchBoard
