@@ -28,11 +28,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "registration_id manquant." }, { status: 400 });
     }
 
-    await dbMarkRegistrationPaid(registrationId).catch((err) => {
-      console.error("[webhook] Erreur mise à jour registration:", err);
-    });
+    // Laisser remonter l'erreur DB : Stripe retentera le webhook tant que la réponse n'est pas 2xx.
+    try {
+      await dbMarkRegistrationPaid(registrationId);
+    } catch (err) {
+      console.error("[webhook] Erreur mise à jour registration (Stripe retentera):", registrationId, err);
+      return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    }
 
-    const reg = await dbGetRegistrationWithTournament(registrationId).catch(() => null);
+    const reg = await dbGetRegistrationWithTournament(registrationId).catch((err) => {
+      console.warn("[webhook] Impossible de récupérer la registration pour l'email:", registrationId, err);
+      return null;
+    });
     if (reg) {
       await sendEmail('dartsopen_inscription_confirmation', reg.player_email, {
         nom_equipe: reg.player_name,
@@ -40,7 +47,7 @@ export async function POST(req: Request) {
         date: reg.tournament_date,
         lieu: reg.tournament_location,
         joueurs: reg.player_names.join(', '),
-      }).catch((err) => console.error('[webhook] Erreur envoi email confirmation:', err));
+      }).catch((err) => console.error('[webhook] Erreur envoi email confirmation:', reg.player_email, err));
     }
   }
 
