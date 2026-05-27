@@ -63,6 +63,21 @@ scripts/    → seed de données de test
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` — Stripe
 - `STRIPE_WEBHOOK_SECRET` — webhook Stripe
 
+## Gestion des erreurs
+
+### Webhook Stripe
+- Les erreurs DB doivent **remonter** (ne pas swallower) : retourner `status: 500` pour que Stripe retente
+- Pattern : `try { await dbMarkPaid(...) } catch (err) { console.error(...); return NextResponse.json(..., { status: 500 }) }`
+
+### Routes publiques
+- `.catch(() => null)` est interdit sans log — utiliser `.catch((err) => { console.warn(..., err); return null })`
+- Cela garantit que les erreurs DB inattendues (connexion perdue, timeout) sont tracées
+
+### Logs
+- `console.error` pour les erreurs inattendues (DB, Stripe)
+- `console.warn` pour les best-effort (email, opérations non-bloquantes)
+- Toujours passer l'objet `err` en dernier argument pour avoir la stack trace
+
 ## Conventions
 - Port DB local : 5433 (évite le conflit avec SterPlatform sur 5432)
 - Branche de travail : `develop` → merge sur `main` après validation
