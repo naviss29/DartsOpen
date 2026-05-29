@@ -26,6 +26,13 @@ const TournamentSchema = z.object({
   players_per_team: z.coerce.number().int().min(1).max(10),
   registration_mode: z.enum(["ONLINE", "ONSITE"]).default("ONLINE"),
   scoring_mode: z.enum(["ELECTRONIC", "TRADITIONAL"]).default("ELECTRONIC"),
+  quick_mode: z.preprocess((val) => val === "true", z.boolean()).default(false),
+}).transform((data) => {
+  // Mode rapide : poule unique et 1 joueur par équipe obligatoires
+  if (data.quick_mode) {
+    return { ...data, nb_pools: 1, players_per_team: 1 };
+  }
+  return data;
 });
 
 const RoundSchema = z.object({
@@ -54,6 +61,7 @@ function extractTournamentRaw(formData: FormData): Record<string, string> {
     players_per_team: (formData.get("players_per_team") as string) ?? "",
     registration_mode: (formData.get("registration_mode") as string) ?? "ONLINE",
     scoring_mode: (formData.get("scoring_mode") as string) ?? "ELECTRONIC",
+    quick_mode: (formData.get("quick_mode") as string) ?? "false",
   };
 }
 

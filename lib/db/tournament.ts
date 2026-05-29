@@ -1,5 +1,5 @@
 import { prisma } from "./client";
-import type { MatchStatus, RegistrationStatus, TournamentStatus } from "../generated/prisma/client";
+import type { BracketType, MatchStatus, RegistrationStatus, TournamentStatus } from "../generated/prisma/client";
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +18,7 @@ function mapTournament(t: {
   playersPerTeam: number;
   registrationMode: string;
   scoringMode: string;
+  quickMode: boolean;
   createdAt: Date;
   rounds?: ReturnType<typeof mapRound>[];
 }) {
@@ -36,6 +37,7 @@ function mapTournament(t: {
     players_per_team: t.playersPerTeam,
     registration_mode: t.registrationMode,
     scoring_mode: t.scoringMode,
+    quick_mode: t.quickMode,
     created_at: t.createdAt.toISOString(),
     rounds: t.rounds ?? [],
   };
@@ -73,6 +75,7 @@ function mapRegistration(r: {
   platformFeeCents: number;
   feeCollected: boolean;
   seeded: boolean;
+  lives: number;
   createdAt: Date;
 }) {
   return {
@@ -90,6 +93,7 @@ function mapRegistration(r: {
     platform_fee_cents: r.platformFeeCents,
     fee_collected: r.feeCollected,
     seeded: r.seeded,
+    lives: r.lives,
     created_at: r.createdAt.toISOString(),
   };
 }
@@ -114,6 +118,7 @@ function mapPool(p: {
       platformFeeCents: number;
       feeCollected: boolean;
       seeded: boolean;
+      lives: number;
       createdAt: Date;
       tournamentId: string;
     };
@@ -185,6 +190,7 @@ function mapMatch(m: {
   bracketRound: number | null;
   bracketPosition: number | null;
   boardNumber: number;
+  bracketType: BracketType;
   status: MatchStatus;
   player1Id: string;
   player2Id: string | null;
@@ -201,6 +207,7 @@ function mapMatch(m: {
     bracket_round: m.bracketRound,
     bracket_position: m.bracketPosition,
     board_number: m.boardNumber,
+    bracket_type: m.bracketType,
     status: m.status,
     player1_id: m.player1Id,
     player2_id: m.player2Id,
@@ -294,6 +301,7 @@ export async function dbCreateTournament(userId: string, data: {
   players_per_team: number;
   registration_mode: string;
   scoring_mode: string;
+  quick_mode?: boolean;
 }) {
   const t = await prisma.tournament.create({
     data: {
@@ -309,6 +317,7 @@ export async function dbCreateTournament(userId: string, data: {
       playersPerTeam: data.players_per_team,
       registrationMode: data.registration_mode as "ONLINE" | "ONSITE",
       scoringMode: data.scoring_mode as "ELECTRONIC" | "TRADITIONAL",
+      quickMode: data.quick_mode ?? false,
     },
     include: { rounds: { select: roundSelect } },
   });
@@ -327,6 +336,7 @@ export async function dbUpdateTournament(id: string, data: {
   players_per_team?: number;
   registration_mode?: string;
   scoring_mode?: string;
+  quick_mode?: boolean;
 }) {
   const t = await prisma.tournament.update({
     where: { id },
@@ -342,6 +352,7 @@ export async function dbUpdateTournament(id: string, data: {
       ...(data.players_per_team !== undefined && { playersPerTeam: data.players_per_team }),
       ...(data.registration_mode !== undefined && { registrationMode: data.registration_mode as "ONLINE" | "ONSITE" }),
       ...(data.scoring_mode !== undefined && { scoringMode: data.scoring_mode as "ELECTRONIC" | "TRADITIONAL" }),
+      ...(data.quick_mode !== undefined && { quickMode: data.quick_mode }),
     },
     include: { rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } } },
   });
@@ -576,6 +587,7 @@ export async function dbBulkCreateMatches(
     status: string;
     winnerId?: string | null;
     roundIds: string[];
+    bracketType?: BracketType;
   }[]
 ) {
   await prisma.$transaction(async (tx) => {
@@ -586,6 +598,7 @@ export async function dbBulkCreateMatches(
           bracketRound: m.bracketRound,
           bracketPosition: m.bracketPosition,
           boardNumber: m.boardNumber,
+          bracketType: m.bracketType ?? "SINGLE",
           status: m.status as MatchStatus,
           player1Id: m.player1Id,
           player2Id: m.player2Id ?? null,
@@ -695,14 +708,14 @@ export async function dbProposeWinner(
 export async function dbConfirmWinner(
   matchSetId: string,
   playerSide: 1 | 2
-): Promise<{ error?: string; disputed?: boolean; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null } }> {
+): Promise<{ error?: string; disputed?: boolean; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
   const set = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
     include: {
       match: {
         include: {
           sets: true,
-          tournament: { select: { id: true } },
+          tournament: { select: { id: true, quickMode: true } },
         },
       },
     },
@@ -753,14 +766,14 @@ export async function dbDisputeResult(matchSetId: string): Promise<{ error?: str
 export async function dbMarkWinnerDirect(
   matchSetId: string,
   winnerId: string
-): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null } }> {
+): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
   const set = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
     include: {
       match: {
         include: {
           sets: true,
-          tournament: { select: { id: true } },
+          tournament: { select: { id: true, quickMode: true } },
         },
       },
     },
@@ -788,8 +801,8 @@ async function tryFinalizeMatch(match: {
   boardNumber: number;
   status: MatchStatus;
   sets: { winnerId: string | null; validatedP1: boolean; validatedP2: boolean }[];
-  tournament: { id: string };
-}): Promise<{ matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null } }> {
+  tournament: { id: string; quickMode: boolean };
+}): Promise<{ matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
   const confirmedSets = match.sets.filter((s) => s.validatedP1 && s.validatedP2 && s.winnerId !== null);
   const totalSets = match.sets.length;
 
@@ -835,7 +848,7 @@ async function tryFinalizeMatch(match: {
 
   return {
     matchFinished: true,
-    match: { id: match.id, tournamentId: match.tournament.id, bracketRound: match.bracketRound },
+    match: { id: match.id, tournamentId: match.tournament.id, bracketRound: match.bracketRound, quickMode: match.tournament.quickMode },
   };
 }
 
@@ -938,6 +951,181 @@ export async function dbAdvanceBracket(
   });
 
   return {};
+}
+
+// ── Mode rapide — double élimination ─────────────────────────────────────────
+
+/**
+ * Retourne toutes les inscriptions PAID d'un tournoi avec leurs vies restantes.
+ * Utilisé pour déterminer l'état du bracket en mode rapide.
+ */
+export async function dbGetQuickTournamentState(tournamentId: string) {
+  const rows = await prisma.registration.findMany({
+    where: { tournamentId, status: "PAID" },
+    select: {
+      id: true,
+      playerName: true,
+      lives: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => ({ id: r.id, player_name: r.playerName, lives: r.lives }));
+}
+
+/**
+ * Décrémente les vies d'un joueur de 1 et retourne le nouveau compte.
+ * Protégé par un floor à 0 pour éviter les valeurs négatives.
+ */
+export async function dbDecrementLives(registrationId: string): Promise<number> {
+  const updated = await prisma.registration.update({
+    where: { id: registrationId },
+    data: { lives: { decrement: 1 } },
+    select: { lives: true },
+  });
+  // Sécurité : ne pas laisser passer en négatif (ne devrait pas arriver en prod)
+  if (updated.lives < 0) {
+    await prisma.registration.update({ where: { id: registrationId }, data: { lives: 0 } });
+    return 0;
+  }
+  return updated.lives;
+}
+
+/**
+ * Remet les vies de tous les joueurs PAID d'un tournoi à 2.
+ * Appelé lors de la (re)génération du bracket rapide.
+ */
+export async function dbResetAllLives(tournamentId: string): Promise<void> {
+  await prisma.registration.updateMany({
+    where: { tournamentId, status: "PAID" },
+    data: { lives: 2 },
+  });
+}
+
+/**
+ * Retourne les matchs de bracket encore actifs (non FINISHED) en mode rapide.
+ * Exclut les matchs de poule (poolId non null).
+ */
+export async function dbGetActiveQuickBracketMatches(tournamentId: string) {
+  const rows = await prisma.match.findMany({
+    where: {
+      tournamentId,
+      poolId: null,
+      status: { not: "FINISHED" },
+      bracketType: { in: ["WINNERS", "LOSERS", "GRAND_FINAL"] },
+    },
+    select: {
+      id: true,
+      player1Id: true,
+      player2Id: true,
+      bracketType: true,
+      bracketRound: true,
+    },
+  });
+  return rows.map((m) => ({
+    id: m.id,
+    player1_id: m.player1Id,
+    player2_id: m.player2Id,
+    bracket_type: m.bracketType,
+    bracket_round: m.bracketRound,
+  }));
+}
+
+/**
+ * Supprime tous les matchs de bracket quickMode (WINNERS, LOSERS, GRAND_FINAL)
+ * et les rounds associés. Appelé lors de la régénération du bracket rapide.
+ */
+export async function dbDeleteQuickBracketMatchesAndRounds(tournamentId: string): Promise<void> {
+  await prisma.$transaction([
+    prisma.match.deleteMany({
+      where: {
+        tournamentId,
+        poolId: null,
+        bracketType: { in: ["WINNERS", "LOSERS", "GRAND_FINAL"] },
+      },
+    }),
+    prisma.round.deleteMany({ where: { tournamentId } }),
+  ]);
+}
+
+/**
+ * Crée les 3 rounds (manche unique par match) pour le mode rapide.
+ * Ordre : 1=501, 2=Cricket, 3=701.
+ * Retourne les IDs pour être passés lors de la création des matchs.
+ */
+export async function dbCreateQuickTournamentRounds(
+  tournamentId: string
+): Promise<{ id501: string; idCricket: string; id701: string }> {
+  const [r501, rCricket, r701] = await prisma.$transaction([
+    prisma.round.create({
+      data: { tournamentId, roundOrder: 1, gameType: "501",     entryType: "SINGLE", finishType: "DOUBLE" },
+      select: { id: true },
+    }),
+    prisma.round.create({
+      data: { tournamentId, roundOrder: 2, gameType: "CRICKET", entryType: "SINGLE", finishType: "SINGLE" },
+      select: { id: true },
+    }),
+    prisma.round.create({
+      data: { tournamentId, roundOrder: 3, gameType: "701",     entryType: "SINGLE", finishType: "DOUBLE" },
+      select: { id: true },
+    }),
+  ]);
+  return { id501: r501.id, idCricket: rCricket.id, id701: r701.id };
+}
+
+/**
+ * Récupère les IDs des 3 rounds quickMode d'un tournoi (501, Cricket, 701).
+ * Retourne null si les rounds n'ont pas encore été créés.
+ */
+export async function dbGetQuickTournamentRoundIds(
+  tournamentId: string
+): Promise<{ id501: string; idCricket: string; id701: string } | null> {
+  const rounds = await prisma.round.findMany({
+    where: { tournamentId },
+    select: { id: true, gameType: true },
+    orderBy: { roundOrder: "asc" },
+  });
+  const r501     = rounds.find((r) => r.gameType === "501");
+  const rCricket = rounds.find((r) => r.gameType === "CRICKET");
+  const r701     = rounds.find((r) => r.gameType === "701");
+  if (!r501 || !rCricket || !r701) return null;
+  return { id501: r501.id, idCricket: rCricket.id, id701: r701.id };
+}
+
+/**
+ * Promeut les matchs PENDING (board=0) vers les cibles libres après création dynamique.
+ * Appelé après chaque génération de matchs en mode rapide pour éviter les cibles vides.
+ */
+export async function dbPromoteUnassignedMatches(
+  tournamentId: string,
+  nbBoards: number
+): Promise<void> {
+  const activeMatches = await prisma.match.findMany({
+    where: { tournamentId, status: "IN_PROGRESS", boardNumber: { gt: 0 } },
+    select: { boardNumber: true },
+  });
+  const usedBoards = new Set(activeMatches.map((m) => m.boardNumber));
+
+  const freeBoards: number[] = [];
+  for (let i = 1; i <= nbBoards; i++) {
+    if (!usedBoards.has(i)) freeBoards.push(i);
+  }
+  if (freeBoards.length === 0) return;
+
+  const pending = await prisma.match.findMany({
+    where: { tournamentId, status: "PENDING", boardNumber: 0 },
+    select: { id: true },
+    orderBy: { id: "asc" },
+    take: freeBoards.length,
+  });
+
+  await prisma.$transaction(
+    pending.map((m, i) =>
+      prisma.match.update({
+        where: { id: m.id },
+        data: { status: "IN_PROGRESS", boardNumber: freeBoards[i] },
+      })
+    )
+  );
 }
 
 // ── Organization (Stripe Connect) ─────────────────────────────────────────────

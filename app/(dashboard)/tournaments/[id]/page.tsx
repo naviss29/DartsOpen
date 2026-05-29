@@ -25,6 +25,7 @@ type Tournament = {
   advancement_per_pool: number;
   registration_mode: string;
   scoring_mode: string;
+  quick_mode: boolean;
   rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[];
 };
 
@@ -71,7 +72,14 @@ export default async function TournamentDetailPage({ params }: Props) {
     <div className="space-y-8">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{tournament.name}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{tournament.name}</h1>
+            {tournament.quick_mode && (
+              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                ⚡ Mode rapide
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             📅 {new Date(tournament.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
             📍 {tournament.location}
@@ -178,6 +186,16 @@ export default async function TournamentDetailPage({ params }: Props) {
         </section>
       )}
 
+      {tournament.quick_mode && tournament.status !== "DRAFT" && (
+        <div className="rounded-xl bg-green-50 border border-green-200 p-4">
+          <p className="text-sm font-medium text-green-800">⚡ Mode tournoi rapide</p>
+          <p className="text-xs text-green-700 mt-1">
+            Double élimination — 2 vies par joueur. Les manches (501 → Cricket → 701) sont générées automatiquement selon la phase.
+          </p>
+        </div>
+      )}
+
+      {!tournament.quick_mode && (
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="font-semibold text-gray-900">
           Manches ({rounds.length})
@@ -220,6 +238,7 @@ export default async function TournamentDetailPage({ params }: Props) {
           <p className="text-sm text-gray-500">Aucune manche configurée.</p>
         )}
       </section>
+      )}
     </div>
   );
 }
