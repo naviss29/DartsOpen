@@ -36,6 +36,13 @@ enum ScoringMode {
   TRADITIONAL
 }
 
+enum BracketType {
+  SINGLE
+  WINNERS
+  LOSERS
+  GRAND_FINAL
+}
+
 model Organization {
   userId          String  @id @map("user_id")
   stripeAccountId String? @map("stripe_account_id")
@@ -58,6 +65,7 @@ model Tournament {
   playersPerTeam     Int              @default(1) @map("players_per_team")
   registrationMode   RegistrationMode @default(ONLINE) @map("registration_mode")
   scoringMode        ScoringMode      @default(ELECTRONIC) @map("scoring_mode")
+  quickMode          Boolean          @default(false) @map("quick_mode")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
@@ -98,6 +106,7 @@ model Registration {
   platformFeeCents Int                @default(0) @map("platform_fee_cents")
   feeCollected     Boolean            @default(false) @map("fee_collected")
   seeded           Boolean            @default(false)
+  lives            Int                @default(2)
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tournament  Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -145,6 +154,7 @@ model Match {
   bracketRound    Int?        @map("bracket_round")
   bracketPosition Int?        @map("bracket_position")
   boardNumber     Int         @default(0) @map("board_number")
+  bracketType     BracketType @default(SINGLE) @map("bracket_type")
   status          MatchStatus @default(PENDING)
   player1Id       String      @map("player1_id")
   player2Id       String?     @map("player2_id")

@@ -78,6 +78,33 @@ scripts/    → seed de données de test
 - `console.warn` pour les best-effort (email, opérations non-bloquantes)
 - Toujours passer l'objet `err` en dernier argument pour avoir la stack trace
 
+## Mode tournoi rapide (Phase 1)
+
+### Concept
+Double élimination pour bar/soirée. Chaque joueur a 2 vies.
+
+### Nouveaux champs Prisma
+- `Tournament.quickMode` — active le mode rapide
+- `Match.bracketType` — `SINGLE | WINNERS | LOSERS | GRAND_FINAL`
+- `Registration.lives` — vies restantes (2 → 1 → 0 = éliminé)
+
+### Fichiers clés
+- `lib/utils/doubleElimination.ts` — fonctions pures (format, pairing, shuffle)
+- `lib/actions/quickTournament.ts` — `generateQuickBracket` + `doAdvanceQuickTournament`
+- `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`
+
+### Format de jeu (automatique)
+- > 8 joueurs actifs : 501 fermeture double (WB) / Cricket (LB)
+- 5–8 joueurs : Cricket
+- ≤ 4 joueurs + Grande Finale : 701 finish double
+
+### Flow admin
+1. Créer tournoi avec `quick_mode=true` → `nb_pools=1`, `players_per_team=1` verrouillés
+2. Inscrire les joueurs (ONSITE recommandé)
+3. Appeler `generateQuickBracket(tournamentId)` → matchs WB R1 créés
+4. Valider les scores via `markWinnerDirect` → `doAdvanceQuickTournament` appelé automatiquement
+5. Les matchs suivants (WB/LB) se créent et s'affectent aux cibles libres automatiquement
+
 ## Conventions
 - Port DB local : 5433 (évite le conflit avec SterPlatform sur 5432)
 - Branche de travail : `develop` → merge sur `main` après validation

@@ -9,6 +9,7 @@ import {
   dbGetTournament,
 } from "@/lib/db/tournament";
 import { doAdvanceToNextRound } from "@/lib/actions/bracket";
+import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 import { getUser } from "@/lib/api/auth";
 
 export async function proposeWinner(
@@ -45,7 +46,13 @@ export async function confirmWinner(
   if (result.error) return { error: result.error };
 
   if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
-    await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
+    if (result.match.quickMode) {
+      await doAdvanceQuickTournament(tournamentId, result.match.id).catch((err) =>
+        console.warn("[confirmWinner] doAdvanceQuickTournament:", err)
+      );
+    } else {
+      await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
+    }
   }
 
   revalidatePath(`/t/${tournamentId}/score`);
@@ -72,7 +79,13 @@ export async function markWinnerDirect(
   if (result.error) return { error: result.error };
 
   if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
-    await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
+    if (result.match.quickMode) {
+      await doAdvanceQuickTournament(tournamentId, result.match.id).catch((err) =>
+        console.warn("[markWinnerDirect] doAdvanceQuickTournament:", err)
+      );
+    } else {
+      await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
+    }
   }
 
   revalidatePath(`/t/${tournamentId}/score`);
