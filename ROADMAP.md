@@ -50,7 +50,15 @@
 - Page bracket : bouton « Générer le bracket rapide », pas de bouton « Tour suivant »
 - `QuickBracketView` : sections WB / LB / Grande Finale avec indicateur de vies (♥) et bouton arbitrage
 
-## Phase 2 — À venir
-- Notifications temps réel (Mercure) pour le tableau des machines
+## Phase 2 — En cours
+### Notifications temps réel (Mercure) ✅
+- Hub Mercure dans `docker-compose.yml` (port 9090, `dunglas/mercure`)
+- `lib/mercure.ts` — JWT HS256 (sans dépendance externe), topic par tournoi, publisher fire-and-forget
+- Route `/api/public/tournaments/[id]/mercure-token` — token abonné côté navigateur
+- `MatchBoard` + `BracketLive` : URL token corrigée → endpoint DartsOpen local (plus SterPlatform)
+- `TvBoard` : polling 5 s remplacé par SSE Mercure (fallback polling si hub absent)
+- `score.ts` : publication automatique après chaque match finalisé
+
+### À venir
 - Export PDF résultats du tournoi rapide
-- Statistiques par joueur (taux de victoire en WB vs LB)
+- Statistiques par joueur (taux de victoire WB vs LB)

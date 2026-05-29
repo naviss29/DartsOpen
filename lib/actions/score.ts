@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/tournament";
 import { doAdvanceToNextRound } from "@/lib/actions/bracket";
 import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
+import { publishMatchUpdate } from "@/lib/mercure";
 import { getUser } from "@/lib/api/auth";
 
 export async function proposeWinner(
@@ -55,6 +56,10 @@ export async function confirmWinner(
     }
   }
 
+  if (result.matchFinished) {
+    publishMatchUpdate(tournamentId).catch(() => {});
+  }
+
   revalidatePath(`/t/${tournamentId}/score`);
   revalidatePath(`/t/${tournamentId}/live`);
   return {};
@@ -86,6 +91,10 @@ export async function markWinnerDirect(
     } else {
       await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
     }
+  }
+
+  if (result.matchFinished) {
+    publishMatchUpdate(tournamentId).catch(() => {});
   }
 
   revalidatePath(`/t/${tournamentId}/score`);

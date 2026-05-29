@@ -62,6 +62,34 @@ scripts/    → seed de données de test
 - `STER_ORG_SLUG` — slug org dans SterPlatform (`dartsopen`)
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` — Stripe
 - `STRIPE_WEBHOOK_SECRET` — webhook Stripe
+- `NEXT_PUBLIC_MERCURE_PUBLIC_URL` — URL publique du hub (navigateur → hub)
+- `MERCURE_PRIVATE_URL` — URL privée du hub (Next.js → hub, peut être identique)
+- `MERCURE_JWT_SECRET` — secret HS256 partagé avec le hub (voir docker-compose.yml)
+
+## Mercure (temps réel)
+
+### Architecture
+- Hub local via `docker-compose up -d` (port 9090, image `dunglas/mercure`)
+- `lib/mercure.ts` — signe les JWT HS256 sans bibliothèque externe (`crypto` Node)
+- Publisher : `publishMatchUpdate(tournamentId)` — fire-and-forget, appelé depuis `score.ts`
+- Abonné token : `GET /api/public/tournaments/[id]/mercure-token` → `{ token, topic }`
+- Topic : `https://dartsopen.fr/tournaments/{id}/matches`
+
+### Fallback
+Si `MERCURE_JWT_SECRET` ou `NEXT_PUBLIC_MERCURE_PUBLIC_URL` ne sont pas définis :
+- Publisher : no-op silencieux
+- Composants : polling automatique (MatchBoard 3 s, BracketLive 5 s, TvBoard 5 s)
+
+### Démarrage local
+```bash
+docker compose up -d   # lance PostgreSQL + Mercure hub
+```
+Ajouter dans `.env.local` :
+```
+NEXT_PUBLIC_MERCURE_PUBLIC_URL=http://localhost:9090/.well-known/mercure
+MERCURE_PRIVATE_URL=http://localhost:9090/.well-known/mercure
+MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
+```
 
 ## Gestion des erreurs
 

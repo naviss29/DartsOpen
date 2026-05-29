@@ -15,5 +15,24 @@ services:
       timeout: 5s
       retries: 10
 
+  mercure:
+    image: dunglas/mercure
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: ":9090"
+      # JWT secret partagé avec DartsOpen (MERCURE_JWT_SECRET dans .env.local)
+      MERCURE_PUBLISHER_JWT_KEY: "dartsopen-mercure-dev-secret"
+      MERCURE_SUBSCRIBER_JWT_KEY: "dartsopen-mercure-dev-secret"
+      # CORS : autorise Next.js en dev (localhost:3000)
+      MERCURE_EXTRA_DIRECTIVES: "cors_origins http://localhost:3000\n      demo 0"
+    command: /usr/bin/caddy run --config /etc/caddy/dev.Caddyfile
+    ports:
+      - "9090:9090"
+    volumes:
+      - mercure_data:/data
+      - mercure_config:/config
+
 volumes:
   db_data:
+  mercure_data:
+  mercure_config:

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
+
 interface Match {
   id: string;
   board_number: number;
@@ -27,9 +29,38 @@ export function TvBoard({ tournamentId, initialMatches, nbBoards }: Props) {
   }, [tournamentId]);
 
   useEffect(() => {
-    const id = setInterval(refresh, 5000);
-    return () => clearInterval(id);
-  }, [refresh]);
+    let mounted = true;
+    let es: EventSource | null = null;
+    let poll: ReturnType<typeof setInterval> | null = null;
+
+    const doRefresh = async () => {
+      if (!mounted) return;
+      await refresh();
+    };
+
+    const startPolling = () => { poll = setInterval(doRefresh, 5000); };
+
+    const connect = async () => {
+      if (!MERCURE_URL) { startPolling(); return; }
+
+      const tokenRes = await fetch(
+        `/api/public/tournaments/${tournamentId}/mercure-token`
+      ).catch(() => null);
+      if (!tokenRes?.ok) { startPolling(); return; }
+
+      const { token, topic } = await tokenRes.json() as { token: string; topic: string };
+      const url = new URL(MERCURE_URL);
+      url.searchParams.append("topic", topic);
+      url.searchParams.append("authorization", token);
+
+      es = new EventSource(url.toString());
+      es.onmessage = doRefresh;
+      es.onerror = () => { es?.close(); es = null; if (mounted && !poll) startPolling(); };
+    };
+
+    connect();
+    return () => { mounted = false; es?.close(); if (poll) clearInterval(poll); };
+  }, [tournamentId, refresh]);
 
   const boards = Array.from({ length: nbBoards }, (_, i) => {
     const n = i + 1;
