@@ -59,6 +59,10 @@
 - `TvBoard` : polling 5 s remplacé par SSE Mercure (fallback polling si hub absent)
 - `score.ts` : publication automatique après chaque match finalisé
 
+### Vue live publique (QR code) ✅
+- `QuickBracketLive` — client Mercure/polling, bracket WB/LB/GF en temps réel
+- `live/page.tsx` : détecte `quick_mode`, affiche `QuickBracketLive` à la place de `BracketLive`
+- Bouton arbitrage absent sur la vue publique (`tournamentId` optionnel dans `QuickBracketView`)
+
 ### À venir
-- Export PDF résultats du tournoi rapide
-- Statistiques par joueur (taux de victoire WB vs LB)
+- Export PDF résultats du tournoi rapide (optionnel)

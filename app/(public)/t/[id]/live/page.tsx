@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MatchBoard } from "@/components/tournament/MatchBoard";
 import { ScoreBoard } from "@/components/tournament/ScoreBoard";
 import { BracketLive } from "@/components/tournament/BracketLive";
+import { QuickBracketLive } from "@/components/tournament/QuickBracketLive";
 import { dbGetTournamentPublic, dbListMatches, dbListPools } from "@/lib/db/tournament";
 import type { Metadata } from "next";
 
@@ -13,14 +14,15 @@ export const metadata: Metadata = { title: "Vue Live — DartsOpen" };
 type SterMatch = {
   id: string;
   board_number: number;
+  bracket_type: string;
   status: string;
   bracket_round: number | null;
   bracket_position: number | null;
   pool_id: string | null;
   player1_id: string;
   player2_id: string;
-  player1: { id: string; player_name: string };
-  player2: { id: string; player_name: string };
+  player1: { id: string; player_name: string; lives: number };
+  player2: { id: string; player_name: string; lives: number };
   winner_id: string | null;
   updated_at: string;
   sets: { id: string; round_order: number; winner_id: string | null; validated_p1: boolean; validated_p2: boolean }[];
@@ -42,6 +44,7 @@ export default async function LivePage({ params }: Props) {
     status: string;
     nb_boards: number;
     nb_pools: number;
+    quick_mode: boolean;
   } | null;
 
   if (!tournament) notFound();
@@ -95,9 +98,12 @@ export default async function LivePage({ params }: Props) {
     sets: m.sets,
   }));
 
-  // Bracket matches
+  // Bracket matches — mode standard (SINGLE) et mode rapide (WINNERS/LOSERS/GRAND_FINAL)
   const bracketMatches = allMatches
-    .filter((m) => m.pool_id === null && m.bracket_round !== null)
+    .filter((m) => m.pool_id === null && m.bracket_round !== null);
+
+  const standardBracketMatches = bracketMatches
+    .filter((m) => m.bracket_type === "SINGLE")
     .map((m) => ({
       id: m.id,
       bracket_round: m.bracket_round as number,
@@ -106,6 +112,21 @@ export default async function LivePage({ params }: Props) {
       winner_id: m.winner_id,
       player1: m.player1,
       player2: m.player2,
+    }));
+
+  const quickBracketMatches = bracketMatches
+    .filter((m) => m.bracket_type !== "SINGLE")
+    .map((m) => ({
+      id: m.id,
+      bracket_round: m.bracket_round as number,
+      bracket_position: m.bracket_position as number,
+      bracket_type: m.bracket_type,
+      board_number: m.board_number,
+      status: m.status,
+      winner_id: m.winner_id,
+      player1: m.player1,
+      player2: m.player2,
+      sets: m.sets,
     }));
 
   // Finished pool matches for scoreboard
@@ -119,7 +140,8 @@ export default async function LivePage({ params }: Props) {
       sets: m.sets.map((s) => ({ winner_id: s.winner_id })),
     }));
 
-  const hasBracket = bracketMatches.length > 0;
+  const hasBracket = standardBracketMatches.length > 0;
+  const hasQuickBracket = quickBracketMatches.length > 0;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
@@ -150,14 +172,23 @@ export default async function LivePage({ params }: Props) {
         nbBoards={tournament.nb_boards}
       />
 
-      {hasBracket && (
-        <BracketLive
+      {/* Bracket double élimination (mode rapide) */}
+      {tournament.quick_mode && hasQuickBracket && (
+        <QuickBracketLive
           tournamentId={id}
-          initialMatches={bracketMatches}
+          initialMatches={quickBracketMatches}
         />
       )}
 
-      {!hasBracket && (
+      {/* Bracket simple élimination (mode standard) */}
+      {!tournament.quick_mode && hasBracket && (
+        <BracketLive
+          tournamentId={id}
+          initialMatches={standardBracketMatches}
+        />
+      )}
+
+      {!tournament.quick_mode && !hasBracket && (
         <ScoreBoard
           tournamentId={id}
           pools={pools}

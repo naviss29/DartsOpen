@@ -15,7 +15,8 @@ interface QuickMatch {
 
 interface Props {
   matches: QuickMatch[];
-  tournamentId: string;
+  /** Si absent, le bouton d'arbitrage est masqué (vue publique) */
+  tournamentId?: string;
 }
 
 export function QuickBracketView({ matches, tournamentId }: Props) {
@@ -90,7 +91,7 @@ function BracketSection({
   subtitle: string;
   color: SectionColor;
   matches: QuickMatch[];
-  tournamentId: string;
+  tournamentId?: string;
 }) {
   const styles = sectionStyles[color];
 
@@ -113,7 +114,7 @@ function BracketSection({
 
 // ── Carte d'un match ──────────────────────────────────────────────────────────
 
-function QuickMatchCard({ match, tournamentId }: { match: QuickMatch; tournamentId: string }) {
+function QuickMatchCard({ match, tournamentId }: { match: QuickMatch; tournamentId?: string }) {
   const isInProgress = match.status === "IN_PROGRESS";
   const isPending    = match.status === "PENDING";
   const isFinished   = match.status === "FINISHED";
@@ -145,8 +146,8 @@ function QuickMatchCard({ match, tournamentId }: { match: QuickMatch; tournament
         <PlayerRow player={match.player2} winnerId={match.winner_id} />
       </div>
 
-      {/* Bouton arbitrage (admin) */}
-      {isInProgress && match.player1 && match.player2 && match.sets.length > 0 && (
+      {/* Bouton arbitrage (admin uniquement — tournamentId absent sur la vue publique) */}
+      {tournamentId && isInProgress && match.player1 && match.player2 && match.sets.length > 0 && (
         <div className="border-t border-gray-100 px-3 py-2 flex justify-end">
           <ArbitrateMatchButton
             match={{
