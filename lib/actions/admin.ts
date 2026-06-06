@@ -25,9 +25,9 @@ export async function arbitrateMatch(
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const result = await dbArbitrateMatch(matchId, setWinners).catch(() => ({
-    error: "Erreur lors de la correction du match.",
-  }));
+  const result = await dbArbitrateMatch(matchId, setWinners).catch(
+    (): Awaited<ReturnType<typeof dbArbitrateMatch>> => ({ error: "Erreur lors de la correction du match." })
+  );
   if (result.error) return result;
 
   // En mode rapide, l'avancement du bracket est déclenché automatiquement
