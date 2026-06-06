@@ -106,12 +106,18 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 - `console.warn` pour les best-effort (email, opérations non-bloquantes)
 - Toujours passer l'objet `err` en dernier argument pour avoir la stack trace
 
-## Mode tournoi rapide (Phase 1)
+## Mode tournoi rapide
 
 ### Concept
-Double élimination pour bar/soirée. Chaque joueur a 2 vies.
+Double élimination pour bar/soirée. Chaque joueur a 2 vies. Pas de poules, pas de scoring électronique/traditionnel — le gagnant est désigné directement par l'organisateur via le bouton d'arbitrage.
 
-### Nouveaux champs Prisma
+### Contraintes fixes (non modifiables)
+- Inscriptions : **sur place uniquement** (`registration_mode = ONSITE`)
+- Seul le **nom/pseudo** est requis — email et téléphone non demandés
+- `nb_pools = 1`, `players_per_team = 1` verrouillés à la création
+- Le mode de saisie des scores (électronique / traditionnel) est **ignoré**
+
+### Champs Prisma
 - `Tournament.quickMode` — active le mode rapide
 - `Match.bracketType` — `SINGLE | WINNERS | LOSERS | GRAND_FINAL`
 - `Registration.lives` — vies restantes (2 → 1 → 0 = éliminé)
@@ -119,7 +125,11 @@ Double élimination pour bar/soirée. Chaque joueur a 2 vies.
 ### Fichiers clés
 - `lib/utils/doubleElimination.ts` — fonctions pures (format, pairing, shuffle)
 - `lib/actions/quickTournament.ts` — `generateQuickBracket` + `doAdvanceQuickTournament`
+- `lib/actions/player.ts` — `addPlayer` : email optionnel (vide `""` si absent), email de confirmation sauté si pas d'email
 - `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`
+- `components/tournament/AddPlayerForm.tsx` — prop `quickMode` : masque les champs email et téléphone
+- `components/tournament/QuickBracketView.tsx` — vue statique WB / LB / Grande Finale avec bouton arbitrage
+- `components/tournament/QuickBracketLive.tsx` — vue live (Mercure ou polling 5s)
 
 ### Format de jeu (automatique)
 - > 8 joueurs actifs : 501 fermeture double (WB) / Cricket (LB)
@@ -127,11 +137,12 @@ Double élimination pour bar/soirée. Chaque joueur a 2 vies.
 - ≤ 4 joueurs + Grande Finale : 701 finish double
 
 ### Flow admin
-1. Créer tournoi avec `quick_mode=true` → `nb_pools=1`, `players_per_team=1` verrouillés
-2. Inscrire les joueurs (ONSITE recommandé)
-3. Appeler `generateQuickBracket(tournamentId)` → matchs WB R1 créés
-4. Valider les scores via `markWinnerDirect` → `doAdvanceQuickTournament` appelé automatiquement
-5. Les matchs suivants (WB/LB) se créent et s'affectent aux cibles libres automatiquement
+1. Créer le tournoi avec `quick_mode=true` → `nb_pools=1`, `players_per_team=1` verrouillés
+2. Passer en statut **OPEN** puis inscrire les joueurs sur place (nom/pseudo uniquement)
+3. Passer en statut **IN_PROGRESS** → aller sur **Phases finales**
+4. Cliquer **Générer le bracket rapide** → `generateQuickBracket` crée les matchs WB R1 sur les cibles
+5. Désigner le gagnant via le bouton **Arbitrer** sur chaque match → `markWinnerDirect` → `doAdvanceQuickTournament` déclenché automatiquement
+6. Les matchs suivants (WB/LB/Grande Finale) se créent et s'affectent aux cibles libres automatiquement
 
 ## Conventions
 - Port DB local : 5433 (évite le conflit avec SterPlatform sur 5432)

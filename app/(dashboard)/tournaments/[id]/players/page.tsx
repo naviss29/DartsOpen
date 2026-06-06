@@ -17,6 +17,7 @@ type Tournament = {
   max_players: number;
   nb_pools: number;
   players_per_team: number;
+  quick_mode: boolean;
 };
 
 type Registration = {
@@ -45,6 +46,7 @@ export default async function PlayersPage({ params }: Props) {
   const canSeed = ["DRAFT", "OPEN", "IN_PROGRESS"].includes(tournament.status);
   const isFull = playerCount >= tournament.max_players;
   const isTeam = tournament.players_per_team > 1;
+  const isQuick = tournament.quick_mode;
 
   return (
     <div className="space-y-6">
@@ -56,11 +58,13 @@ export default async function PlayersPage({ params }: Props) {
           <Link href={`/tournaments/${id}/players`} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white">
             👥 Joueurs
           </Link>
-          <Link href={`/tournaments/${id}/pools`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
-            🏆 Poules & Matchs
-          </Link>
+          {!isQuick && (
+            <Link href={`/tournaments/${id}/pools`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
+              🏆 Poules & Matchs
+            </Link>
+          )}
           <Link href={`/tournaments/${id}/bracket`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
-            🥇 Phases finales
+            {isQuick ? "⚡ Bracket rapide" : "🥇 Phases finales"}
           </Link>
         </nav>
       </div>
@@ -73,7 +77,7 @@ export default async function PlayersPage({ params }: Props) {
           <p className="text-sm text-gray-500 mt-1">
             {playerCount} / {tournament.max_players} joueurs
             {isTeam && ` (${count} équipe${count > 1 ? "s" : ""})`}
-            &nbsp;·&nbsp; {tournament.nb_pools} poules prévues
+            {!isQuick && <>&nbsp;·&nbsp; {tournament.nb_pools} poule{tournament.nb_pools > 1 ? "s" : ""} prévue{tournament.nb_pools > 1 ? "s" : ""}</>}
           </p>
         </div>
         {isFull && (
@@ -88,7 +92,7 @@ export default async function PlayersPage({ params }: Props) {
           <h2 className="font-medium text-gray-900 mb-4">
             {isTeam ? "Ajouter une équipe" : "Ajouter un joueur"}
           </h2>
-          <AddPlayerForm tournamentId={id} playersPerTeam={tournament.players_per_team} />
+          <AddPlayerForm tournamentId={id} playersPerTeam={tournament.players_per_team} quickMode={isQuick} />
         </div>
       )}
 
@@ -108,8 +112,8 @@ export default async function PlayersPage({ params }: Props) {
                 {isTeam && (
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Joueurs</th>
                 )}
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">Téléphone</th>
+                {!isQuick && <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>}
+                {!isQuick && <th className="px-4 py-3 text-left font-medium text-gray-600">Téléphone</th>}
                 {canSeed && <th className="px-4 py-3 text-left font-medium text-gray-600">Tête de série</th>}
                 {canEdit && <th className="px-4 py-3" />}
               </tr>
@@ -124,8 +128,8 @@ export default async function PlayersPage({ params }: Props) {
                       {reg.player_names?.join(", ") ?? "—"}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-gray-600">{reg.player_email}</td>
-                  <td className="px-4 py-3 text-gray-500">{reg.player_phone ?? "—"}</td>
+                  {!isQuick && <td className="px-4 py-3 text-gray-600">{reg.player_email}</td>}
+                  {!isQuick && <td className="px-4 py-3 text-gray-500">{reg.player_phone ?? "—"}</td>}
                   {canSeed && (
                     <td className="px-4 py-3">
                       <SeedToggleButton registrationId={reg.id} tournamentId={id} seeded={reg.seeded} />

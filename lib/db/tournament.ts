@@ -620,16 +620,44 @@ export async function dbDeleteBracketMatches(tournamentId: string) {
   await prisma.match.deleteMany({ where: { tournamentId, poolId: null } });
 }
 
+/**
+ * Corrige manuellement les sets d'un match et recalcule son vainqueur.
+ *
+ * Mode standard : si le vainqueur change, supprime tous les matchs de bracket
+ * avec un round supérieur afin que l'organisateur régénère manuellement la suite.
+ *
+ * Mode rapide : ne supprime rien — le bracket est dynamique (WB et LB ont leurs
+ * propres compteurs de round indépendants). L'avancement est délégué à
+ * doAdvanceQuickTournament depuis la couche action.
+ */
 export async function dbArbitrateMatch(
   matchId: string,
   setWinners: { setId: string; winnerId: string | null }[]
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { sets: true },
+    include: {
+      sets: true,
+      tournament: { select: { id: true, quickMode: true } },
+    },
   });
   if (!match) return { error: "Match introuvable." };
   if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
+
+  const isQuickMode = match.tournament.quickMode;
+
+  // Recalcul du vainqueur avant la transaction pour pouvoir retourner matchFinished
+  const p1Wins = setWinners.filter((s) => s.winnerId === match.player1Id).length;
+  const p2Wins = setWinners.filter((s) => s.winnerId === match.player2Id).length;
+  const total = match.sets.length;
+  const allPlayed = setWinners.every((s) => s.winnerId !== null);
+
+  let newWinnerId: string | null = null;
+  if (p1Wins > p2Wins && (allPlayed || p1Wins > Math.floor(total / 2))) newWinnerId = match.player1Id;
+  else if (p2Wins > p1Wins && (allPlayed || p2Wins > Math.floor(total / 2))) newWinnerId = match.player2Id;
+
+  const newStatus: MatchStatus = allPlayed && newWinnerId ? "FINISHED" : "IN_PROGRESS";
+  const matchFinished = newStatus === "FINISHED";
 
   await prisma.$transaction(async (tx) => {
     for (const { setId, winnerId } of setWinners) {
@@ -643,32 +671,30 @@ export async function dbArbitrateMatch(
       });
     }
 
-    // Recompute match winner from updated sets
-    const p1Wins = setWinners.filter((s) => s.winnerId === match.player1Id).length;
-    const p2Wins = setWinners.filter((s) => s.winnerId === match.player2Id).length;
-    const total = match.sets.length;
-    const allPlayed = setWinners.every((s) => s.winnerId !== null);
-
-    let newWinnerId: string | null = null;
-    if (p1Wins > p2Wins && (allPlayed || p1Wins > Math.floor(total / 2))) newWinnerId = match.player1Id;
-    else if (p2Wins > p1Wins && (allPlayed || p2Wins > Math.floor(total / 2))) newWinnerId = match.player2Id;
-
-    const newStatus: MatchStatus = allPlayed && newWinnerId ? "FINISHED" : "IN_PROGRESS";
-
     await tx.match.update({
       where: { id: matchId },
       data: { winnerId: newWinnerId, status: newStatus },
     });
 
-    // If bracket match and winner changed: drop all subsequent rounds so admin can regenerate
-    if (match.bracketRound !== null && newWinnerId !== match.winnerId) {
+    // En mode standard uniquement : supprimer les rounds suivants si le vainqueur change,
+    // pour éviter un bracket incohérent. En mode rapide, WB round N et LB round N sont
+    // indépendants — supprimer par bracketRound > N détruirait des matchs LB valides.
+    if (!isQuickMode && match.bracketRound !== null && newWinnerId !== match.winnerId) {
       await tx.match.deleteMany({
         where: { tournamentId: match.tournamentId, poolId: null, bracketRound: { gt: match.bracketRound } },
       });
     }
   });
 
-  return {};
+  return {
+    matchFinished,
+    match: {
+      id: matchId,
+      tournamentId: match.tournamentId,
+      bracketRound: match.bracketRound,
+      quickMode: isQuickMode,
+    },
+  };
 }
 
 // ── Match sets — scoring business logic ───────────────────────────────────────

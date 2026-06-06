@@ -33,11 +33,21 @@ export default async function ScorePage({ params, searchParams }: Props) {
   const boardNumber = parseInt(board ?? "1", 10);
 
   const [tournament, allMatches] = await Promise.all([
-    dbGetTournamentPublic(id).catch(() => null) as Promise<{ id: string; name: string; status: string; scoring_mode: string; rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[] } | null>,
+    dbGetTournamentPublic(id).catch(() => null) as Promise<{ id: string; name: string; status: string; scoring_mode: string; quick_mode: boolean; rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[] } | null>,
     dbListMatches(id).catch(() => []) as Promise<SterMatch[]>,
   ]);
 
   if (!tournament || tournament.status !== "IN_PROGRESS") notFound();
+
+  if (tournament.quick_mode) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center space-y-4">
+        <p className="text-4xl">⚡</p>
+        <h1 className="text-xl font-bold text-white">{tournament.name}</h1>
+        <p className="text-gray-400">Les scores sont gérés par l&apos;organisateur en mode tournoi rapide.</p>
+      </div>
+    );
+  }
 
   const rawMatch = allMatches.find(
     (m) => m.board_number === boardNumber && m.status === "IN_PROGRESS"

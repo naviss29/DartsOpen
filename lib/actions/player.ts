@@ -6,10 +6,12 @@ import { dbAddRegistration, dbDeleteRegistration, dbGetTournament, dbSetSeeded }
 import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
 import { sendEmail } from "@/lib/api/sterplatform";
 
+// Email facultatif : les tournois rapides n'ont pas de champ email dans le formulaire.
+// La chaîne vide "" est acceptée (valeur soumise par un <input type="hidden"> absent).
 const PlayerSchema = z.object({
   tournament_id: z.string().uuid(),
   player_name: z.string().trim().min(2, "Le nom doit contenir au moins 2 caractères."),
-  player_email: z.string().trim().email("Email invalide."),
+  player_email: z.union([z.string().trim().email("Email invalide."), z.literal("")]).optional(),
   player_phone: z
     .string()
     .trim()
@@ -61,9 +63,12 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     return { error: "Les inscriptions sont fermées pour ce tournoi." };
   }
 
+  // playerEmail vide ("") = inscription mode rapide sans adresse email
+  const playerEmail = parsed.data.player_email || "";
+
   const reg = await dbAddRegistration(parsed.data.tournament_id, {
     playerName: parsed.data.player_name,
-    playerEmail: parsed.data.player_email,
+    playerEmail,
     playerPhone: parsed.data.player_phone ?? null,
     playerNames,
     platformFeeCents: PLATFORM_FEE_CENTS * playersPerTeam,
@@ -72,14 +77,17 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
 
   if (!reg) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
 
-  const dateFormatted = new Date(tournament.date).toLocaleDateString("fr-FR");
-  await sendEmail("dartsopen_inscription_confirmation", reg.player_email, {
-    nom_equipe: reg.player_name,
-    tournoi: tournament.name,
-    date: dateFormatted,
-    lieu: tournament.location,
-    joueurs: reg.player_names.join(", "),
-  }).catch((err) => console.error("[addPlayer] Erreur envoi email confirmation:", err));
+  // Confirmation email uniquement si une adresse a été fournie (pas en mode rapide)
+  if (playerEmail) {
+    const dateFormatted = new Date(tournament.date).toLocaleDateString("fr-FR");
+    await sendEmail("dartsopen_inscription_confirmation", playerEmail, {
+      nom_equipe: reg.player_name,
+      tournoi: tournament.name,
+      date: dateFormatted,
+      lieu: tournament.location,
+      joueurs: reg.player_names.join(", "),
+    }).catch((err) => console.error("[addPlayer] Erreur envoi email confirmation:", err));
+  }
 
   revalidatePath(`/tournaments/${parsed.data.tournament_id}/players`);
   return {};

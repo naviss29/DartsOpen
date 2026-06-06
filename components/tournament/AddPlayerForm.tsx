@@ -6,9 +6,10 @@ import { addPlayer } from "@/lib/actions/player";
 interface Props {
   tournamentId: string;
   playersPerTeam: number;
+  quickMode?: boolean;
 }
 
-export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
+export function AddPlayerForm({ tournamentId, playersPerTeam, quickMode = false }: Props) {
   const [state, action, isPending] = useActionState(addPlayer, undefined);
   const isTeam = playersPerTeam > 1;
 
@@ -61,34 +62,38 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
-          <input
-            name="player_email"
-            type="email"
-            required
-            defaultValue={state?.fields?.player_email}
-            placeholder="jean@exemple.fr"
-            className={inputCn}
-          />
-          {state?.errors?.player_email && (
-            <p className="mt-1 text-xs text-red-600">{state.errors.player_email[0]}</p>
-          )}
-        </div>
+        {!quickMode && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
+              <input
+                name="player_email"
+                type="email"
+                required
+                defaultValue={state?.fields?.player_email}
+                placeholder="jean@exemple.fr"
+                className={inputCn}
+              />
+              {state?.errors?.player_email && (
+                <p className="mt-1 text-xs text-red-600">{state.errors.player_email[0]}</p>
+              )}
+            </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
-          <input
-            name="player_phone"
-            type="tel"
-            defaultValue={state?.fields?.player_phone}
-            placeholder="0612345678"
-            className={inputCn}
-          />
-          {state?.errors?.player_phone && (
-            <p className="mt-1 text-xs text-red-600">{state.errors.player_phone[0]}</p>
-          )}
-        </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
+              <input
+                name="player_phone"
+                type="tel"
+                defaultValue={state?.fields?.player_phone}
+                placeholder="0612345678"
+                className={inputCn}
+              />
+              {state?.errors?.player_phone && (
+                <p className="mt-1 text-xs text-red-600">{state.errors.player_phone[0]}</p>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <button
