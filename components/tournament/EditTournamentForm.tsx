@@ -81,8 +81,9 @@ export function EditTournamentForm({ tournament }: Props) {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nom du tournoi</label>
+          <label htmlFor="edit_name" className="block text-sm font-medium text-gray-700 mb-1">Nom du tournoi</label>
           <input
+            id="edit_name"
             name="name"
             type="text"
             required
@@ -93,8 +94,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+          <label htmlFor="edit_date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
           <input
+            id="edit_date"
             name="date"
             type="date"
             required
@@ -105,8 +107,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Lieu</label>
+          <label htmlFor="edit_location" className="block text-sm font-medium text-gray-700 mb-1">Lieu</label>
           <input
+            id="edit_location"
             name="location"
             type="text"
             required
@@ -117,8 +120,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Joueurs max</label>
+          <label htmlFor="edit_max_players" className="block text-sm font-medium text-gray-700 mb-1">Joueurs max</label>
           <input
+            id="edit_max_players"
             name="max_players"
             type="number"
             min="2"
@@ -131,8 +135,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€ / joueur)</label>
+          <label htmlFor="edit_entry_fee" className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€ / joueur)</label>
           <input
+            id="edit_entry_fee"
             name="entry_fee"
             type="number"
             min="0"
@@ -155,8 +160,9 @@ export function EditTournamentForm({ tournament }: Props) {
           </div>
         ) : (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de poules</label>
+            <label htmlFor="edit_nb_pools" className="block text-sm font-medium text-gray-700 mb-1">Nombre de poules</label>
             <input
+              id="edit_nb_pools"
               name="nb_pools"
               type="number"
               min="1"
@@ -170,8 +176,9 @@ export function EditTournamentForm({ tournament }: Props) {
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de cibles</label>
+          <label htmlFor="edit_nb_boards" className="block text-sm font-medium text-gray-700 mb-1">Nombre de cibles</label>
           <input
+            id="edit_nb_boards"
             name="nb_boards"
             type="number"
             min="1"
@@ -184,8 +191,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Qualifiés par poule</label>
+          <label htmlFor="edit_advancement_per_pool" className="block text-sm font-medium text-gray-700 mb-1">Qualifiés par poule</label>
           <input
+            id="edit_advancement_per_pool"
             name="advancement_per_pool"
             type="number"
             min="1"
@@ -209,8 +217,9 @@ export function EditTournamentForm({ tournament }: Props) {
           </div>
         ) : (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Joueurs par équipe</label>
+            <label htmlFor="edit_players_per_team" className="block text-sm font-medium text-gray-700 mb-1">Joueurs par équipe</label>
             <input
+              id="edit_players_per_team"
               name="players_per_team"
               type="number"
               min="1"

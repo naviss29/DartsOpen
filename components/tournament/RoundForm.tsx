@@ -32,8 +32,8 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       )}
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Type de jeu</label>
-        <select name="game_type" required value={gameType} onChange={e => setGameType(e.target.value)} className={selectCn}>
+        <label htmlFor="game_type" className="block text-xs font-medium text-gray-600 mb-1">Type de jeu</label>
+        <select id="game_type" name="game_type" required value={gameType} onChange={e => setGameType(e.target.value)} className={selectCn}>
           <option value="501">501</option>
           <option value="701">701</option>
           <option value="901">901</option>
@@ -43,8 +43,8 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Entrée</label>
-        <select name="entry_type" required key={`entry-${gameType}`} defaultValue={defaults.entry} className={selectCn}>
+        <label htmlFor="entry_type" className="block text-xs font-medium text-gray-600 mb-1">Entrée</label>
+        <select id="entry_type" name="entry_type" required key={`entry-${gameType}`} defaultValue={defaults.entry} className={selectCn}>
           <option value="SINGLE">Simple</option>
           <option value="DOUBLE">Double</option>
           <option value="TRIPLE">Triple</option>
@@ -52,8 +52,8 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Sortie</label>
-        <select name="finish_type" required key={`finish-${gameType}`} defaultValue={defaults.finish} className={selectCn}>
+        <label htmlFor="finish_type" className="block text-xs font-medium text-gray-600 mb-1">Sortie</label>
+        <select id="finish_type" name="finish_type" required key={`finish-${gameType}`} defaultValue={defaults.finish} className={selectCn}>
           <option value="MASTER">Master</option>
           <option value="DOUBLE">Double</option>
           <option value="SINGLE">Simple</option>

@@ -47,8 +47,9 @@ export function TournamentForm() {
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="font-semibold text-gray-900">Informations générales</h2>
 
-        <Field label="Nom du tournoi" error={state?.errors?.name?.[0]}>
+        <Field label="Nom du tournoi" name="name" error={state?.errors?.name?.[0]}>
           <input
+            id="name"
             name="name"
             type="text"
             required
@@ -59,11 +60,11 @@ export function TournamentForm() {
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Date" error={state?.errors?.date?.[0]}>
-            <input name="date" type="date" required min={today} defaultValue={state?.fields?.date} className={inputCn} />
+          <Field label="Date" name="date" error={state?.errors?.date?.[0]}>
+            <input id="date" name="date" type="date" required min={today} defaultValue={state?.fields?.date} className={inputCn} />
           </Field>
-          <Field label="Lieu" error={state?.errors?.location?.[0]}>
-            <input name="location" type="text" required defaultValue={state?.fields?.location} placeholder="Salle des fêtes" className={inputCn} />
+          <Field label="Lieu" name="location" error={state?.errors?.location?.[0]}>
+            <input id="location" name="location" type="text" required defaultValue={state?.fields?.location} placeholder="Salle des fêtes" className={inputCn} />
           </Field>
         </div>
       </section>
@@ -76,11 +77,11 @@ export function TournamentForm() {
           /* Mode rapide : seulement nb joueurs et nb cibles */
           <>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Nombre de joueurs max" error={state?.errors?.max_players?.[0]}>
-                <input name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required className={inputCn} />
+              <Field label="Nombre de joueurs max" name="max_players" error={state?.errors?.max_players?.[0]}>
+                <input id="max_players" name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required className={inputCn} />
               </Field>
-              <Field label="Nombre de cibles disponibles" error={state?.errors?.nb_boards?.[0]}>
-                <input name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "4"} required className={inputCn} />
+              <Field label="Nombre de cibles disponibles" name="nb_boards" error={state?.errors?.nb_boards?.[0]}>
+                <input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "4"} required className={inputCn} />
               </Field>
             </div>
             {/* Valeurs forcées en mode rapide — invisibles pour l'organisateur */}
@@ -98,31 +99,31 @@ export function TournamentForm() {
           /* Mode standard : tous les champs */
           <>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Nombre de joueurs max" error={state?.errors?.max_players?.[0]}>
-                <input name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required className={inputCn} />
+              <Field label="Nombre de joueurs max" name="max_players" error={state?.errors?.max_players?.[0]}>
+                <input id="max_players" name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required className={inputCn} />
               </Field>
-              <Field label="Droits d'inscription (€ / joueur)" error={state?.errors?.entry_fee?.[0]}>
-                <input name="entry_fee" type="number" min="0" defaultValue={state?.fields?.entry_fee ?? "10"} required className={inputCn} />
+              <Field label="Droits d'inscription (€ / joueur)" name="entry_fee" error={state?.errors?.entry_fee?.[0]}>
+                <input id="entry_fee" name="entry_fee" type="number" min="0" defaultValue={state?.fields?.entry_fee ?? "10"} required className={inputCn} />
                 <p className="mt-1 text-xs text-gray-400">Le total facturé = ce montant × nb de joueurs par équipe</p>
               </Field>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Nombre de poules" error={state?.errors?.nb_pools?.[0]}>
-                <input name="nb_pools" type="number" min="1" max="64" defaultValue={state?.fields?.nb_pools ?? "8"} required className={inputCn} />
+              <Field label="Nombre de poules" name="nb_pools" error={state?.errors?.nb_pools?.[0]}>
+                <input id="nb_pools" name="nb_pools" type="number" min="1" max="64" defaultValue={state?.fields?.nb_pools ?? "8"} required className={inputCn} />
               </Field>
-              <Field label="Nombre de cibles disponibles" error={state?.errors?.nb_boards?.[0]}>
-                <input name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "4"} required className={inputCn} />
+              <Field label="Nombre de cibles disponibles" name="nb_boards" error={state?.errors?.nb_boards?.[0]}>
+                <input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "4"} required className={inputCn} />
               </Field>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Joueurs par équipe" error={state?.errors?.players_per_team?.[0]}>
-                <input name="players_per_team" type="number" min="1" max="10" defaultValue={state?.fields?.players_per_team ?? "2"} required className={inputCn} />
+              <Field label="Joueurs par équipe" name="players_per_team" error={state?.errors?.players_per_team?.[0]}>
+                <input id="players_per_team" name="players_per_team" type="number" min="1" max="10" defaultValue={state?.fields?.players_per_team ?? "2"} required className={inputCn} />
                 <p className="mt-1 text-xs text-gray-400">Ex : 1 = solo, 2 = doublette</p>
               </Field>
-              <Field label="Qualifiés par poule" error={state?.errors?.advancement_per_pool?.[0]}>
-                <input name="advancement_per_pool" type="number" min="1" max="8" defaultValue={state?.fields?.advancement_per_pool ?? "1"} required className={inputCn} />
+              <Field label="Qualifiés par poule" name="advancement_per_pool" error={state?.errors?.advancement_per_pool?.[0]}>
+                <input id="advancement_per_pool" name="advancement_per_pool" type="number" min="1" max="8" defaultValue={state?.fields?.advancement_per_pool ?? "1"} required className={inputCn} />
                 <p className="mt-1 text-xs text-gray-400">Ex : 8 poules × 2 = 16 finalistes</p>
               </Field>
             </div>
@@ -192,10 +193,10 @@ export function TournamentForm() {
 const inputCn =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ label, name, error, children }: { label: string; name?: string; error?: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       {children}
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
