@@ -54,6 +54,18 @@ describe("Inscription joueur — validation du schéma", () => {
     expect(result.success).toBe(true);
   });
 
+  it("rejette null pour player_email (formData.get() sans champ = null, doit être converti en undefined avant parse)", () => {
+    // Bug réel : formData.get("player_email") renvoie null quand le champ n'existe pas.
+    // Le correctif dans player.ts convertit null → undefined avec ??.
+    // Ce test vérifie que null brut est bien rejeté, justifiant la conversion.
+    const result = PlayerSchema.safeParse({
+      tournament_id: validUuid,
+      player_name: "Jean Dupont",
+      player_email: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejette un email malformé", () => {
     const result = PlayerSchema.safeParse({
       tournament_id: validUuid,

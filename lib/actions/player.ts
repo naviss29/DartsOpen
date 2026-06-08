@@ -49,7 +49,9 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   const parsed = PlayerSchema.safeParse({
     tournament_id: formData.get("tournament_id"),
     player_name: teamName,
-    player_email: formData.get("player_email"),
+    // formData.get() renvoie null quand le champ est absent (quick mode sans champ email).
+    // Zod .optional() accepte undefined mais pas null → on convertit.
+    player_email: formData.get("player_email") ?? undefined,
     player_phone: formData.get("player_phone") || undefined,
   });
 
