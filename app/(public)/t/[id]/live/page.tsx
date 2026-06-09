@@ -4,6 +4,7 @@ import { MatchBoard } from "@/components/tournament/MatchBoard";
 import { ScoreBoard } from "@/components/tournament/ScoreBoard";
 import { BracketLive } from "@/components/tournament/BracketLive";
 import { QuickBracketLive } from "@/components/tournament/QuickBracketLive";
+import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
 import { dbGetTournamentPublic, dbListMatches, dbListPools } from "@/lib/db/tournament";
 import type { Metadata } from "next";
 
@@ -144,6 +145,7 @@ export default async function LivePage({ params }: Props) {
   const hasQuickBracket = quickBracketMatches.length > 0;
 
   return (
+    <LandscapeGuard>
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
@@ -196,5 +198,6 @@ export default async function LivePage({ params }: Props) {
         />
       )}
     </div>
+    </LandscapeGuard>
   );
 }

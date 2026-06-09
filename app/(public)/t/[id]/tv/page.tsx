@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { dbGetTournamentPublic, dbListMatches } from "@/lib/db/tournament";
 import { TvBoard } from "@/components/tournament/TvBoard";
+import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -36,6 +37,7 @@ export default async function TvPage({ params }: Props) {
   const matches = (await dbListMatches(id).catch(() => [])) as PublicMatch[];
 
   return (
+    <LandscapeGuard>
     <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden p-6 gap-5">
       {/* Header compact */}
       <div className="flex items-center justify-between shrink-0">
@@ -71,5 +73,6 @@ export default async function TvPage({ params }: Props) {
         <TvBoard tournamentId={id} initialMatches={matches} nbBoards={tournament.nb_boards} />
       )}
     </div>
+    </LandscapeGuard>
   );
 }
