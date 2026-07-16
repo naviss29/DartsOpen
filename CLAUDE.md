@@ -14,8 +14,7 @@
 docker compose up -d
 
 # 2. Variables d'env
-cp .env.local.example .env.local
-# Remplir DATABASE_URL, NEXT_PUBLIC_API_URL, clés Stripe
+# Créer .env.local (aucun fichier d'exemple fourni) — voir « Variables d'environnement requises » ci-dessous
 
 # 3. Dépendances + migration
 npm install
@@ -89,7 +88,7 @@ scripts/    → seed de données de test
 ### Architecture
 - Hub local via `docker-compose up -d` (port 9090, image `dunglas/mercure`)
 - `lib/mercure.ts` — signe les JWT HS256 sans bibliothèque externe (`crypto` Node)
-- Publisher : `publishMatchUpdate(tournamentId)` — fire-and-forget, appelé depuis `score.ts`
+- Publisher : `publishMatchUpdate(tournamentId)` — fire-and-forget, appelé depuis `score.ts` (confirmWinner, markWinnerDirect) et `admin.ts` (arbitrateMatch)
 - Abonné token : `GET /api/public/tournaments/[id]/mercure-token` → `{ token, topic }`
 - Topic : `https://dartsopen.fr/tournaments/{id}/matches`
 
@@ -113,7 +112,7 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 
 ### Webhook Stripe
 - Les erreurs DB doivent **remonter** (ne pas swallower) : retourner `status: 500` pour que Stripe retente
-- Pattern : `try { await dbMarkPaid(...) } catch (err) { console.error(...); return NextResponse.json(..., { status: 500 }) }`
+- Pattern : `try { await dbMarkRegistrationPaid(...) } catch (err) { console.error(...); return NextResponse.json(..., { status: 500 }) }`
 
 ### Routes publiques
 - `.catch(() => null)` est interdit sans log — utiliser `.catch((err) => { console.warn(..., err); return null })`
@@ -143,6 +142,7 @@ Double élimination pour bar/soirée. Chaque joueur a 2 vies. Pas de poules, pas
 ### Fichiers clés
 - `lib/utils/doubleElimination.ts` — fonctions pures (format, pairing, shuffle)
 - `lib/actions/quickTournament.ts` — `generateQuickBracket` + `doAdvanceQuickTournament`
+- `lib/actions/admin.ts` — `arbitrateMatch` : seul point d'entrée pour désigner un vainqueur en mode rapide (la page de saisie de score publique est désactivée dans ce mode)
 - `lib/actions/player.ts` — `addPlayer` : email optionnel (vide `""` si absent), email de confirmation sauté si pas d'email
 - `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`
 - `components/tournament/AddPlayerForm.tsx` — prop `quickMode` : masque les champs email et téléphone
@@ -159,7 +159,7 @@ Double élimination pour bar/soirée. Chaque joueur a 2 vies. Pas de poules, pas
 2. Passer en statut **OPEN** puis inscrire les joueurs sur place (nom/pseudo uniquement)
 3. Passer en statut **IN_PROGRESS** → aller sur **Phases finales**
 4. Cliquer **Générer le bracket rapide** → `generateQuickBracket` crée les matchs WB R1 sur les cibles
-5. Désigner le gagnant via le bouton **Arbitrer** sur chaque match → `markWinnerDirect` → `doAdvanceQuickTournament` déclenché automatiquement
+5. Désigner le gagnant via le bouton **Arbitrer** sur chaque match → `arbitrateMatch` (`lib/actions/admin.ts`) → `doAdvanceQuickTournament` déclenché automatiquement
 6. Les matchs suivants (WB/LB/Grande Finale) se créent et s'affectent aux cibles libres automatiquement
 
 ## Conventions

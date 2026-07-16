@@ -464,22 +464,6 @@ export async function dbCountRegistrations(tournamentId: string, status?: string
   });
 }
 
-export async function dbGetRegistrationByToken(token: string) {
-  const r = await prisma.registration.findUnique({
-    where: { qrCodeToken: token },
-    include: {
-      tournament: {
-        include: { rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } } },
-      },
-    },
-  });
-  if (!r) return null;
-  return {
-    ...mapRegistration(r),
-    tournament: mapTournament({ ...r.tournament, rounds: r.tournament.rounds.map(mapRound) }),
-  };
-}
-
 // ── Pools ─────────────────────────────────────────────────────────────────────
 
 export async function dbListPools(tournamentId: string) {
@@ -715,18 +699,6 @@ export async function dbArbitrateMatch(
 
 // ── Match sets — scoring business logic ───────────────────────────────────────
 
-export async function dbGetMatchSet(matchSetId: string) {
-  const s = await prisma.matchSet.findUnique({
-    where: { id: matchSetId },
-    include: {
-      match: {
-        include: { sets: true },
-      },
-    },
-  });
-  return s;
-}
-
 export async function dbProposeWinner(
   matchSetId: string,
   winnerId: string,
@@ -892,107 +864,6 @@ async function tryFinalizeMatch(match: {
     matchFinished: true,
     match: { id: match.id, tournamentId: match.tournament.id, bracketRound: match.bracketRound, quickMode: match.tournament.quickMode },
   };
-}
-
-// ── Bracket advancement ───────────────────────────────────────────────────────
-
-export async function dbAdvanceBracket(
-  tournamentId: string,
-  currentBracketRound: number
-): Promise<{ error?: string; finished?: boolean }> {
-  const currentMatches = await prisma.match.findMany({
-    where: { tournamentId, bracketRound: currentBracketRound },
-    include: { sets: true },
-    orderBy: { bracketPosition: "asc" },
-  });
-
-  if (!currentMatches.length) return { error: "Aucun match trouvé pour ce tour." };
-
-  const allFinished = currentMatches.every((m) => m.status === "FINISHED");
-  if (!allFinished) return { error: "Tous les matchs du tour en cours doivent être terminés." };
-
-  if (currentMatches.length === 1) return { finished: true };
-
-  const rounds = await prisma.round.findMany({
-    where: { tournamentId },
-    select: { id: true },
-    orderBy: { roundOrder: "asc" },
-  });
-
-  const tournament = await prisma.tournament.findUnique({
-    where: { id: tournamentId },
-    select: { nbBoards: true },
-  });
-
-  if (!tournament) return { error: "Tournoi introuvable." };
-
-  const nextRound = currentBracketRound + 1;
-  const winners = currentMatches
-    .sort((a, b) => (a.bracketPosition ?? 0) - (b.bracketPosition ?? 0))
-    .map((m) => m.winnerId!)
-    .filter(Boolean);
-
-  const pairs: { p1: string; p2: string | null; position: number }[] = [];
-  for (let i = 0; i < winners.length; i += 2) {
-    pairs.push({
-      p1: winners[i],
-      p2: winners[i + 1] ?? null,
-      position: Math.floor(i / 2) + 1,
-    });
-  }
-
-  await prisma.$transaction(async (tx) => {
-    for (let i = 0; i < pairs.length; i++) {
-      const pair = pairs[i];
-      const boardNumber = (i % tournament.nbBoards) + 1;
-
-      if (pair.p2 === null) {
-        const match = await tx.match.create({
-          data: {
-            tournamentId,
-            bracketRound: nextRound,
-            bracketPosition: pair.position,
-            boardNumber: 0,
-            status: "FINISHED",
-            player1Id: pair.p1,
-            winnerId: pair.p1,
-          },
-          select: { id: true },
-        });
-        if (rounds.length > 0) {
-          await tx.matchSet.createMany({
-            data: rounds.map((r) => ({
-              matchId: match.id,
-              roundId: r.id,
-              winnerId: pair.p1,
-              validatedP1: true,
-              validatedP2: true,
-            })),
-          });
-        }
-      } else {
-        const match = await tx.match.create({
-          data: {
-            tournamentId,
-            bracketRound: nextRound,
-            bracketPosition: pair.position,
-            boardNumber,
-            status: i < tournament.nbBoards ? "IN_PROGRESS" : "PENDING",
-            player1Id: pair.p1,
-            player2Id: pair.p2,
-          },
-          select: { id: true },
-        });
-        if (rounds.length > 0) {
-          await tx.matchSet.createMany({
-            data: rounds.map((r) => ({ matchId: match.id, roundId: r.id })),
-          });
-        }
-      }
-    }
-  });
-
-  return {};
 }
 
 // ── Mode rapide — double élimination ─────────────────────────────────────────

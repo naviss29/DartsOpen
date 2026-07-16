@@ -35,4 +35,3 @@
 ## Dette technique potentielle
 
 - Penser à l'index PostgreSQL sur `match.status` + `match.board_number` pour les requêtes temps réel
-- Dépendances mortes `@supabase/ssr` / `@supabase/supabase-js` dans package.json (migration vers SterPlatform + Mercure terminée, à retirer)

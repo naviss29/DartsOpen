@@ -117,7 +117,6 @@ function BracketSection({
 function QuickMatchCard({ match, tournamentId }: { match: QuickMatch; tournamentId?: string }) {
   const isInProgress = match.status === "IN_PROGRESS";
   const isPending    = match.status === "PENDING";
-  const isFinished   = match.status === "FINISHED";
 
   const statusLabel = isInProgress
     ? `Cible ${match.board_number}`

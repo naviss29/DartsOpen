@@ -1,43 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { computeMatchWinner } from "@/lib/utils/bracket";
-
-// Tests du flux de validation de score
-describe("Flux de validation de score", () => {
-  const P1 = "player-1-uuid";
-  const P2 = "player-2-uuid";
-
-  it("P1 gagne si plus de sets validés à son nom", () => {
-    const sets = [
-      { winner_id: P1 },
-      { winner_id: P2 },
-      { winner_id: P1 },
-    ];
-    expect(computeMatchWinner(sets, P1, P2)).toBe(P1);
-  });
-
-  it("P2 gagne si plus de sets validés à son nom", () => {
-    const sets = [
-      { winner_id: P2 },
-      { winner_id: P2 },
-    ];
-    expect(computeMatchWinner(sets, P1, P2)).toBe(P2);
-  });
-
-  it("null en cas d'égalité parfaite", () => {
-    const sets = [{ winner_id: P1 }, { winner_id: P2 }];
-    expect(computeMatchWinner(sets, P1, P2)).toBeNull();
-  });
-
-  it("ignore les sets sans gagnant (en cours)", () => {
-    const sets = [{ winner_id: P1 }, { winner_id: null }, { winner_id: P1 }];
-    expect(computeMatchWinner(sets, P1, P2)).toBe(P1);
-  });
-
-  it("retourne null si aucun set n'a de gagnant", () => {
-    const sets = [{ winner_id: null }, { winner_id: null }];
-    expect(computeMatchWinner(sets, P1, P2)).toBeNull();
-  });
-});
 
 // Tests de la logique d'auto-avancement du bracket (doAdvanceToNextRound)
 describe("Logique auto-avancement bracket", () => {

@@ -7,6 +7,7 @@ import {
   dbListRegistrations,
   dbBulkCreateMatches,
   dbDeleteQuickBracketMatchesAndRounds,
+  dbResetAllLives,
   dbCreateQuickTournamentRounds,
   dbGetQuickTournamentRoundIds,
   dbGetQuickTournamentState,
@@ -20,7 +21,6 @@ import {
   shufflePlayers,
   pairPlayers,
   getQuickModeGameFormat,
-  type QuickBracketType,
 } from "@/lib/utils/doubleElimination";
 import type { BracketType } from "@/lib/generated/prisma/client";
 
@@ -51,10 +51,7 @@ export async function generateQuickBracket(tournamentId: string): Promise<{ erro
   // Supprimer bracket + rounds précédents, remettre les vies à 2
   try {
     await dbDeleteQuickBracketMatchesAndRounds(tournamentId);
-    await prisma.registration.updateMany({
-      where: { tournamentId, status: "PAID" },
-      data: { lives: 2 },
-    });
+    await dbResetAllLives(tournamentId);
   } catch (err) {
     console.error("[generateQuickBracket] reset:", err);
     return { error: "Erreur lors de la réinitialisation du bracket." };
