@@ -10,6 +10,7 @@ import {
   dbListMatches,
   dbBulkCreateMatches,
   dbDeleteBracketMatches,
+  dbUpdateTournamentStatus,
 } from "@/lib/db/tournament";
 
 async function getAdvancingPlayerIds(
@@ -139,7 +140,14 @@ export async function doAdvanceToNextRound(
   const allFinished = bracketMatches.every((m) => m.status === "FINISHED");
   if (!allFinished) return { error: "Tous les matchs du tour en cours doivent être terminés." };
 
-  if (bracketMatches.length === 1) return { finished: true };
+  if (bracketMatches.length === 1) {
+    // Miroir du mode rapide (doAdvanceQuickTournament) : la fin du bracket clôture
+    // automatiquement le tournoi, sans intervention manuelle de l'organisateur.
+    await dbUpdateTournamentStatus(tournamentId, "FINISHED").catch((err) =>
+      console.warn("[doAdvanceToNextRound] updateStatus FINISHED:", err)
+    );
+    return { finished: true };
+  }
 
   const rounds = [...tournament.rounds].sort((a, b) => a.order - b.order);
   const nextRound = currentBracketRound + 1;
