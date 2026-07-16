@@ -71,8 +71,8 @@ scripts/    → seed de données de test
 - Participation : +1 pt
 - Victoire en poule : +1 pt
 - Victoire en bracket : +2 pts
-- Champion du tournoi : +10 pts
-- Champion détecté via `bracketRound` max + `bracketPosition = 1`
+- Champion du tournoi : +10 pts (attribué une seule fois par tournoi, jamais par match de bracket gagné)
+- Champion détecté par `resolveChampions` via `bracketType` : match `GRAND_FINAL` au round le plus élevé si le tournoi en a (mode rapide — WB/LB/Grande Finale ont chacun leur propre compteur de round indépendant), sinon match `SINGLE` au round le plus élevé (mode standard, un seul match possible par construction de `doAdvanceToNextRound`)
 
 ## Variables d'environnement requises
 - `DATABASE_URL` — PostgreSQL

@@ -39,7 +39,7 @@ export async function dbGetRanking(): Promise<RankingEntry[]> {
       select: {
         winnerId: true,
         bracketRound: true,
-        bracketPosition: true,
+        bracketType: true,
         poolId: true,
         tournamentId: true,
         winner: { select: { id: true, playerName: true } },
@@ -82,11 +82,15 @@ export async function dbGetRanking(): Promise<RankingEntry[]> {
     } else if (m.bracketRound !== null) {
       e.pts += 2;
       e.wins += 1;
-      if (championByTournament.get(m.tournamentId) === m.winnerId) {
-        e.pts += 10;
-        e.championships += 1;
-      }
     }
+  }
+
+  // Bonus champion attribué une seule fois par tournoi (et non une fois par match de bracket gagné).
+  for (const reg of registrations) {
+    if (championByTournament.get(reg.tournamentId) !== reg.id) continue;
+    const e = entry(reg.playerName);
+    e.pts += 10;
+    e.championships += 1;
   }
 
   return Array.from(points.entries())
@@ -126,7 +130,7 @@ export async function dbGetPlayerProfile(playerName: string): Promise<PlayerProf
         tournamentId: true,
         winnerId: true,
         bracketRound: true,
-        bracketPosition: true,
+        bracketType: true,
         poolId: true,
         player1Id: true,
         player2Id: true,
@@ -141,7 +145,7 @@ export async function dbGetPlayerProfile(playerName: string): Promise<PlayerProf
       select: {
         tournamentId: true,
         bracketRound: true,
-        bracketPosition: true,
+        bracketType: true,
         winnerId: true,
       },
     }),
@@ -190,13 +194,18 @@ export async function dbGetPlayerProfile(playerName: string): Promise<PlayerProf
         totalWins += 1;
         bracketWins += 1;
         hist.wins += 1;
-        if (championByTournament.get(match.tournamentId) === myId) {
-          totalPoints += 10;
-          totalChampionships += 1;
-          hist.isChampion = true;
-        }
       }
     }
+  }
+
+  // Bonus champion attribué une seule fois par tournoi (et non une fois par match de bracket gagné).
+  for (const reg of registrations) {
+    if (championByTournament.get(reg.tournamentId) !== reg.id) continue;
+    const hist = historyMap.get(reg.tournamentId);
+    if (!hist) continue;
+    totalPoints += 10;
+    totalChampionships += 1;
+    hist.isChampion = true;
   }
 
   return {
@@ -221,8 +230,20 @@ export async function dbGetPlayerProfile(playerName: string): Promise<PlayerProf
   };
 }
 
+/**
+ * Détermine le vainqueur final de chaque tournoi à partir de ses matchs de bracket.
+ *
+ * Mode standard (bracketType SINGLE) : un seul compteur de round pour tout le bracket —
+ * la finale est l'unique match du round le plus élevé (doAdvanceToNextRound s'arrête
+ * dès qu'il ne reste qu'un match, garantissant cette unicité).
+ *
+ * Mode rapide (WINNERS/LOSERS/GRAND_FINAL) : WB, LB et la Grande Finale ont chacun leur
+ * propre compteur de round indépendant (voir doAdvanceQuickTournament) — le round le plus
+ * élevé tous types confondus ne désigne donc pas forcément la Grande Finale. Le champion
+ * est explicitement le vainqueur du dernier match GRAND_FINAL.
+ */
 function resolveChampions(
-  matches: { tournamentId: string; bracketRound: number | null; bracketPosition: number | null; winnerId: string | null }[]
+  matches: { tournamentId: string; bracketRound: number | null; bracketType: string; winnerId: string | null }[]
 ): Map<string, string> {
   const byTournament = new Map<string, typeof matches>();
   for (const m of matches) {
@@ -233,8 +254,12 @@ function resolveChampions(
   }
   const champions = new Map<string, string>();
   for (const [tid, tMatches] of byTournament) {
-    const maxRound = Math.max(...tMatches.map((m) => m.bracketRound!));
-    const final = tMatches.find((m) => m.bracketRound === maxRound && m.bracketPosition === 1);
+    const grandFinals = tMatches.filter((m) => m.bracketType === "GRAND_FINAL");
+    const finalPool = grandFinals.length > 0 ? grandFinals : tMatches.filter((m) => m.bracketType === "SINGLE");
+    if (finalPool.length === 0) continue;
+
+    const maxRound = Math.max(...finalPool.map((m) => m.bracketRound!));
+    const final = finalPool.find((m) => m.bracketRound === maxRound);
     if (final?.winnerId) champions.set(tid, final.winnerId);
   }
   return champions;
