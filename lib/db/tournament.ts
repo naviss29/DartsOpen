@@ -365,8 +365,19 @@ export async function dbDeleteTournament(id: string) {
 }
 
 export async function dbUpdateTournamentStatus(id: string, status: string) {
-  const current = await prisma.tournament.findUniqueOrThrow({ where: { id }, select: { status: true } });
+  const current = await prisma.tournament.findUniqueOrThrow({
+    where: { id },
+    select: { status: true, quickMode: true, _count: { select: { rounds: true } } },
+  });
   assertValidTransition(current.status, status);
+
+  // Un tournoi standard sans manche configurée ne peut jamais terminer un match
+  // (aucun MatchSet n'est créé) : bloquer l'ouverture des inscriptions à la source.
+  // Le mode rapide est exempté : ses manches (501/Cricket/701) sont générées
+  // automatiquement par generateQuickBracket, après l'ouverture.
+  if (status === "OPEN" && !current.quickMode && current._count.rounds === 0) {
+    throw new Error("Impossible d'ouvrir les inscriptions : aucune manche n'est configurée.");
+  }
 
   const t = await prisma.tournament.update({
     where: { id },

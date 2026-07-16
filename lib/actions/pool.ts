@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { distributeWithSeeding } from "@/lib/utils/pools";
 import { generateRoundRobin } from "@/lib/utils/bracket";
-import { dbListRegistrations, dbGeneratePools } from "@/lib/db/tournament";
+import { dbListRegistrations, dbGeneratePools, dbListMatches } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -14,9 +14,10 @@ export async function generatePools(
   _prevState: { error?: string } | null,
   _formData: FormData
 ): Promise<{ error?: string }> {
-  const [tournament, players] = await Promise.all([
+  const [tournament, players, existingMatches] = await Promise.all([
     getOwnedTournament(tournamentId),
     dbListRegistrations(tournamentId, "PAID"),
+    dbListMatches(tournamentId),
   ]);
 
   if (tournament.status !== "OPEN" && tournament.status !== "IN_PROGRESS") {
@@ -25,6 +26,12 @@ export async function generatePools(
 
   if (!players || players.length < 2) {
     return { error: "Il faut au moins 2 équipes inscrites pour générer les poules." };
+  }
+
+  // La régénération réinitialise poules et matchs : interdite dès qu'un résultat existe déjà.
+  const hasFinishedPoolMatch = existingMatches.some((m) => m.pool_id !== null && m.status === "FINISHED");
+  if (hasFinishedPoolMatch) {
+    return { error: "Impossible de régénérer les poules : au moins un match de poule est déjà terminé." };
   }
 
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(players.length / 2));

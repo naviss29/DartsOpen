@@ -47,6 +47,7 @@ export default async function PoolsPage({ params }: Props) {
   ]);
 
   const hasPools = pools.length > 0;
+  const hasFinishedMatch = pools.some((p) => p.matches.some((m) => m.status === "FINISHED"));
   const registrationCount = registrations.length;
   const totalPlayers = registrationCount * tournament.players_per_team;
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
@@ -123,6 +124,7 @@ export default async function PoolsPage({ params }: Props) {
             hasPools={hasPools}
             nbPoolsConfigured={tournament.nb_pools}
             effectivePools={effectivePools}
+            hasFinishedMatch={hasFinishedMatch}
           />
         )}
       </div>

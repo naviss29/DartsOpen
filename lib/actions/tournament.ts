@@ -111,8 +111,9 @@ export async function updateTournamentStatus(
 
   const ok = await dbUpdateTournamentStatus(tournamentId, status).catch((err) => {
     console.error("[updateTournamentStatus]", err);
-    return null;
+    return err instanceof Error ? err.message : null;
   });
+  if (typeof ok === "string") return { error: ok };
   if (!ok) return { error: "Impossible de mettre à jour le statut." };
   revalidatePath(`/tournaments/${tournamentId}`);
 }
@@ -147,7 +148,10 @@ export async function addRound(prevState: TournamentState, formData: FormData): 
 }
 
 export async function deleteRound(roundId: string, tournamentId: string): Promise<{ error?: string }> {
-  await getOwnedTournament(tournamentId);
+  const tournament = await getOwnedTournament(tournamentId);
+  if (tournament.status !== "DRAFT") {
+    return { error: "Impossible de supprimer une manche une fois les inscriptions ouvertes." };
+  }
 
   const ok = await dbDeleteRound(roundId, tournamentId).catch(() => null);
   if (ok === null) return { error: "Erreur lors de la suppression de la manche." };
