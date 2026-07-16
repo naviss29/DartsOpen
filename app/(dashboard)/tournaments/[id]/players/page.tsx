@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation";
 import { AddPlayerForm } from "@/components/tournament/AddPlayerForm";
 import { RemovePlayerButton } from "@/components/tournament/RemovePlayerButton";
 import { SeedToggleButton } from "@/components/tournament/SeedToggleButton";
-import { dbGetTournament, dbListRegistrations } from "@/lib/db/tournament";
+import { dbListRegistrations } from "@/lib/db/tournament";
+import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -33,12 +33,8 @@ type Registration = {
 export default async function PlayersPage({ params }: Props) {
   const { id } = await params;
 
-  const [tournament, registrations] = await Promise.all([
-    dbGetTournament(id).catch(() => null) as Promise<Tournament | null>,
-    dbListRegistrations(id, "PAID").catch(() => []) as Promise<Registration[]>,
-  ]);
-
-  if (!tournament) notFound();
+  const tournament = await getOwnedTournament(id) as Tournament;
+  const registrations = await dbListRegistrations(id, "PAID").catch(() => []) as Registration[];
 
   const count = registrations.length;
   const playerCount = count * tournament.players_per_team;

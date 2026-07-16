@@ -35,5 +35,4 @@
 ## Dette technique potentielle
 
 - Penser à l'index PostgreSQL sur `match.status` + `match.board_number` pour les requêtes temps réel
-- Supabase Realtime : prévoir un fallback polling si la connexion WebSocket est perdue
-- Stripe webhooks : idempotence à implémenter dès le départ pour éviter les doubles versements
+- Dépendances mortes `@supabase/ssr` / `@supabase/supabase-js` dans package.json (migration vers SterPlatform + Mercure terminée, à retirer)

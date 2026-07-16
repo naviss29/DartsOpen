@@ -1,7 +1,6 @@
-import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PaypalActivateButton } from "@/components/tournament/PaypalActivateButton";
-import { dbGetTournament } from "@/lib/db/tournament";
+import { getOwnedTournament } from "@/lib/actions/access";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Activer le tournoi — DartsOpen" };
@@ -18,8 +17,7 @@ type Tournament = {
 
 export default async function ActivatePage({ params }: Props) {
   const { id } = await params;
-  const tournament = await dbGetTournament(id).catch(() => null) as Tournament | null;
-  if (!tournament) notFound();
+  const tournament = await getOwnedTournament(id) as Tournament;
 
   const platformFeeEuros = tournament.max_players * 0.10;
 

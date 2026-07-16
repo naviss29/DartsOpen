@@ -163,8 +163,8 @@ MatchSet (score par manche)
 ### Multi-tenant
 
 Chaque association est un tenant isolé. L'isolation des données est assurée par :
-- **Supabase RLS (Row Level Security)** : les policies PostgreSQL filtrent automatiquement par `association_id`
-- **JWT Supabase** : le token contient le `association_id`, vérifié côté serveur
+- **`getOwnedTournament()`** (`lib/actions/access.ts`) : point d'entrée unique appelé par toutes les pages et Server Actions organisateur. Vérifie le JWT SterPlatform (`ster_token`), charge le tournoi et compare `tournament.association_id` au `user.id` — accès refusé (404) en cas de mismatch, sans révéler l'existence du tournoi
+- Les pages et actions publiques (inscription, saisie de score) restent volontairement en dehors de ce contrôle
 
 ### Temps réel
 
@@ -173,9 +173,11 @@ Joueur saisit un score
         ↓
 Server Action Next.js (validation + écriture PostgreSQL)
         ↓
-Supabase Realtime broadcast (channel: tournament:{id})
+Mercure hub (JWT HS256) publie sur le topic tournaments/{id}/matches
         ↓
-Tous les clients abonnés (salle + smartphones) → re-render instantané
+Clients abonnés (SSE) → re-render instantané
+        ↓
+Fallback : polling automatique si Mercure indisponible (MatchBoard 3s, BracketLive/TvBoard 5s)
 ```
 
 ### Flux paiement Stripe Connect

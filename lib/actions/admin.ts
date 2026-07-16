@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { getUser } from "@/lib/api/auth";
+import { getOwnedTournament } from "@/lib/actions/access";
 import { dbArbitrateMatch } from "@/lib/db/tournament";
 import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 import { publishMatchUpdate } from "@/lib/mercure";
@@ -22,10 +21,9 @@ export async function arbitrateMatch(
   tournamentId: string,
   setWinners: { setId: string; winnerId: string | null }[]
 ): Promise<{ error?: string }> {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  await getOwnedTournament(tournamentId);
 
-  const result = await dbArbitrateMatch(matchId, setWinners).catch(
+  const result = await dbArbitrateMatch(matchId, tournamentId, setWinners).catch(
     (): Awaited<ReturnType<typeof dbArbitrateMatch>> => ({ error: "Erreur lors de la correction du match." })
   );
   if (result.error) return result;

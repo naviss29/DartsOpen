@@ -1,9 +1,9 @@
-import { notFound } from "next/navigation";
 import { RoundForm } from "@/components/tournament/RoundForm";
 import { DeleteRoundButton } from "@/components/tournament/DeleteRoundButton";
 import { TournamentStatusButton } from "@/components/tournament/TournamentStatusButton";
 import { EditTournamentForm } from "@/components/tournament/EditTournamentForm";
-import { dbGetTournament, dbListRegistrations, dbListPools } from "@/lib/db/tournament";
+import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
+import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -31,20 +31,19 @@ type Tournament = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const tournament = await dbGetTournament(id).catch(() => null) as Tournament | null;
-  return { title: tournament ? `${tournament.name} — DartsOpen` : "Tournoi — DartsOpen" };
+  const tournament = await getOwnedTournament(id) as Tournament;
+  return { title: `${tournament.name} — DartsOpen` };
 }
 
 export default async function TournamentDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const [tournament, registrations, pools] = await Promise.all([
-    dbGetTournament(id).catch(() => null) as Promise<Tournament | null>,
+  const tournament = await getOwnedTournament(id) as Tournament;
+
+  const [registrations, pools] = await Promise.all([
     dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
     dbListPools(id).catch(() => []) as Promise<{ id: string }[]>,
   ]);
-
-  if (!tournament) notFound();
 
   const playerCount = registrations.length;
   const poolCount = pools.length;

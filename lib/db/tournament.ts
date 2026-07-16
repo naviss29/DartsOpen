@@ -1,5 +1,6 @@
 import { prisma } from "./client";
 import type { BracketType, MatchStatus, RegistrationStatus, TournamentStatus } from "../generated/prisma/client";
+import { assertValidTransition } from "../utils/tournamentStatus";
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
@@ -364,6 +365,9 @@ export async function dbDeleteTournament(id: string) {
 }
 
 export async function dbUpdateTournamentStatus(id: string, status: string) {
+  const current = await prisma.tournament.findUniqueOrThrow({ where: { id }, select: { status: true } });
+  assertValidTransition(current.status, status);
+
   const t = await prisma.tournament.update({
     where: { id },
     data: { status: status as TournamentStatus },
@@ -393,8 +397,8 @@ export async function dbAddRound(tournamentId: string, data: {
   return mapRound(r);
 }
 
-export async function dbDeleteRound(roundId: string) {
-  await prisma.round.delete({ where: { id: roundId } });
+export async function dbDeleteRound(roundId: string, tournamentId: string) {
+  await prisma.round.deleteMany({ where: { id: roundId, tournamentId } });
 }
 
 // ── Registrations ─────────────────────────────────────────────────────────────
@@ -432,12 +436,12 @@ export async function dbAddRegistration(tournamentId: string, data: {
   return mapRegistration(r);
 }
 
-export async function dbDeleteRegistration(registrationId: string) {
-  await prisma.registration.delete({ where: { id: registrationId } });
+export async function dbDeleteRegistration(registrationId: string, tournamentId: string) {
+  await prisma.registration.deleteMany({ where: { id: registrationId, tournamentId } });
 }
 
-export async function dbSetSeeded(registrationId: string, seeded: boolean) {
-  await prisma.registration.update({ where: { id: registrationId }, data: { seeded } });
+export async function dbSetSeeded(registrationId: string, tournamentId: string, seeded: boolean) {
+  await prisma.registration.updateMany({ where: { id: registrationId, tournamentId }, data: { seeded } });
 }
 
 export async function dbCountRegistrations(tournamentId: string, status?: string) {
@@ -632,10 +636,11 @@ export async function dbDeleteBracketMatches(tournamentId: string) {
  */
 export async function dbArbitrateMatch(
   matchId: string,
+  tournamentId: string,
   setWinners: { setId: string; winnerId: string | null }[]
 ): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
-  const match = await prisma.match.findUnique({
-    where: { id: matchId },
+  const match = await prisma.match.findFirst({
+    where: { id: matchId, tournamentId },
     include: {
       sets: true,
       tournament: { select: { id: true, quickMode: true } },

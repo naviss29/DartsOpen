@@ -6,12 +6,12 @@ import {
   dbConfirmWinner,
   dbDisputeResult,
   dbMarkWinnerDirect,
-  dbGetTournament,
 } from "@/lib/db/tournament";
 import { doAdvanceToNextRound } from "@/lib/actions/bracket";
 import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 import { publishMatchUpdate } from "@/lib/mercure";
 import { getUser } from "@/lib/api/auth";
+import { getOwnedTournament } from "@/lib/actions/access";
 
 export async function proposeWinner(
   matchSetId: string,
@@ -70,13 +70,7 @@ export async function markWinnerDirect(
   winnerId: string,
   tournamentId: string
 ): Promise<{ error?: string }> {
-  const user = await getUser();
-  if (!user) return { error: "Non authentifié." };
-
-  const tournament = await dbGetTournament(tournamentId);
-  if (!tournament || tournament.association_id !== user.id) {
-    return { error: "Accès refusé." };
-  }
+  await getOwnedTournament(tournamentId);
 
   const result = await dbMarkWinnerDirect(matchSetId, winnerId).catch(
     (): Awaited<ReturnType<typeof dbMarkWinnerDirect>> => ({ error: "Erreur lors de la saisie du score." })

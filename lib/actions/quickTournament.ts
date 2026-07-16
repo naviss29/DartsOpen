@@ -1,8 +1,7 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getUser } from "@/lib/api/auth";
+import { getOwnedTournament } from "@/lib/actions/access";
 import {
   dbGetTournament,
   dbListRegistrations,
@@ -39,15 +38,7 @@ import type { BracketType } from "@/lib/generated/prisma/client";
  * (ses adversaires arriveront au fil des matchs).
  */
 export async function generateQuickBracket(tournamentId: string): Promise<{ error?: string }> {
-  const user = await getUser();
-  if (!user) redirect("/login");
-
-  const tournament = await dbGetTournament(tournamentId).catch((err) => {
-    console.error("[generateQuickBracket] dbGetTournament:", err);
-    return null;
-  });
-  if (!tournament) return { error: "Tournoi introuvable." };
-  if (tournament.association_id !== user.id) return { error: "Accès refusé." };
+  const tournament = await getOwnedTournament(tournamentId);
   if (!tournament.quick_mode) return { error: "Ce tournoi n'est pas en mode rapide." };
 
   const registrations = await dbListRegistrations(tournamentId, "PAID").catch((err) => {

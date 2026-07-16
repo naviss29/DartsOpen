@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { distributeWithSeeding } from "@/lib/utils/pools";
 import { generateRoundRobin } from "@/lib/utils/bracket";
-import { dbListRegistrations, dbGeneratePools, dbGetTournament } from "@/lib/db/tournament";
-import { getUser } from "@/lib/api/auth";
+import { dbListRegistrations, dbGeneratePools } from "@/lib/db/tournament";
+import { getOwnedTournament } from "@/lib/actions/access";
 
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -14,17 +14,10 @@ export async function generatePools(
   _prevState: { error?: string } | null,
   _formData: FormData
 ): Promise<{ error?: string }> {
-  const user = await getUser();
-  if (!user) return { error: "Non authentifié." };
-
   const [tournament, players] = await Promise.all([
-    dbGetTournament(tournamentId),
+    getOwnedTournament(tournamentId),
     dbListRegistrations(tournamentId, "PAID"),
   ]);
-
-  if (!tournament || tournament.association_id !== user.id) {
-    return { error: "Accès refusé." };
-  }
 
   if (tournament.status !== "OPEN" && tournament.status !== "IN_PROGRESS") {
     return { error: "Les poules ne peuvent être générées que lorsque le tournoi est ouvert ou en cours." };

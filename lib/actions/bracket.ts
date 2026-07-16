@@ -1,9 +1,8 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { seedBracket } from "@/lib/utils/bracket";
 import { computePoolStandings } from "@/lib/utils/pools";
-import { getUser } from "@/lib/api/auth";
+import { getOwnedTournament } from "@/lib/actions/access";
 import {
   dbGetTournament,
   dbListRegistrations,
@@ -70,11 +69,7 @@ async function getAdvancingPlayerIds(
 }
 
 export async function generateBracket(tournamentId: string): Promise<{ error?: string }> {
-  const user = await getUser();
-  if (!user) redirect("/login");
-
-  const tournament = await dbGetTournament(tournamentId);
-  if (!tournament) return { error: "Tournoi introuvable." };
+  const tournament = await getOwnedTournament(tournamentId);
 
   const advancingPlayers = await getAdvancingPlayerIds(tournamentId, tournament);
 
@@ -121,8 +116,7 @@ export async function advanceToNextRound(
   tournamentId: string,
   currentBracketRound: number
 ): Promise<{ error?: string; finished?: boolean }> {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  await getOwnedTournament(tournamentId);
 
   return doAdvanceToNextRound(tournamentId, currentBracketRound);
 }

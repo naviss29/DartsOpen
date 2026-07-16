@@ -49,6 +49,15 @@ prisma/     → schema + migrations
 scripts/    → seed de données de test
 ```
 
+## Contrôle d'accès organisateur
+
+- `getOwnedTournament(tournamentId)` (`lib/actions/access.ts`) est le point d'entrée unique : vérifie le JWT SterPlatform, charge le tournoi et compare `tournament.association_id` au `user.id` → `notFound()` sinon (404 indistinguable d'un tournoi inexistant)
+- Utilisé en première instruction par les 5 pages `(dashboard)/tournaments/[id]/**` et par toutes les Server Actions organisateur (création/édition/suppression de tournoi et manches, génération poules/bracket/bracket rapide, avancement de tour, arbitrage, gestion des joueurs)
+- **Ne jamais wrapper l'appel dans `.catch()`** : `notFound()`/`redirect()` sont des throws spéciaux Next.js qui doivent se propager
+- Volontairement laissé hors contrôle : `addPlayer`/`createRegistration` (inscription publique), `proposeWinner`/`confirmWinner`/`disputeResult` (saisie de score publique), `doAdvanceToNextRound`/`doAdvanceQuickTournament` (helpers internes partagés avec le flux public, protégés indirectement via leurs appelants organisateur)
+- Les sous-ressources (`round`, `registration`, `match`) sont scopées par `tournamentId` côté DB (`deleteMany`/`updateMany` avec `where` composé) pour empêcher la substitution d'un identifiant appartenant à un autre tournoi
+- Transitions de statut validées côté serveur par `lib/utils/tournamentStatus.ts` (`DRAFT → OPEN → IN_PROGRESS → FINISHED`, séquentiel, `FINISHED` terminal), appliqué dans `dbUpdateTournamentStatus`
+
 ## Algorithme de classement (lib/db/ranking.ts)
 - Participation : +1 pt
 - Victoire en poule : +1 pt

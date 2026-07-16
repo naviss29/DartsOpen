@@ -1,9 +1,10 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { generateBracket, advanceToNextRound } from "@/lib/actions/bracket";
 import { generateQuickBracket } from "@/lib/actions/quickTournament";
 import { BracketView } from "@/components/tournament/BracketView";
 import { QuickBracketView } from "@/components/tournament/QuickBracketView";
-import { dbGetTournament, dbListMatches } from "@/lib/db/tournament";
+import { dbListMatches } from "@/lib/db/tournament";
+import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -38,8 +39,7 @@ type BracketMatch = {
 export default async function BracketPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await dbGetTournament(id).catch(() => null) as Tournament | null;
-  if (!tournament) notFound();
+  const tournament = await getOwnedTournament(id) as Tournament;
   if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
     redirect(`/tournaments/${id}/pools`);
   }

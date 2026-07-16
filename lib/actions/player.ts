@@ -5,6 +5,7 @@ import { z } from "zod";
 import { dbAddRegistration, dbDeleteRegistration, dbGetTournament, dbSetSeeded } from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
 import { sendEmail } from "@/lib/api/sterplatform";
+import { getOwnedTournament } from "@/lib/actions/access";
 
 // Email facultatif : les tournois rapides n'ont pas de champ email dans le formulaire.
 // La chaîne vide "" est acceptée (valeur soumise par un <input type="hidden"> absent).
@@ -100,20 +101,21 @@ export async function setSeedStatus(
   tournamentId: string,
   seeded: boolean
 ): Promise<{ error?: string }> {
-  const ok = await dbSetSeeded(registrationId, seeded).then(() => true).catch(() => null);
+  await getOwnedTournament(tournamentId);
+
+  const ok = await dbSetSeeded(registrationId, tournamentId, seeded).then(() => true).catch(() => null);
   if (!ok) return { error: "Erreur lors de la mise à jour." };
   revalidatePath(`/tournaments/${tournamentId}/players`);
   return {};
 }
 
 export async function removePlayer(registrationId: string, tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await dbGetTournament(tournamentId).catch(() => null);
-  if (!tournament) return { error: "Tournoi introuvable." };
+  const tournament = await getOwnedTournament(tournamentId);
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     return { error: "Impossible de retirer un joueur une fois le tournoi démarré." };
   }
 
-  const ok = await dbDeleteRegistration(registrationId).catch(() => null);
+  const ok = await dbDeleteRegistration(registrationId, tournamentId).catch(() => null);
   if (ok === null) return { error: "Erreur lors de la suppression du joueur." };
 
   revalidatePath(`/tournaments/${tournamentId}/players`);
