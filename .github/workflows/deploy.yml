@@ -1,7 +1,9 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main, develop]
 
 env:
@@ -11,16 +13,17 @@ jobs:
   deploy:
     name: Deploy vers Coolify
     runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Deploy staging (develop)
-        if: github.ref == 'refs/heads/develop'
+        if: github.event.workflow_run.head_branch == 'develop'
         run: |
           curl --silent --show-error --fail \
             -X GET "${{ secrets.COOLIFY_STAGING_WEBHOOK_URL }}" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
 
       - name: Deploy prod (main)
-        if: github.ref == 'refs/heads/main'
+        if: github.event.workflow_run.head_branch == 'main'
         run: |
           curl --silent --show-error --fail \
             -X GET "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
