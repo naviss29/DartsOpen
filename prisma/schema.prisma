@@ -36,6 +36,13 @@ enum ScoringMode {
   TRADITIONAL
 }
 
+enum BracketType {
+  SINGLE
+  WINNERS
+  LOSERS
+  GRAND_FINAL
+}
+
 model Organization {
   userId          String  @id @map("user_id")
   stripeAccountId String? @map("stripe_account_id")
@@ -58,6 +65,7 @@ model Tournament {
   playersPerTeam     Int              @default(1) @map("players_per_team")
   registrationMode   RegistrationMode @default(ONLINE) @map("registration_mode")
   scoringMode        ScoringMode      @default(ELECTRONIC) @map("scoring_mode")
+  quickMode          Boolean          @default(false) @map("quick_mode")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
@@ -65,6 +73,7 @@ model Tournament {
   pools         Pool[]
   matches       Match[]
 
+  @@index([userId])
   @@map("tournaments")
 }
 
@@ -79,6 +88,7 @@ model Round {
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   matchSets  MatchSet[]
 
+  @@index([tournamentId])
   @@map("rounds")
 }
 
@@ -96,6 +106,7 @@ model Registration {
   platformFeeCents Int                @default(0) @map("platform_fee_cents")
   feeCollected     Boolean            @default(false) @map("fee_collected")
   seeded           Boolean            @default(false)
+  lives            Int                @default(2)
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tournament  Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -105,6 +116,8 @@ model Registration {
   matchesWon  Match[]      @relation("MatchWinner")
   setsWon     MatchSet[]
 
+  @@index([tournamentId])
+  @@index([tournamentId, status])
   @@map("registrations")
 }
 
@@ -117,6 +130,7 @@ model Pool {
   players    PoolPlayer[]
   matches    Match[]
 
+  @@index([tournamentId])
   @@map("pools")
 }
 
@@ -129,6 +143,7 @@ model PoolPlayer {
   registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@id([poolId, registrationId])
+  @@index([registrationId])
   @@map("pool_players")
 }
 
@@ -139,6 +154,7 @@ model Match {
   bracketRound    Int?        @map("bracket_round")
   bracketPosition Int?        @map("bracket_position")
   boardNumber     Int         @default(0) @map("board_number")
+  bracketType     BracketType @default(SINGLE) @map("bracket_type")
   status          MatchStatus @default(PENDING)
   player1Id       String      @map("player1_id")
   player2Id       String?     @map("player2_id")
@@ -152,6 +168,10 @@ model Match {
   winner     Registration? @relation("MatchWinner", fields: [winnerId], references: [id])
   sets       MatchSet[]
 
+  @@index([tournamentId])
+  @@index([tournamentId, bracketRound])
+  @@index([tournamentId, poolId, status])
+  @@index([poolId])
   @@map("matches")
 }
 
@@ -169,5 +189,6 @@ model MatchSet {
   round  Round        @relation(fields: [roundId], references: [id])
   winner Registration? @relation(fields: [winnerId], references: [id])
 
+  @@index([matchId])
   @@map("match_sets")
 }

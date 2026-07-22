@@ -1,9 +1,9 @@
 # DartsOpen — Documentation technique
 
-> Version : 1.3
+> Version : 1.4
 > Auteur : Alan
 > Date : Mai 2026
-> Statut : **Phase 12 active — validation 501, historique des volées**
+> Statut : **Phase 12 terminée — audit sécurité + performance appliqué**
 
 ---
 
@@ -24,6 +24,7 @@
 | 1.1 | Mai 2026 | Phase 10 — correction finalisation matchs (sets stale dans dbConfirmWinner), rétro-compatibilité tryFinalizeMatch, régénération poules IN_PROGRESS, vue live enrichie (couleurs, Derniers résultats, pagination À venir) |
 | 1.2 | Mai 2026 | Phase 11 — têtes de série (dispatch serpentin), arbitrage admin par manche, dashboard multi-utilisateur, fix "Derniers résultats" (updated_at), migration OVH VPS-2, 103 tests |
 | 1.3 | Mai 2026 | Phase 12 — validation 501 (scores impossibles, bust double out, positions de fermeture impossibles), historique des volées, 120 tests |
+| 1.4 | Mai 2026 | Audit sécurité + performance — 12 index Prisma (Tournament, Round, Registration, Pool, PoolPlayer, Match, MatchSet), waterfalls → Promise.all (bracket + pool), take:100 dbListAllTournaments, vérification ownership sur toutes les Server Actions, next@16.2.6 (GHSA-36qx-fr4f-26g5 bypass middleware) |
 
 ---
 
@@ -162,8 +163,8 @@ MatchSet (score par manche)
 ### Multi-tenant
 
 Chaque association est un tenant isolé. L'isolation des données est assurée par :
-- **Supabase RLS (Row Level Security)** : les policies PostgreSQL filtrent automatiquement par `association_id`
-- **JWT Supabase** : le token contient le `association_id`, vérifié côté serveur
+- **`getOwnedTournament()`** (`lib/actions/access.ts`) : point d'entrée unique appelé par toutes les pages et Server Actions organisateur. Vérifie le JWT SterPlatform (`ster_token`), charge le tournoi et compare `tournament.association_id` au `user.id` — accès refusé (404) en cas de mismatch, sans révéler l'existence du tournoi
+- Les pages et actions publiques (inscription, saisie de score) restent volontairement en dehors de ce contrôle
 
 ### Temps réel
 
@@ -172,9 +173,11 @@ Joueur saisit un score
         ↓
 Server Action Next.js (validation + écriture PostgreSQL)
         ↓
-Supabase Realtime broadcast (channel: tournament:{id})
+Mercure hub (JWT HS256) publie sur le topic tournaments/{id}/matches
         ↓
-Tous les clients abonnés (salle + smartphones) → re-render instantané
+Clients abonnés (SSE) → re-render instantané
+        ↓
+Fallback : polling automatique si Mercure indisponible (MatchBoard 3s, BracketLive/TvBoard 5s)
 ```
 
 ### Flux paiement Stripe Connect

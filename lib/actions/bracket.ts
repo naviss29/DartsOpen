@@ -1,9 +1,8 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { seedBracket } from "@/lib/utils/bracket";
 import { computePoolStandings } from "@/lib/utils/pools";
-import { getUser } from "@/lib/api/auth";
+import { getOwnedTournament } from "@/lib/actions/access";
 import {
   dbGetTournament,
   dbListRegistrations,
@@ -11,6 +10,7 @@ import {
   dbListMatches,
   dbBulkCreateMatches,
   dbDeleteBracketMatches,
+  dbUpdateTournamentStatus,
 } from "@/lib/db/tournament";
 
 async function getAdvancingPlayerIds(
@@ -22,9 +22,11 @@ async function getAdvancingPlayerIds(
     return registrations.map((r) => r.id);
   }
 
-  const allMatches = await dbListMatches(tournamentId);
+  const [allMatches, pools] = await Promise.all([
+    dbListMatches(tournamentId),
+    dbListPools(tournamentId),
+  ]);
   const poolMatches = allMatches.filter((m) => m.pool_id !== null);
-  const pools = await dbListPools(tournamentId);
   if (!pools.length) return [];
 
   const advancing: string[] = [];
@@ -68,11 +70,7 @@ async function getAdvancingPlayerIds(
 }
 
 export async function generateBracket(tournamentId: string): Promise<{ error?: string }> {
-  const user = await getUser();
-  if (!user) redirect("/login");
-
-  const tournament = await dbGetTournament(tournamentId);
-  if (!tournament) return { error: "Tournoi introuvable." };
+  const tournament = await getOwnedTournament(tournamentId);
 
   const advancingPlayers = await getAdvancingPlayerIds(tournamentId, tournament);
 
@@ -119,8 +117,7 @@ export async function advanceToNextRound(
   tournamentId: string,
   currentBracketRound: number
 ): Promise<{ error?: string; finished?: boolean }> {
-  const user = await getUser();
-  if (!user) redirect("/login");
+  await getOwnedTournament(tournamentId);
 
   return doAdvanceToNextRound(tournamentId, currentBracketRound);
 }
@@ -129,10 +126,11 @@ export async function doAdvanceToNextRound(
   tournamentId: string,
   currentBracketRound: number
 ): Promise<{ error?: string; finished?: boolean }> {
-  const tournament = await dbGetTournament(tournamentId);
+  const [tournament, allMatches] = await Promise.all([
+    dbGetTournament(tournamentId),
+    dbListMatches(tournamentId),
+  ]);
   if (!tournament) return { error: "Tournoi introuvable." };
-
-  const allMatches = await dbListMatches(tournamentId);
   const bracketMatches = allMatches.filter(
     (m) => m.pool_id === null && m.bracket_round === currentBracketRound
   );
@@ -142,7 +140,14 @@ export async function doAdvanceToNextRound(
   const allFinished = bracketMatches.every((m) => m.status === "FINISHED");
   if (!allFinished) return { error: "Tous les matchs du tour en cours doivent être terminés." };
 
-  if (bracketMatches.length === 1) return { finished: true };
+  if (bracketMatches.length === 1) {
+    // Miroir du mode rapide (doAdvanceQuickTournament) : la fin du bracket clôture
+    // automatiquement le tournoi, sans intervention manuelle de l'organisateur.
+    await dbUpdateTournamentStatus(tournamentId, "FINISHED").catch((err) =>
+      console.warn("[doAdvanceToNextRound] updateStatus FINISHED:", err)
+    );
+    return { finished: true };
+  }
 
   const rounds = [...tournament.rounds].sort((a, b) => a.order - b.order);
   const nextRound = currentBracketRound + 1;

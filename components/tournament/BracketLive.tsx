@@ -3,8 +3,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { roundLabel } from "@/lib/utils/bracket";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
-const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
 const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
 
 interface BracketMatch {
@@ -75,8 +73,7 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
       if (!MERCURE_URL) { startPolling(); return; }
 
       const tokenRes = await fetch(
-        `${API_URL}/api/public/tournaments/${tournamentId}/mercure-token`,
-        { headers: { "X-Organization-Slug": ORG_SLUG } }
+        `/api/public/tournaments/${tournamentId}/mercure-token`
       );
       if (!tokenRes.ok) { startPolling(); return; }
 

@@ -120,9 +120,10 @@ export function BracketView({ matches, maxRound, tournamentId }: Props) {
                       .sort((a, b) => a.bracket_position - b.bracket_position)
                       .map((match) => {
                         const top = match.bracket_position * slotH + (slotH - CARD_H) / 2;
+                        const laterMatchesCount = matches.filter((m) => m.bracket_round > match.bracket_round).length;
                         return (
                           <div key={match.id} style={{ position: "absolute", top, left: 0, right: 0 }}>
-                            <BracketCard match={match} tournamentId={tournamentId} />
+                            <BracketCard match={match} tournamentId={tournamentId} laterMatchesCount={laterMatchesCount} />
                           </div>
                         );
                       })
@@ -130,9 +131,10 @@ export function BracketView({ matches, maxRound, tournamentId }: Props) {
                     Array.from({ length: count }, (_, j) => {
                       const match = roundMap.get(j);
                       const top = j * slotH + (slotH - CARD_H) / 2;
+                      const laterMatchesCount = match ? matches.filter((m) => m.bracket_round > match.bracket_round).length : 0;
                       return (
                         <div key={match?.id ?? `ph-${round}-${j}`} style={{ position: "absolute", top, left: 0, right: 0 }}>
-                          {match ? <BracketCard match={match} tournamentId={tournamentId} /> : <PlaceholderCard />}
+                          {match ? <BracketCard match={match} tournamentId={tournamentId} laterMatchesCount={laterMatchesCount} /> : <PlaceholderCard />}
                         </div>
                       );
                     })
@@ -160,7 +162,7 @@ function PlaceholderCard() {
   );
 }
 
-function BracketCard({ match, tournamentId }: { match: BracketMatch; tournamentId?: string }) {
+function BracketCard({ match, tournamentId, laterMatchesCount = 0 }: { match: BracketMatch; tournamentId?: string; laterMatchesCount?: number }) {
   const isBye = match.player2 === null;
   if (isBye) {
     return (
@@ -194,6 +196,7 @@ function BracketCard({ match, tournamentId }: { match: BracketMatch; tournamentI
           <ArbitrateMatchButton
             match={{ ...match, player1: match.player1, player2: match.player2, sets: match.sets }}
             tournamentId={tournamentId}
+            laterMatchesCount={laterMatchesCount}
           />
         </div>
       )}

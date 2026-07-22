@@ -1,9 +1,9 @@
-import { notFound } from "next/navigation";
 import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 import { PrintButton } from "@/components/tournament/PrintButton";
 import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
-import { dbGetTournament, dbListPools, dbListRegistrations } from "@/lib/db/tournament";
+import { dbListPools, dbListRegistrations } from "@/lib/db/tournament";
+import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -39,15 +39,15 @@ type Pool = {
 export default async function PoolsPage({ params }: Props) {
   const { id } = await params;
 
-  const [tournament, pools, registrations] = await Promise.all([
-    dbGetTournament(id).catch(() => null) as Promise<Tournament | null>,
+  const tournament = await getOwnedTournament(id) as Tournament;
+
+  const [pools, registrations] = await Promise.all([
     dbListPools(id).catch(() => []) as Promise<Pool[]>,
     dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
   ]);
 
-  if (!tournament) notFound();
-
   const hasPools = pools.length > 0;
+  const hasFinishedMatch = pools.some((p) => p.matches.some((m) => m.status === "FINISHED"));
   const registrationCount = registrations.length;
   const totalPlayers = registrationCount * tournament.players_per_team;
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
@@ -124,6 +124,7 @@ export default async function PoolsPage({ params }: Props) {
             hasPools={hasPools}
             nbPoolsConfigured={tournament.nb_pools}
             effectivePools={effectivePools}
+            hasFinishedMatch={hasFinishedMatch}
           />
         )}
       </div>

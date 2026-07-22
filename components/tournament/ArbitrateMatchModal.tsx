@@ -23,9 +23,11 @@ interface Props {
     sets: MatchSet[];
   };
   tournamentId: string;
+  /** Nombre de matchs déjà générés dans les tours suivants — 0 si aucun risque de suppression. */
+  laterMatchesCount?: number;
 }
 
-export function ArbitrateMatchButton({ match, tournamentId }: Props) {
+export function ArbitrateMatchButton({ match, tournamentId, laterMatchesCount = 0 }: Props) {
   const [open, setOpen] = useState(false);
 
   if (!match.sets?.length) return null;
@@ -43,6 +45,7 @@ export function ArbitrateMatchButton({ match, tournamentId }: Props) {
         <ArbitrateModal
           match={match}
           tournamentId={tournamentId}
+          laterMatchesCount={laterMatchesCount}
           onClose={() => setOpen(false)}
         />
       )}
@@ -50,13 +53,21 @@ export function ArbitrateMatchButton({ match, tournamentId }: Props) {
   );
 }
 
-function ArbitrateModal({ match, tournamentId, onClose }: Props & { onClose: () => void }) {
+function ArbitrateModal({ match, tournamentId, laterMatchesCount = 0, onClose }: Props & { onClose: () => void }) {
   const sortedSets = [...match.sets].sort((a, b) => a.round_order - b.round_order);
   const [winners, setWinners] = useState<Record<string, string | null>>(
     Object.fromEntries(sortedSets.map((s) => [s.id, s.winner_id]))
   );
   const [error, setError] = useState<string | null>(null);
+  const [ackDestructive, setAckDestructive] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const isDestructive = laterMatchesCount > 0;
+
+  const setWinner = (setId: string, winnerId: string | null) => {
+    setWinners((w) => ({ ...w, [setId]: winnerId }));
+    setAckDestructive(false);
+  };
 
   const handleSubmit = () => {
     setError(null);
@@ -92,22 +103,41 @@ function ArbitrateModal({ match, tournamentId, onClose }: Props & { onClose: () 
                 <WinnerBtn
                   label={match.player1.player_name}
                   active={winners[s.id] === match.player1.id}
-                  onClick={() => setWinners((w) => ({ ...w, [s.id]: match.player1.id }))}
+                  onClick={() => setWinner(s.id, match.player1.id)}
                 />
                 <WinnerBtn
                   label={match.player2.player_name}
                   active={winners[s.id] === match.player2.id}
-                  onClick={() => setWinners((w) => ({ ...w, [s.id]: match.player2.id }))}
+                  onClick={() => setWinner(s.id, match.player2.id)}
                 />
                 <WinnerBtn
                   label="—"
                   active={winners[s.id] === null}
-                  onClick={() => setWinners((w) => ({ ...w, [s.id]: null }))}
+                  onClick={() => setWinner(s.id, null)}
                 />
               </div>
             </div>
           ))}
         </div>
+
+        {isDestructive && (
+          <div className="rounded-lg bg-red-950/50 border border-red-800 p-3 space-y-2">
+            <p className="text-sm text-red-300">
+              ⚠️ Si le vainqueur change, cette correction supprimera les{" "}
+              <strong>{laterMatchesCount} match{laterMatchesCount > 1 ? "s" : ""} déjà généré{laterMatchesCount > 1 ? "s" : ""}</strong>{" "}
+              dans les tours suivants (et leurs scores). Cette action est irréversible.
+            </p>
+            <label className="flex items-start gap-2 text-sm text-red-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ackDestructive}
+                onChange={(e) => setAckDestructive(e.target.checked)}
+                className="mt-0.5"
+              />
+              Je comprends et je confirme la correction.
+            </label>
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
@@ -121,7 +151,7 @@ function ArbitrateModal({ match, tournamentId, onClose }: Props & { onClose: () 
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isPending}
+            disabled={isPending || (isDestructive && !ackDestructive)}
             className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 transition-colors disabled:opacity-50"
           >
             {isPending ? "Enregistrement…" : "Valider la correction"}

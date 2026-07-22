@@ -59,10 +59,11 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
 
       {isTeam && (
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">
+          <label htmlFor="team_name" className="block text-sm font-medium text-gray-300 mb-1">
             Nom de l&apos;équipe *
           </label>
           <input
+            id="team_name"
             name="team_name"
             type="text"
             required
@@ -74,12 +75,13 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       )}
 
       <div className="space-y-3">
-        <p className="text-sm font-medium text-gray-300">
+        <label htmlFor="player_0" className="block text-sm font-medium text-gray-300">
           {isTeam ? "Pseudos des joueurs *" : "Votre pseudo *"}
-        </p>
+        </label>
         {Array.from({ length: playersPerTeam }, (_, i) => (
           <input
             key={i}
+            id={`player_${i}`}
             name={`player_${i}`}
             type="text"
             required
@@ -91,10 +93,11 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">
+        <label htmlFor="contact_email" className="block text-sm font-medium text-gray-300 mb-1">
           Email de contact *
         </label>
         <input
+          id="contact_email"
           name="contact_email"
           type="email"
           required
@@ -107,10 +110,11 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">
+        <label htmlFor="phone" className="block text-sm font-medium text-gray-300 mb-1">
           Téléphone (optionnel)
         </label>
         <input
+          id="phone"
           name="phone"
           type="tel"
           placeholder="0612345678"

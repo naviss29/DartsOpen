@@ -17,12 +17,16 @@ interface Props {
     players_per_team: number;
     registration_mode: string;
     scoring_mode: string;
+    quick_mode: boolean;
   };
 }
 
 export function EditTournamentForm({ tournament }: Props) {
   const [state, action, isPending] = useActionState(updateTournament, undefined);
   const [isOpen, setIsOpen] = useState(false);
+  const [quickMode, setQuickMode] = useState(
+    state?.fields?.quick_mode === "true" ? true : state?.fields?.quick_mode === "false" ? false : tournament.quick_mode
+  );
   const prevPending = useRef(false);
 
   useEffect(() => {
@@ -46,6 +50,7 @@ export function EditTournamentForm({ tournament }: Props) {
       {isOpen && (
     <form key={state?.ts ?? "initial"} action={action} className="space-y-4">
       <input type="hidden" name="tournament_id" value={tournament.id} />
+      <input type="hidden" name="quick_mode" value={quickMode ? "true" : "false"} />
 
       {state?.error && (
         <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
@@ -53,10 +58,32 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
       )}
 
+      {/* Mode rapide */}
+      <div className="rounded-lg border border-gray-200 p-4">
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Mode tournoi rapide</p>
+            <p className="text-xs text-gray-500 mt-0.5">Double élimination — 2 vies par joueur, bracket dynamique.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={quickMode}
+            onClick={() => setQuickMode((v) => !v)}
+            className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${quickMode ? "bg-green-500" : "bg-gray-300"}`}
+          >
+            <span
+              className={`block w-5 h-5 rounded-full bg-white shadow transition-transform translate-y-0.5 ${quickMode ? "translate-x-5.5" : "translate-x-0.5"}`}
+            />
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nom du tournoi</label>
+          <label htmlFor="edit_name" className="block text-sm font-medium text-gray-700 mb-1">Nom du tournoi</label>
           <input
+            id="edit_name"
             name="name"
             type="text"
             required
@@ -67,8 +94,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+          <label htmlFor="edit_date" className="block text-sm font-medium text-gray-700 mb-1">Date</label>
           <input
+            id="edit_date"
             name="date"
             type="date"
             required
@@ -79,8 +107,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Lieu</label>
+          <label htmlFor="edit_location" className="block text-sm font-medium text-gray-700 mb-1">Lieu</label>
           <input
+            id="edit_location"
             name="location"
             type="text"
             required
@@ -91,8 +120,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Joueurs max</label>
+          <label htmlFor="edit_max_players" className="block text-sm font-medium text-gray-700 mb-1">Joueurs max</label>
           <input
+            id="edit_max_players"
             name="max_players"
             type="number"
             min="2"
@@ -105,8 +135,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€ / joueur)</label>
+          <label htmlFor="edit_entry_fee" className="block text-sm font-medium text-gray-700 mb-1">Droits d&apos;inscription (€ / joueur)</label>
           <input
+            id="edit_entry_fee"
             name="entry_fee"
             type="number"
             min="0"
@@ -117,23 +148,37 @@ export function EditTournamentForm({ tournament }: Props) {
           {state?.errors?.entry_fee && <p className="mt-1 text-xs text-red-600">{state.errors.entry_fee[0]}</p>}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de poules</label>
-          <input
-            name="nb_pools"
-            type="number"
-            min="1"
-            max="64"
-            required
-            defaultValue={state?.fields?.nb_pools ?? tournament.nb_pools}
-            className={inputCn}
-          />
-          {state?.errors?.nb_pools && <p className="mt-1 text-xs text-red-600">{state.errors.nb_pools[0]}</p>}
-        </div>
+        {/* Nombre de poules : verrouillé à 1 en mode rapide */}
+        {quickMode ? (
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-1">Nombre de poules</label>
+            <div className={`${inputCn} bg-gray-50 text-gray-400 cursor-not-allowed flex items-center gap-2`}>
+              <span>1</span>
+              <span className="text-xs">(mode rapide)</span>
+            </div>
+            <input type="hidden" name="nb_pools" value="1" />
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="edit_nb_pools" className="block text-sm font-medium text-gray-700 mb-1">Nombre de poules</label>
+            <input
+              id="edit_nb_pools"
+              name="nb_pools"
+              type="number"
+              min="1"
+              max="64"
+              required
+              defaultValue={state?.fields?.nb_pools ?? tournament.nb_pools}
+              className={inputCn}
+            />
+            {state?.errors?.nb_pools && <p className="mt-1 text-xs text-red-600">{state.errors.nb_pools[0]}</p>}
+          </div>
+        )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de cibles</label>
+          <label htmlFor="edit_nb_boards" className="block text-sm font-medium text-gray-700 mb-1">Nombre de cibles</label>
           <input
+            id="edit_nb_boards"
             name="nb_boards"
             type="number"
             min="1"
@@ -146,8 +191,9 @@ export function EditTournamentForm({ tournament }: Props) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Qualifiés par poule</label>
+          <label htmlFor="edit_advancement_per_pool" className="block text-sm font-medium text-gray-700 mb-1">Qualifiés par poule</label>
           <input
+            id="edit_advancement_per_pool"
             name="advancement_per_pool"
             type="number"
             min="1"
@@ -159,19 +205,32 @@ export function EditTournamentForm({ tournament }: Props) {
           {state?.errors?.advancement_per_pool && <p className="mt-1 text-xs text-red-600">{state.errors.advancement_per_pool[0]}</p>}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Joueurs par équipe</label>
-          <input
-            name="players_per_team"
-            type="number"
-            min="1"
-            max="10"
-            required
-            defaultValue={state?.fields?.players_per_team ?? tournament.players_per_team}
-            className={inputCn}
-          />
-          {state?.errors?.players_per_team && <p className="mt-1 text-xs text-red-600">{state.errors.players_per_team[0]}</p>}
-        </div>
+        {/* Joueurs par équipe : verrouillé à 1 en mode rapide */}
+        {quickMode ? (
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-1">Joueurs par équipe</label>
+            <div className={`${inputCn} bg-gray-50 text-gray-400 cursor-not-allowed flex items-center gap-2`}>
+              <span>1</span>
+              <span className="text-xs">(mode rapide)</span>
+            </div>
+            <input type="hidden" name="players_per_team" value="1" />
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="edit_players_per_team" className="block text-sm font-medium text-gray-700 mb-1">Joueurs par équipe</label>
+            <input
+              id="edit_players_per_team"
+              name="players_per_team"
+              type="number"
+              min="1"
+              max="10"
+              required
+              defaultValue={state?.fields?.players_per_team ?? tournament.players_per_team}
+              className={inputCn}
+            />
+            {state?.errors?.players_per_team && <p className="mt-1 text-xs text-red-600">{state.errors.players_per_team[0]}</p>}
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-gray-200 p-4 space-y-2">

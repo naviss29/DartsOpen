@@ -6,9 +6,10 @@ import { addPlayer } from "@/lib/actions/player";
 interface Props {
   tournamentId: string;
   playersPerTeam: number;
+  quickMode?: boolean;
 }
 
-export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
+export function AddPlayerForm({ tournamentId, playersPerTeam, quickMode = false }: Props) {
   const [state, action, isPending] = useActionState(addPlayer, undefined);
   const isTeam = playersPerTeam > 1;
 
@@ -26,8 +27,9 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
       <div className="grid grid-cols-2 gap-3">
         {isTeam && (
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-600 mb-1">Nom de l&apos;équipe *</label>
+            <label htmlFor="player_name" className="block text-xs font-medium text-gray-600 mb-1">Nom de l&apos;équipe *</label>
             <input
+              id="player_name"
               name="player_name"
               type="text"
               required
@@ -42,13 +44,14 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
         )}
 
         <div className={isTeam ? "col-span-2" : "col-span-1"}>
-          <label className="block text-xs font-medium text-gray-600 mb-1">
+          <label htmlFor="player_pseudo_0" className="block text-xs font-medium text-gray-600 mb-1">
             {isTeam ? `Pseudos des joueurs *` : "Nom complet *"}
           </label>
           <div className={isTeam ? "grid grid-cols-2 gap-2" : ""}>
             {Array.from({ length: playersPerTeam }, (_, i) => (
               <input
                 key={i}
+                id={`player_pseudo_${i}`}
                 name={`player_pseudo_${i}`}
                 type="text"
                 required
@@ -61,34 +64,40 @@ export function AddPlayerForm({ tournamentId, playersPerTeam }: Props) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
-          <input
-            name="player_email"
-            type="email"
-            required
-            defaultValue={state?.fields?.player_email}
-            placeholder="jean@exemple.fr"
-            className={inputCn}
-          />
-          {state?.errors?.player_email && (
-            <p className="mt-1 text-xs text-red-600">{state.errors.player_email[0]}</p>
-          )}
-        </div>
+        {!quickMode && (
+          <>
+            <div>
+              <label htmlFor="player_email" className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
+              <input
+                id="player_email"
+                name="player_email"
+                type="email"
+                required
+                defaultValue={state?.fields?.player_email}
+                placeholder="jean@exemple.fr"
+                className={inputCn}
+              />
+              {state?.errors?.player_email && (
+                <p className="mt-1 text-xs text-red-600">{state.errors.player_email[0]}</p>
+              )}
+            </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
-          <input
-            name="player_phone"
-            type="tel"
-            defaultValue={state?.fields?.player_phone}
-            placeholder="0612345678"
-            className={inputCn}
-          />
-          {state?.errors?.player_phone && (
-            <p className="mt-1 text-xs text-red-600">{state.errors.player_phone[0]}</p>
-          )}
-        </div>
+            <div>
+              <label htmlFor="player_phone" className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
+              <input
+                id="player_phone"
+                name="player_phone"
+                type="tel"
+                defaultValue={state?.fields?.player_phone}
+                placeholder="0612345678"
+                className={inputCn}
+              />
+              {state?.errors?.player_phone && (
+                <p className="mt-1 text-xs text-red-600">{state.errors.player_phone[0]}</p>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <button

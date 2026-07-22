@@ -177,7 +177,7 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | DSN PostgreSQL local |
-| `NEXT_PUBLIC_API_URL` | URL SterPlatform (ex. `https://sterplatform.bichetapps.com`) |
+| `NEXT_PUBLIC_API_URL` | URL SterPlatform (ex. `https://sterplatform.bapps-studio.com`) |
 | `STER_ORG_SLUG` | Slug organisation SterPlatform (`dartsopen`) |
 | `STER_API_TOKEN` | Token partagé avec SterPlatform pour `POST /api/email/send` (`APP_TOKEN` côté SterPlatform) |
 | `STRIPE_SECRET_KEY` | Clé secrète Stripe (`sk_test_` en dev) |

@@ -3,12 +3,14 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
 import { getUser } from "@/lib/api/auth";
+import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
   if (!user) redirect('/login');
 
   return (
+    <LandscapeGuard>
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
@@ -83,5 +85,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
         </div>
       </main>
     </div>
+    </LandscapeGuard>
   );
 }
