@@ -90,7 +90,7 @@ scripts/    → seed de données de test
 - `lib/mercure.ts` — signe les JWT HS256 sans bibliothèque externe (`crypto` Node)
 - Publisher : `publishMatchUpdate(tournamentId)` — fire-and-forget, appelé depuis `score.ts` (confirmWinner, markWinnerDirect) et `admin.ts` (arbitrateMatch)
 - Abonné token : `GET /api/public/tournaments/[id]/mercure-token` → `{ token, topic }`
-- Topic : `https://dartsopen.fr/tournaments/{id}/matches`
+- Topic : `https://dartsopen.bapps-studio.com/tournaments/{id}/matches`
 
 ### Fallback
 Si `MERCURE_JWT_SECRET` ou `NEXT_PUBLIC_MERCURE_PUBLIC_URL` ne sont pas définis :

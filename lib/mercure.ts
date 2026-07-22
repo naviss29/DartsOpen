@@ -21,7 +21,7 @@ function signJwt(payload: object): string {
 // ── Topic ─────────────────────────────────────────────────────────────────────
 
 export function mercureTopic(tournamentId: string): string {
-  return `https://dartsopen.fr/tournaments/${tournamentId}/matches`;
+  return `https://dartsopen.bapps-studio.com/tournaments/${tournamentId}/matches`;
 }
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
