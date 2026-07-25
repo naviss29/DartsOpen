@@ -16,6 +16,11 @@ export async function getServerToken(): Promise<string | undefined> {
   return store.get(TOKEN_COOKIE)?.value;
 }
 
+export async function getServerRefreshToken(): Promise<string | undefined> {
+  const store = await cookies();
+  return store.get(REFRESH_COOKIE)?.value;
+}
+
 export async function setAuthCookies(token: string, refreshToken: string): Promise<void> {
   const store = await cookies();
   store.set(TOKEN_COOKIE, token, { ...COOKIE_BASE, maxAge: 60 * 60 });

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { logout } from "@/lib/actions/auth";
 import { getUser } from "@/lib/api/auth";
 import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
+import LogoutButton from "@/components/LogoutButton";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
@@ -55,14 +55,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           >
             <span>💛</span> Soutenir le projet
           </Link>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              <span>🚪</span> Se déconnecter
-            </button>
-          </form>
+          <LogoutButton />
           <div className="pt-3 text-center">
             <p className="text-xs text-gray-400 mb-1">Développé par</p>
             <Image

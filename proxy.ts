@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
+import { ssoStartPath } from "@/lib/sso/redirect";
 
 const TOKEN_COOKIE = 'ster_token';
 const REFRESH_COOKIE = 'ster_refresh_token';
@@ -13,14 +14,10 @@ const COOKIE_BASE = {
   path: '/',
 };
 
-// Webhooks Stripe volontairement exclus : la signature Stripe fait déjà
-// autorité sur la légitimité de la requête, et limiter par IP risquerait de
-// bloquer des retries légitimes depuis les IP sortantes partagées de Stripe.
+// /login, /register, /forgot-password, /reset-password n'existent plus en local (migration
+// écosystème SSO — voir /api/auth/sso/start) : le rate limiting du login lui-même est déjà
+// assuré côté SterPlatform (AuthRateLimiterSubscriber, 5 tentatives/minute/IP).
 const RATE_LIMIT_RULES: { prefix: string; windowMs: number; max: number }[] = [
-  { prefix: '/login', windowMs: 5 * 60_000, max: 10 },
-  { prefix: '/register', windowMs: 15 * 60_000, max: 5 },
-  { prefix: '/forgot-password', windowMs: 15 * 60_000, max: 5 },
-  { prefix: '/reset-password', windowMs: 15 * 60_000, max: 5 },
   { prefix: '/api/public', windowMs: 60_000, max: 120 },
   // Limite volontairement large : un même lieu de tournoi (salle, gymnase)
   // peut voir plusieurs dizaines de joueurs partager la même IP publique
@@ -62,9 +59,7 @@ export default async function proxy(request: NextRequest) {
   if (accessToken) return NextResponse.next();
 
   if (!refreshToken) {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('next', pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL(ssoStartPath(pathname), request.url));
   }
 
   try {
@@ -81,9 +76,7 @@ export default async function proxy(request: NextRequest) {
     });
 
     if (!res.ok) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('next', pathname);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL(ssoStartPath(pathname), request.url));
     }
 
     const data = await res.json();
@@ -100,9 +93,7 @@ export default async function proxy(request: NextRequest) {
 
     return response;
   } catch {
-    const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('next', pathname);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL(ssoStartPath(pathname), request.url));
   }
 }
 
@@ -111,10 +102,6 @@ export const config = {
     '/dashboard/:path*',
     '/tournaments/:path*',
     '/settings/:path*',
-    '/login',
-    '/register',
-    '/forgot-password',
-    '/reset-password',
     '/api/public/:path*',
     '/t/:path*',
   ],
