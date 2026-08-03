@@ -13,8 +13,7 @@ const SUBJECTS = [
 const inputCn =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
 
-// TODO: remplacer par l'email réel de contact DartsOpen / Stêr Eo
-const CONTACT_EMAIL = "prod.ster.eo@gmail.com";
+const CONTACT_EMAIL = "contact@bapps-studio.com";
 
 export function ContactForm() {
   const [sent, setSent] = useState(false);

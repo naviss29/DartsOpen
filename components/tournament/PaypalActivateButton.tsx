@@ -39,7 +39,7 @@ export function PaypalActivateButton({ baseFeeEuros, maxPlayers }: Props) {
             </div>
           </div>
           <p className="text-xs text-brand-text-secondary">
-            Un coup de pouce pour aider Stêr Eo Production à grandir et continuer à développer DartsOpen. 💚
+            Un coup de pouce pour aider BApps Studio à continuer à développer DartsOpen. 💚
           </p>
         </div>
 

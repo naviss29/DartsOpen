@@ -14,7 +14,7 @@ export default function ConfidentialitePage() {
 
       <h2>Responsable du traitement</h2>
       <p>
-        Stêr Eo Production, éditrice de DartsOpen. Voir les{" "}
+        BApps Studio, éditrice de DartsOpen. Voir les{" "}
         <a href="/mentions-legales">mentions légales</a> pour les coordonnées complètes.
       </p>
 

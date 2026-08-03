@@ -8,16 +8,19 @@ export default function MentionsLegalesPage() {
     <LegalLayout title="Mentions légales" updatedAt="24/07/2026">
       <h2>Éditeur du site</h2>
       <p>
-        DartsOpen est développé et édité par <strong className="text-brand-dark">Stêr Eo Production</strong>,{" "}
-        <TodoField>[forme juridique à compléter]</TodoField>, immatriculée sous le numéro{" "}
-        <TodoField>[SIRET à compléter]</TodoField>, dont le siège social est situé{" "}
-        <TodoField>[adresse du siège à compléter]</TodoField>.
+        DartsOpen est développé et édité par <strong className="text-brand-dark">BApps Studio</strong>,{" "}
+        <TodoField>[forme juridique à compléter]</TodoField>, dont le siège social est situé au 1 rue
+        de la Hallebarde, 45000 Orléans.
+      </p>
+      <p>
+        SIREN : <TodoField>à venir</TodoField>.
       </p>
       <p>
         Directeur de la publication : <TodoField>[nom à compléter]</TodoField>.
       </p>
       <p>
-        Contact : via le{" "}
+        Contact : <a href="mailto:contact@bapps-studio.com">contact@bapps-studio.com</a> ou via
+        le{" "}
         <a href="/contact">formulaire de contact</a>.
       </p>
 
