@@ -3,7 +3,7 @@
 ## Phase 0 — Fondations ✅
 - Authentification organisateur (SterPlatform JWT)
 - Gestion des tournois (CRUD, statuts)
-- Inscriptions en ligne (Stripe) + mode sur place
+- Inscriptions en ligne (paiement via SterPlatform / Stripe Connect) + mode sur place
 - Génération automatique des poules (round-robin, Berger)
 - Génération du bracket (simple élimination, seeding)
 - Arbitrage admin (validation score, contestation)

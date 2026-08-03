@@ -158,10 +158,10 @@
 | # | Action | Résultat attendu |
 |---|---|---|
 | 1 | Créer un tournoi, sélectionner mode "Sur place (ONSITE)" | Option disponible |
-| 2 | Vérifier qu'aucun lien Stripe n'est requis | Création sans configuration Stripe |
+| 2 | Vérifier qu'aucune organisation BApps Studio liée n'est requise | Création sans liaison SterPlatform |
 | 3 | Vérifier l'icône 🏠 dans le dashboard | Affiché correctement |
 
-**Ligne de test rapide :** Tournoi ONSITE → pas de Stripe requis, icône 🏠 dans le dashboard.
+**Ligne de test rapide :** Tournoi ONSITE → pas de paiement en ligne requis, icône 🏠 dans le dashboard.
 
 ---
 
@@ -212,13 +212,14 @@
 
 ### T-030 — Inscription en ligne (mode ONLINE) 🔴 P1
 
-**Préconditions :** Tournoi en statut OPEN, mode ONLINE, Stripe Connect configuré
+**Préconditions :** Tournoi en statut OPEN, mode ONLINE, organisation BApps Studio liée à
+l'organisateur avec Stripe Connect opérationnel (`canReceivePayments: true` côté SterPlatform)
 
 | # | Action | Résultat attendu |
 |---|---|---|
 | 1 | Accéder à `/t/[id]/register` | Formulaire d'inscription affiché |
 | 2 | Remplir les informations (nom, email, téléphone, nom des coéquipiers si > 1 joueur/équipe) | Champs présents et obligatoires |
-| 3 | Soumettre et payer via Stripe Checkout (carte test : 4242 4242 4242 4242) | Redirection vers page de succès |
+| 3 | Soumettre → redirection vers le checkout créé par SterPlatform, payer (carte test : 4242 4242 4242 4242) | Redirection vers page de succès |
 | 4 | Vérifier la page de confirmation `/t/[id]/register/success` | Message de confirmation affiché |
 | 5 | Vérifier dans la liste des joueurs (dashboard) | Équipe apparaît avec statut PAID |
 | 6 | Vérifier l'email de confirmation | Email reçu sur l'adresse fournie |
@@ -254,13 +255,13 @@
 
 ---
 
-### T-033 — Annulation d'une inscription Stripe 🟡 P3
+### T-033 — Annulation d'une inscription en ligne 🟡 P3
 
 **Préconditions :** Inscription PENDING (paiement abandonné)
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Démarrer une inscription en ligne | Session Stripe créée |
+| 1 | Démarrer une inscription en ligne | Checkout créé côté SterPlatform (`sterPaymentId` enregistré) |
 | 2 | Fermer la page avant de payer | Inscription reste PENDING (non annulée) |
 | 3 | Vérifier que la place n'est pas bloquée définitivement | Place libérable ou timeout géré |
 
@@ -503,45 +504,65 @@
 
 ---
 
-## Campagne C11 — Paiements Stripe
+## Campagne C11 — Paiements (SterPlatform / Stripe Connect, mission DO-003)
 
-### T-100 — Configuration Stripe Connect pour une association 🟠 P2
+DartsOpen ne dialogue plus jamais directement avec Stripe : la liaison à une organisation
+BApps Studio, le statut Stripe Connect et la création des paiements passent exclusivement par
+l'API interne de SterPlatform (`lib/api/sterplatformInternal.ts`, `lib/actions/organization.ts`).
 
-**Préconditions :** Utilisateur connecté, compte Stripe Connect non encore configuré
+### T-100 — Liaison d'une organisation BApps Studio 🟠 P2
+
+**Préconditions :** Utilisateur connecté, aucune organisation liée (`Organization.sterOrganizationSlug` = null)
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Accéder à la page paramètres (`/settings`) | Bouton "Connecter Stripe" affiché |
-| 2 | Cliquer et suivre le flux Stripe Connect | Compte Stripe associé, retour sur `/settings` avec confirmation |
+| 1 | Accéder à la page paramètres (`/settings`) | Sélecteur d'organisations BApps Studio affiché (rôle OWNER/ADMIN uniquement) |
+| 2 | Choisir une organisation et valider | Organisation liée, retour sur `/settings` avec le statut Stripe Connect de cette organisation |
+| 3 | Retenter avec une organisation où l'utilisateur n'a que le rôle MEMBER | Liaison refusée (erreur explicite) |
 
-**Ligne de test rapide :** Connecter Stripe → vérifier la confirmation sur `/settings`.
+**Ligne de test rapide :** Lier une organisation OWNER/ADMIN → statut affiché ; tenter avec MEMBER → refus.
 
 ---
 
 ### T-101 — Reversement automatique à l'association 🟠 P2
 
-**Préconditions :** Inscription payée via Stripe, webhook configuré
+**Préconditions :** Inscription payée, organisation liée avec Stripe Connect opérationnel
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Payer une inscription (carte test 4242...) | Paiement reçu, `application_fee_amount` (frais plateforme) retenu |
-| 2 | Vérifier dans Stripe Dashboard | Le montant de l'inscription (hors frais) est versé sur le compte Connect de l'association |
+| 1 | Payer une inscription (carte test 4242...) | Paiement créé via `createPaymentCheckout` (SterPlatform), `platformFeeCents` transmis |
+| 2 | Vérifier côté SterPlatform / Stripe Dashboard | Le montant de l'inscription (hors frais) est versé sur le compte Connect de l'organisation |
 
-**Ligne de test rapide :** Payer inscription test → vérifier reversement dans Stripe Dashboard.
+**Ligne de test rapide :** Payer inscription test → vérifier reversement côté SterPlatform.
 
 ---
 
-### T-102 — Webhook Stripe (checkout.session.completed) 🔴 P1
+### T-102 — Webhook entrant SterPlatform (payment.succeeded) 🔴 P1
 
-**Préconditions :** Tournoi ONLINE, inscription initiée
+**Préconditions :** Tournoi ONLINE, inscription initiée (`sterPaymentId` renseigné)
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Compléter le paiement Stripe | Webhook `checkout.session.completed` reçu par l'application |
+| 1 | Compléter le paiement | Notification `payment.succeeded` reçue sur `POST /api/webhooks/sterplatform-payments`, signature HMAC vérifiée |
 | 2 | Vérifier la base de données | Inscription passe de PENDING à PAID |
 | 3 | Vérifier l'email | Email de confirmation envoyé à l'adresse de l'équipe |
+| 4 | Rejouer la même notification (signature valide) | Idempotent — pas de double email, statut déjà PAID inchangé |
+| 5 | Envoyer une notification avec une signature invalide ou expirée (> 5 min) | Requête rejetée (400), aucune modification en base |
 
-**Ligne de test rapide :** Payer → inscription PAID en base + email reçu.
+**Ligne de test rapide :** Payer → inscription PAID en base + email reçu ; signature invalide → 400.
+
+---
+
+### T-103 — Paiement bloqué si Stripe Connect non opérationnel 🔴 P1
+
+**Préconditions :** Organisation liée mais Stripe Connect non opérationnel (onboarding incomplet, restreint, etc.)
+
+| # | Action | Résultat attendu |
+|---|---|---|
+| 1 | Tenter une inscription en ligne sur un tournoi payant de cette organisation | Message d'erreur explicite, aucun paiement créé |
+| 2 | Vérifier la page paramètres | Statut "Paiements non activés" avec lien vers BSsite pour configurer Stripe Connect |
+
+**Ligne de test rapide :** Organisation sans Stripe Connect opérationnel → inscription payante refusée proprement.
 
 ---
 
@@ -670,4 +691,4 @@
 | S-08 | Démarrer le tournoi → 1 match IN_PROGRESS par cible | C8 — T-070 |
 | S-09 | Valider un match (ELECTRONIC) → match suivant démarre automatiquement | C8 — T-071 |
 | S-10 | Vue live accessible sans connexion → matchs affichés | C9 — T-080 |
-| S-11 | Inscription en ligne (Stripe test) → statut PAID + email reçu | C11 — T-102 |
+| S-11 | Inscription en ligne (checkout SterPlatform, carte test) → statut PAID + email reçu | C11 — T-102 |

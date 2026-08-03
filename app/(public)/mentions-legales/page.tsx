@@ -39,7 +39,7 @@ export default function MentionsLegalesPage() {
 
       <h2>Prestataires techniques</h2>
       <ul>
-        <li>Paiements en ligne : Stripe (Stripe Payments Europe, Limited)</li>
+        <li>Paiements en ligne : Stripe (Stripe Payments Europe, Limited), intégré via SterPlatform (BApps Studio)</li>
         <li>Envoi des emails transactionnels : Brevo</li>
         <li>Authentification et gestion des comptes organisateurs : SterPlatform (service interne)</li>
       </ul>

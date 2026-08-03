@@ -7,7 +7,7 @@ export interface Registration {
   player_name: string;
   player_email: string;
   player_phone: string | null;
-  stripe_payment_intent_id: string | null;
+  ster_payment_id: string | null;
   status: RegistrationStatus;
   qr_code_token: string;
   created_at: string;

@@ -71,7 +71,7 @@ function mapRegistration(r: {
   playerNames: unknown;
   status: RegistrationStatus;
   qrCodeToken: string;
-  stripeSessionId: string | null;
+  sterPaymentId: string | null;
   entryFeeCents: number;
   platformFeeCents: number;
   feeCollected: boolean;
@@ -88,8 +88,7 @@ function mapRegistration(r: {
     player_names: r.playerNames as string[],
     status: r.status,
     qr_code_token: r.qrCodeToken,
-    stripe_session_id: r.stripeSessionId,
-    stripe_payment_intent_id: r.stripeSessionId,
+    ster_payment_id: r.sterPaymentId,
     entry_fee_cents: r.entryFeeCents,
     platform_fee_cents: r.platformFeeCents,
     fee_collected: r.feeCollected,
@@ -114,7 +113,7 @@ function mapPool(p: {
       playerNames: unknown;
       status: RegistrationStatus;
       qrCodeToken: string;
-      stripeSessionId: string | null;
+      sterPaymentId: string | null;
       entryFeeCents: number;
       platformFeeCents: number;
       feeCollected: boolean;
@@ -1041,24 +1040,31 @@ export async function dbPromoteUnassignedMatches(
   );
 }
 
-// ── Organization (Stripe Connect) ─────────────────────────────────────────────
+// ── Organization (liaison BApps Studio / SterPlatform) ────────────────────────
 
 export async function dbGetOrganization(userId: string) {
   return prisma.organization.findUnique({ where: { userId } });
 }
 
-export async function dbUpsertOrganizationStripeAccount(userId: string, stripeAccountId: string) {
+export async function dbSetOrganizationSlug(userId: string, sterOrganizationSlug: string) {
   return prisma.organization.upsert({
     where: { userId },
-    create: { userId, stripeAccountId },
-    update: { stripeAccountId },
+    create: { userId, sterOrganizationSlug },
+    update: { sterOrganizationSlug },
   });
 }
 
-export async function dbUpdateRegistrationStripeSession(registrationId: string, stripeSessionId: string) {
+export async function dbClearOrganizationSlug(userId: string) {
+  await prisma.organization.updateMany({
+    where: { userId },
+    data: { sterOrganizationSlug: null },
+  });
+}
+
+export async function dbUpdateRegistrationPaymentId(registrationId: string, sterPaymentId: string) {
   await prisma.registration.update({
     where: { id: registrationId },
-    data: { stripeSessionId },
+    data: { sterPaymentId },
   });
 }
 

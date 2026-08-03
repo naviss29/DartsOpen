@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { dbAddRegistration, dbDeleteRegistration, dbGetTournament, dbSetSeeded } from "@/lib/db/tournament";
-import { PLATFORM_FEE_CENTS } from "@/lib/stripe";
+import { PLATFORM_FEE_CENTS } from "@/lib/platformFee";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { getOwnedTournament } from "@/lib/actions/access";
 

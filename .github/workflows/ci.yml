@@ -41,11 +41,10 @@ jobs:
       - name: Build Next.js
         run: npm run build
         env:
-          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_API_URL: https://sterplatform.bapps-studio.com
+          NEXT_PUBLIC_BSSITE_URL: https://bapps-studio.com
           # Variables runtime (non injectées au build, déclarées pour éviter les warnings Next.js)
           DATABASE_URL: placeholder
-          STRIPE_SECRET_KEY: placeholder
-          STRIPE_WEBHOOK_SECRET: placeholder
           STER_API_TOKEN: placeholder
+          STER_PAYMENTS_CALLBACK_SECRET: placeholder

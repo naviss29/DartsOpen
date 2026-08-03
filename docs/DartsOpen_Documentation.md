@@ -61,7 +61,7 @@ Ce projet est porté par un pratiquant de fléchettes qui est également dévelo
 | Base de données | PostgreSQL 15 via Supabase | Robuste, RLS natif pour multi-tenant, gratuit au démarrage |
 | Temps réel | Supabase Realtime | WebSockets sans infrastructure supplémentaire |
 | Auth | Supabase Auth | JWT + OAuth, multi-rôles, magic link |
-| Paiement | Stripe Connect | Versement direct aux associations, frais maîtrisés |
+| Paiement | SterPlatform (Stripe Connect) | Mission DO-003 — DartsOpen ne dialogue plus jamais directement avec Stripe, uniquement avec l'API interne de paiement de SterPlatform |
 | QR Code | `qrcode` npm | Génération côté serveur simple |
 | Tests | Vitest + @testing-library/react | Runner rapide, compatible Next.js |
 | Containerisation | Docker + Docker Compose | Déploiement Coolify identique à FestManager |
@@ -154,7 +154,10 @@ MatchSet (score par manche)
 - Un match ne peut passer en FINISHED que si les deux joueurs ont confirmé le score de chaque set
 - La détection "dernière manche" déclenche l'annonce du prochain match sur la cible
 - Le classement de poule est calculé : victoires > sets gagnés > legs gagnés (à préciser selon règles FFD)
-- Le reversement Stripe n'est déclenché qu'une fois le tournoi en statut FINISHED
+- Le reversement à l'association n'est déclenché qu'une fois le tournoi en statut FINISHED
+- Depuis DO-003, ce modèle a évolué : `stripe_account_id` et `stripe_payment_intent_id` n'existent
+  plus (voir `prisma/schema.prisma` — `Organization.sterOrganizationSlug`,
+  `Registration.sterPaymentId`). DartsOpen ne stocke plus aucune donnée Stripe locale.
 
 ---
 
@@ -180,16 +183,24 @@ Clients abonnés (SSE) → re-render instantané
 Fallback : polling automatique si Mercure indisponible (MatchBoard 3s, BracketLive/TvBoard 5s)
 ```
 
-### Flux paiement Stripe Connect
+### Flux paiement (mission DO-003 — SterPlatform / Stripe Connect)
+
+DartsOpen ne dialogue jamais directement avec Stripe : la création du paiement, son suivi et
+le versement à l'association passent exclusivement par l'API interne de SterPlatform.
 
 ```
-Joueur paye 20€
+Joueur paye 20€ → createRegistration (lib/actions/registration.ts)
         ↓
-Stripe reçoit le paiement (compte plateforme DartsOpen)
+POST /api/internal/organizations/{slug}/payments/checkout (SterPlatform)
         ↓
-Tournoi terminé → Stripe Transfer déclenché par webhook
+Redirection vers checkoutUrl (Stripe Checkout, géré par SterPlatform)
         ↓
-Association reçoit : 20€ - frais Stripe - 0,10€ plateforme
+SterPlatform notifie DartsOpen (webhook signé HMAC) → POST /api/webhooks/sterplatform-payments
+        ↓
+dbMarkRegistrationPaid → Registration.status = PAID, email de confirmation
+        ↓
+Versement à l'association organisatrice géré par le Stripe Connect de son organisation
+BApps Studio (0,10 €/joueur retenu par DartsOpen via platformFeeCents)
 ```
 
 ### QR Codes
@@ -223,7 +234,7 @@ DartsOpen/
 │   │       ├── live/page.tsx      # Vue publique (spectateur)
 │   │       └── score/page.tsx     # Saisie score (joueur via QR)
 │   └── api/
-│       ├── webhooks/stripe/route.ts
+│       ├── webhooks/sterplatform-payments/route.ts   # DO-003 — remplace l'ancien webhook Stripe local
 │       └── qr/[token]/route.ts
 ├── components/
 │   ├── ui/                        # shadcn/ui (Button, Card, Dialog...)
@@ -238,8 +249,8 @@ DartsOpen/
 │   ├── supabase/
 │   │   ├── server.ts              # Client Supabase côté serveur
 │   │   └── client.ts             # Client Supabase côté navigateur
-│   ├── stripe/
-│   │   └── index.ts              # Client Stripe
+│   ├── api/
+│   │   └── sterplatformInternal.ts  # DO-003 — client interne SterPlatform (statut Connect, création paiement)
 │   └── utils/
 │       ├── qrcode.ts             # Génération QR codes
 │       ├── bracket.ts            # Algorithme phases finales
@@ -260,7 +271,8 @@ DartsOpen/
 
 Données personnelles collectées :
 - Nom, prénom, email, téléphone (inscription joueur)
-- Données Stripe (traitées par Stripe, non stockées par DartsOpen)
+- Données de paiement traitées par Stripe via SterPlatform (mission DO-003) — DartsOpen ne
+  stocke aucune donnée bancaire, ni aucun identifiant Stripe local
 
 Mesures :
 - Consentement explicite à l'inscription
@@ -471,10 +483,10 @@ Ne pas oublier de mettre à jour `APP_FROM_EMAIL` dans Coolify (ex: `noreply@dar
 | Étape | Action |
 |---|---|
 | App Coolify | Créer une app depuis `naviss29/DartsOpen`, branche `develop` |
-| Variables d'environnement | `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL` (SterPlatform staging), `STER_ORG_SLUG=dartsopen`, `NEXT_PUBLIC_STER_ORG_SLUG=dartsopen`, `STRIPE_SECRET_KEY` (clé test), `STRIPE_WEBHOOK_SECRET` (test), `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (test) |
+| Variables d'environnement | `DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL` (SterPlatform staging), `NEXT_PUBLIC_BSSITE_URL`, `STER_ORG_SLUG=dartsopen`, `NEXT_PUBLIC_STER_ORG_SLUG=dartsopen`, `STER_API_TOKEN`, `STER_PAYMENTS_CALLBACK_SECRET` |
 | Base de données | Créer une DB PostgreSQL dans Coolify (ou réutiliser celle de prod avec un schéma séparé) et injecter `DATABASE_URL` |
 | Migration Prisma | Après premier déploiement : `docker exec <container> npx prisma migrate deploy` |
-| Webhook Stripe staging | Créer un webhook Stripe en mode test pointant sur `https://<staging-url>/api/webhooks/stripe` |
+| Callback paiements SterPlatform | Depuis DO-003, DartsOpen ne gère plus aucun webhook Stripe : enregistrer `https://<staging-url>/api/webhooks/sterplatform-payments` comme `PAYMENTS_CALLBACK_URL_DARTSOPEN` côté SterPlatform staging |
 | Build args Coolify | Supprimer `SUPABASE_SERVICE_ROLE_KEY` des build args Coolify (vestige Supabase, génère des warnings Docker) |
 
 ### DartsOpen prod (main → Coolify prod)
@@ -483,7 +495,7 @@ Ne pas oublier de mettre à jour `APP_FROM_EMAIL` dans Coolify (ex: `noreply@dar
 |---|---|
 | Merge | Merger `develop` → `main` uniquement après validation complète en staging |
 | Migration Prisma | `docker exec <container> npx prisma migrate deploy` après chaque deploy avec migration |
-| Webhook Stripe prod | Vérifier que le webhook prod pointe sur `https://<prod-url>/api/webhooks/stripe` |
+| Callback paiements SterPlatform prod | Vérifier que `PAYMENTS_CALLBACK_URL_DARTSOPEN` côté SterPlatform prod pointe sur `https://<prod-url>/api/webhooks/sterplatform-payments` |
 
 ---
 

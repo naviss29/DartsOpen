@@ -43,9 +43,14 @@ enum BracketType {
   GRAND_FINAL
 }
 
+/**
+ * Liaison entre un organisateur DartsOpen et son organisation BApps Studio (SterPlatform).
+ * DartsOpen ne possède plus sa propre notion de compte Stripe (DO-003) : l'encaissement passe
+ * exclusivement par SterPlatform, identifié ici par le seul slug de l'organisation.
+ */
 model Organization {
-  userId          String  @id @map("user_id")
-  stripeAccountId String? @map("stripe_account_id")
+  userId                String  @id @map("user_id")
+  sterOrganizationSlug  String? @map("ster_organization_slug")
 
   @@map("organizations")
 }
@@ -101,7 +106,7 @@ model Registration {
   playerNames      Json               @default("[]") @map("player_names")
   status           RegistrationStatus @default(PENDING)
   qrCodeToken      String             @unique @default(uuid()) @map("qr_code_token")
-  stripeSessionId  String?            @map("stripe_session_id")
+  sterPaymentId    String?            @map("ster_payment_id")
   entryFeeCents    Int                @default(0) @map("entry_fee_cents")
   platformFeeCents Int                @default(0) @map("platform_fee_cents")
   feeCollected     Boolean            @default(false) @map("fee_collected")

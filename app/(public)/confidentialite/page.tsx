@@ -22,7 +22,7 @@ export default function ConfidentialitePage() {
       <ul>
         <li>Organisateurs : nom, email, mot de passe (haché), historique des tournois créés</li>
         <li>Joueurs inscrits : nom, email, téléphone (selon le tournoi), nom des coéquipiers</li>
-        <li>Paiements : traités directement par Stripe — DartsOpen ne stocke aucune donnée bancaire</li>
+        <li>Paiements : traités par Stripe via SterPlatform (BApps Studio) — DartsOpen ne stocke aucune donnée bancaire</li>
         <li>Cookies techniques d&apos;authentification (voir ci-dessous)</li>
       </ul>
 
@@ -50,7 +50,8 @@ export default function ConfidentialitePage() {
       <h2>Destinataires</h2>
       <p>
         Les données ne sont transmises qu&apos;aux prestataires techniques nécessaires au
-        fonctionnement du service : Stripe (paiements), Brevo (emails transactionnels). Aucune
+        fonctionnement du service : SterPlatform (paiements via Stripe Connect, authentification),
+        Brevo (emails transactionnels). Aucune
         donnée n&apos;est vendue ni cédée à des tiers à des fins commerciales.
       </p>
 

@@ -2,6 +2,32 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+## [DO-003] — 2026-08-03
+
+Migration complète des paiements vers l'architecture BApps Studio (SterPlatform gère
+Stripe Connect pour le compte de l'organisation, DartsOpen ne dialogue plus jamais
+directement avec Stripe — mêmes principes que BilletAsso/FestManager).
+
+**Correction documentaire** : `CLAUDE.md` faisait référence à une entrée « DO-002 » dans ce
+changelog affirmant que Stripe avait déjà été retiré — cette entrée n'a jamais existé, ni le
+retrait qu'elle décrivait (l'intégration Stripe locale était toujours active et fonctionnelle
+au moment de l'audit qui a précédé cette mission). `CLAUDE.md` a été corrigé pour refléter
+l'état réel du code.
+
+### Ajouté
+- Liaison organisateur → organisation BApps Studio (`Organization.sterOrganizationSlug`,
+  `lib/actions/organization.ts`, page Paramètres).
+- Client API interne SterPlatform (`lib/api/sterplatformInternal.ts`) : statut Stripe Connect
+  (`GET /api/internal/organizations/{slug}/connect/account-id`) et création de paiement
+  (`POST /api/internal/organizations/{slug}/payments/checkout`).
+- Webhook entrant `app/api/webhooks/sterplatform-payments/route.ts` (notifications de
+  paiement signées par SterPlatform), remplace l'ancien webhook Stripe local.
+
+### Supprimé
+- `lib/stripe/index.ts` (client Stripe SDK direct), `lib/actions/stripe.ts`,
+  `app/api/webhooks/stripe/route.ts`, dépendance npm `stripe`, variables d'environnement
+  `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+
 ## [v1.0.0-beta] — 2026-07-24
 
 Sprint RELEASE-001 — préparation de la bêta privée.

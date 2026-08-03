@@ -23,16 +23,17 @@ export default function CguPage() {
       <h2>Frais de plateforme</h2>
       <p>
         DartsOpen applique des frais de plateforme de 0,10&nbsp;€ par joueur inscrit à un
-        tournoi payant, prélevés automatiquement lors du paiement via Stripe. Le solde de
-        l&apos;inscription est reversé à l&apos;association organisatrice sur son compte Stripe
-        Connect.
+        tournoi payant, prélevés automatiquement lors du paiement. Le solde de l&apos;inscription
+        est reversé à l&apos;association organisatrice sur le compte Stripe Connect de son
+        organisation BApps Studio.
       </p>
 
       <h2>Paiement</h2>
       <p>
-        Les paiements d&apos;inscription sont traités par Stripe. DartsOpen n&apos;a accès à
-        aucune donnée bancaire et n&apos;intervient pas dans la transaction financière au-delà
-        du prélèvement des frais de plateforme.
+        Les paiements d&apos;inscription sont initiés par DartsOpen mais traités et encaissés par
+        Stripe via l&apos;infrastructure de paiement de BApps Studio (SterPlatform). DartsOpen
+        n&apos;a accès à aucune donnée bancaire et n&apos;intervient pas dans la transaction
+        financière au-delà du prélèvement des frais de plateforme.
       </p>
 
       <h2>Annulation et remboursement</h2>

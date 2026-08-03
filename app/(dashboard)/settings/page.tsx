@@ -1,19 +1,30 @@
 import { getUser } from "@/lib/api/auth";
 import { redirect } from "next/navigation";
 import { Alert, Card, Pill } from "@naviss29/design-system";
+import { dbGetOrganization } from "@/lib/db/tournament";
+import { getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
+import { getMyOrganizations } from "@/lib/api/organizations";
+import { OrganizationLinkForm } from "@/components/settings/OrganizationLinkForm";
+import { unlinkOrganization } from "@/lib/actions/organization";
+import Button from "@/components/ui/Button";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Paramètres — DartsOpen" };
+
+const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
 
 export default async function SettingsPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
+  const org = await dbGetOrganization(user.id);
+  const slug = org?.sterOrganizationSlug ?? null;
+
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-brand-dark">Paramètres</h1>
-        <p className="text-sm text-brand-text-secondary mt-1">Gérez votre compte et votre connexion Stripe.</p>
+        <p className="text-sm text-brand-text-secondary mt-1">Gérez votre compte et votre organisation BApps Studio.</p>
       </div>
 
       <section>
@@ -27,20 +38,92 @@ export default async function SettingsPage() {
 
       <section>
         <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-brand-dark">Paiements Stripe</h2>
-            <Pill tone="neutral">Non disponible</Pill>
-          </div>
-          <p className="text-sm text-brand-text-secondary">
-            Les droits d&apos;inscription payants ne peuvent pas encore être reversés directement sur un compte
-            bancaire d&apos;organisateur. La plateforme retient <strong>0,10 € par inscription</strong> comme
-            frais de service.
-          </p>
-          <Alert tone="info">
-            Le versement des droits d&apos;inscription à l&apos;organisateur n&apos;est pas encore disponible.
-          </Alert>
+          <h2 className="font-semibold text-brand-dark">Paiements</h2>
+
+          {!slug ? (
+            <OrganizationSection />
+          ) : (
+            <StripeConnectSection slug={slug} />
+          )}
         </Card>
       </section>
     </div>
+  );
+}
+
+async function OrganizationSection() {
+  const organizations = await getMyOrganizations();
+
+  if (!organizations) {
+    return (
+      <Alert tone="error">
+        Impossible de récupérer vos organisations BApps Studio pour le moment. Réessayez plus tard.
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-brand-text-secondary">
+        Pour recevoir les droits d&apos;inscription en ligne, liez ce compte à l&apos;une de vos
+        organisations BApps Studio. Les paiements sont ensuite entièrement gérés depuis BApps
+        Studio, jamais depuis DartsOpen.
+      </p>
+      <OrganizationLinkForm organizations={organizations} />
+    </div>
+  );
+}
+
+async function StripeConnectSection({ slug }: { slug: string }) {
+  const status = await getStripeConnectStatus(slug).catch(() => undefined);
+  const stripeUrl = `${BSSITE_URL}/dashboard/organisations/${slug}/stripe`;
+
+  if (status?.canReceivePayments) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-brand-dark">Organisation : <strong>{slug}</strong></p>
+          <Pill tone="success">Paiements activés</Pill>
+        </div>
+        <p className="text-sm text-brand-text-secondary">
+          Les droits d&apos;inscription sont reversés sur le compte bancaire de votre organisation.
+          La plateforme retient <strong>0,10 € par inscription</strong> comme frais de service.
+        </p>
+        <div className="flex items-center gap-4">
+          <Button href={stripeUrl} variant="secondary">
+            Gérer Stripe Connect
+          </Button>
+          <UnlinkButton />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-brand-dark">Organisation : <strong>{slug}</strong></p>
+        <Pill tone="neutral">Paiements non activés</Pill>
+      </div>
+      <Alert tone="info">
+        Le paiement en ligne nécessite un compte Stripe Connect opérationnel pour cette organisation.
+      </Alert>
+      <div className="flex items-center gap-4">
+        <Button href={stripeUrl}>
+          Configurer Stripe Connect dans BApps Studio
+        </Button>
+        <UnlinkButton />
+      </div>
+    </div>
+  );
+}
+
+function UnlinkButton() {
+  return (
+    <form action={unlinkOrganization}>
+      <button type="submit" className="text-xs text-brand-text-secondary hover:text-brand-dark underline underline-offset-2">
+        Délier cette organisation
+      </button>
+    </form>
   );
 }

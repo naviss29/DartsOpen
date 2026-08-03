@@ -8,7 +8,7 @@ const makePlayer = (id: string): Registration => ({
   player_name: `Player ${id}`,
   player_email: `${id}@test.com`,
   player_phone: null,
-  stripe_payment_intent_id: null,
+  ster_payment_id: null,
   status: "PAID",
   qr_code_token: `token-${id}`,
   created_at: new Date().toISOString(),

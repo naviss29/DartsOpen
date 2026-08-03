@@ -121,14 +121,32 @@ retirés.
 - **Arbitrage destructeur** : en mode standard, corriger un match de bracket dont le vainqueur change supprime les matchs des tours suivants déjà générés (`dbArbitrateMatch`). `ArbitrateMatchModal` calcule ce risque côté client (`laterMatchesCount`, transmis par `BracketView`) et bloque le bouton de validation tant qu'une case à cocher explicite n'a pas été confirmée. Les matchs de poule (`bracket_round` null) et le mode rapide (jamais destructeur) ne sont pas concernés.
 - **Régénération des poules** : `generatePools` refuse la régénération dès qu'au moins un match de poule est `FINISHED` (contrôle serveur, dans l'action). Tant qu'aucun match n'est terminé, `GeneratePoolsButton` affiche un avertissement et exige une case à cocher avant de permettre la régénération (poules + matchs existants supprimés, joueurs redistribués aléatoirement).
 
-## Inscriptions et paiement
+## Inscriptions et paiement (mission DO-003)
 
-- `lib/actions/registration.ts` (`createRegistration`) — inscription publique, confirmée
-  immédiatement (`status: "PAID"`), sans étape de paiement en ligne. Aucune dépendance à un
-  prestataire de paiement (Stripe retiré, voir DO-002 dans `docs/CHANGELOG.md`).
-- `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) restent en base comme
-  information de prix/mode, mais ne déclenchent plus aucun paiement en ligne réel. Un
-  paiement en ligne pourra être réintroduit via un branchement sur SterPlatform.
+- `lib/actions/registration.ts` (`createRegistration`) — inscription publique. Tournoi
+  gratuit (`entry_fee === 0`) : confirmée immédiatement (`status: "PAID"`), email envoyé,
+  aucun paiement. Tournoi payant : DartsOpen ne dialogue **jamais** directement avec Stripe —
+  la session de paiement est créée côté SterPlatform via
+  `lib/api/sterplatformInternal.ts::createPaymentCheckout`
+  (`POST /api/internal/organizations/{slug}/payments/checkout`), qui encaisse pour le compte
+  du Stripe Connect de l'organisation BApps Studio liée à l'organisateur.
+- **Liaison organisation** (`lib/actions/organization.ts`, `Organization.sterOrganizationSlug`
+  en base) — un organisateur doit lier son compte à l'une de ses organisations BApps Studio
+  (rôle OWNER/ADMIN requis) avant de pouvoir accepter des paiements en ligne ; le slug soumis
+  est toujours revérifié côté serveur contre `GET /api/me/organizations` (jamais fait
+  confiance tel quel). Page Paramètres (`app/(dashboard)/settings/page.tsx`) : liaison si
+  absente, sinon statut Stripe Connect réel via
+  `lib/api/sterplatformInternal.ts::getStripeConnectStatus`
+  (`GET /api/internal/organizations/{slug}/connect/account-id`) avec lien vers la page Stripe
+  Connect de l'organisation dans BSsite (`NEXT_PUBLIC_BSSITE_URL`).
+- **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) — remplace l'ancien
+  webhook Stripe local : reçoit les notifications de paiement signées par SterPlatform
+  (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`), marque la
+  `Registration` payée sur `payment.succeeded`.
+- `PLATFORM_FEE_CENTS` (`lib/platformFee.ts`) — reste une décision métier propre à DartsOpen
+  (transmise en paramètre `platformFeeCents` à l'appel de checkout, jamais calculée côté
+  SterPlatform, qui reste générique entre modules).
+- `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) inchangés en base.
 
 ## Algorithme de classement (lib/db/ranking.ts)
 - Participation : +1 pt
@@ -144,6 +162,11 @@ retirés.
   côté SSO, jamais `request.url` — voir "Authentification (SSO central)")
 - `STER_ORG_SLUG` / `NEXT_PUBLIC_STER_ORG_SLUG` — slug org dans SterPlatform (`dartsopen`)
 - `STER_SSO_CLIENT_SECRET` — secret client SSO, voir "Authentification (SSO central)"
+- `STER_API_TOKEN` — jeton serveur-à-serveur (`X-App-Token`) partagé avec SterPlatform :
+  email transactionnel, statut Stripe Connect, création de paiement
+- `STER_PAYMENTS_CALLBACK_SECRET` — signe les notifications de paiement entrantes depuis
+  SterPlatform, voir "Inscriptions et paiement"
+- `NEXT_PUBLIC_BSSITE_URL` — URL du portail BSsite (lien Stripe Connect page Paramètres)
 - `NEXT_PUBLIC_MERCURE_PUBLIC_URL` — URL publique du hub (navigateur → hub)
 - `MERCURE_PRIVATE_URL` — URL privée du hub (Next.js → hub, peut être identique)
 - `MERCURE_JWT_SECRET` — secret HS256 partagé avec le hub (voir docker-compose.yml)

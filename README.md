@@ -7,8 +7,7 @@
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)
-![Stripe](https://img.shields.io/badge/Stripe-Connect-635BFF)
-![Tests](https://img.shields.io/badge/tests-120%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-217%20passing-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
 
 ---
@@ -27,9 +26,9 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
 |---|---|
 | Création de tournoi (poules, manches, type de jeu) | ✅ |
 | Inscriptions par équipe (solo / doublette / triplette…) | ✅ |
-| Inscription en ligne + paiement Stripe | ✅ |
+| Inscription en ligne + paiement (SterPlatform / Stripe Connect) | ✅ |
 | Mode inscriptions sur place uniquement | ✅ |
-| Frais plateforme 0,10 € / joueur (PayPal upfront + Stripe) | ✅ |
+| Frais plateforme 0,10 € / joueur (PayPal upfront + paiements en ligne via SterPlatform) | ✅ |
 | QR Code pré-tournoi par cible (à scotcher sur les machines avant l'événement) | ✅ |
 | Mode scoring électronique (clic sur le vainqueur — double validation) | ✅ |
 | Mode scoring traditionnel (saisie des scores par volée avec tableau de bord) | ✅ |
@@ -60,21 +59,19 @@ L'application permet aux associations d'organiser leurs tournois de A à Z : con
                 │ HTTPS
 ┌───────────────▼────────────────────────────────────────┐
 │           Server Actions + API Routes                  │
-│           Stripe Webhooks                              │
+│           Webhook paiements SterPlatform                │
 └───────┬─────────────────────┬──────────────────────────┘
         │                     │
 ┌───────▼──────────┐   ┌──────▼──────────────────────────┐
-│  PostgreSQL      │   │  Stripe Connect                  │
-│  (Prisma 7)      │   │  Paiements + Reversements        │
-│  DB propre       │   └─────────────────────────────────┘
-└───────┬──────────┘
-        │
-┌───────▼──────────────────────────────────────────────┐
-│                  SterPlatform                        │
-│  Auth JWT (login, register, refresh, logout)         │
-│  Mercure SSE (temps réel)                            │
-│  Email transactionnel (POST /api/email/send)         │
-└──────────────────────────────────────────────────────┘
+│  PostgreSQL      │   │  SterPlatform                    │
+│  (Prisma 7)      │   │  Auth JWT · Mercure SSE           │
+│  DB propre       │   │  Email transactionnel             │
+└───────────────────┘   │  API interne paiements           │
+                        │  → Stripe Connect (Stripe)       │
+                        └──────────────────────────────────┘
+
+DartsOpen ne dialogue jamais directement avec Stripe : Stripe Connect est géré
+exclusivement par SterPlatform (mission DO-003).
 ```
 
 ### Structure du dépôt
@@ -85,16 +82,15 @@ DartsOpen/
 │   ├── (auth)/             # Pages login / inscription
 │   ├── (dashboard)/        # Dashboard association
 │   ├── (tournament)/       # Vue tournoi (public + joueur)
-│   └── api/                # API Routes publiques + webhooks Stripe
+│   └── api/                # API Routes publiques + webhook paiements SterPlatform
 ├── components/             # Composants React réutilisables
 │   ├── ui/                 # Composants UI de base
 │   └── tournament/         # Composants métier tournoi
 ├── lib/
-│   ├── actions/            # Server Actions (tournament, player, pool, bracket, score, stripe)
-│   ├── api/                # Clients HTTP (auth.ts, client.ts, sterplatform.ts)
+│   ├── actions/            # Server Actions (tournament, player, pool, bracket, score, registration, organization)
+│   ├── api/                # Clients HTTP (auth.ts, client.ts, sterplatform.ts, sterplatformInternal.ts, organizations.ts)
 │   ├── db/                 # Couche Prisma (client.ts + tournament.ts)
 │   ├── generated/prisma/   # Client Prisma généré (gitignored)
-│   ├── stripe/             # Client Stripe
 │   └── utils/              # Helpers (QR code, scores, brackets)
 ├── prisma/
 │   ├── schema.prisma       # Schéma de données
@@ -117,7 +113,7 @@ DartsOpen/
 | Auth | SterPlatform (JWT) |
 | Temps réel | Mercure SSE (hub SterPlatform) |
 | Email | SterPlatform (`POST /api/email/send` + `X-App-Token`) |
-| Paiement | Stripe Connect |
+| Paiement | SterPlatform (Stripe Connect) |
 | QR Code | `qrcode` npm |
 | Tests | Vitest |
 | Containerisation | Docker + Docker Compose |
@@ -168,7 +164,7 @@ npm run test:coverage # Couverture de code
 npm run seed:players  # Remplir un tournoi avec des équipes fictives (interactif)
 ```
 
-**120 tests passants** — utils (bracket, pools, scores 501, seeding) + actions (tournament, score, bracket, pools avec seeds, arbitrage)
+**217 tests passants** — utils (bracket, pools, scores 501, seeding) + actions (tournament, score, bracket, pools avec seeds, arbitrage, organisation) + API interne SterPlatform + webhook paiements
 
 ---
 
@@ -179,11 +175,13 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 | `DATABASE_URL` | DSN PostgreSQL local |
 | `NEXT_PUBLIC_API_URL` | URL SterPlatform (ex. `https://sterplatform.bapps-studio.com`) |
 | `STER_ORG_SLUG` | Slug organisation SterPlatform (`dartsopen`) |
-| `STER_API_TOKEN` | Token partagé avec SterPlatform pour `POST /api/email/send` (`APP_TOKEN` côté SterPlatform) |
-| `STRIPE_SECRET_KEY` | Clé secrète Stripe (`sk_test_` en dev) |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Clé publique Stripe (`pk_test_` en dev) |
-| `STRIPE_WEBHOOK_SECRET` | Secret webhook Stripe (`whsec_`) |
+| `STER_API_TOKEN` | Token serveur-à-serveur partagé avec SterPlatform (`X-App-Token` — email, statut Stripe Connect, création de paiement) |
+| `STER_PAYMENTS_CALLBACK_SECRET` | Secret de signature des notifications de paiement entrantes depuis SterPlatform (`/api/webhooks/sterplatform-payments`) |
+| `NEXT_PUBLIC_BSSITE_URL` | URL du portail BSsite (lien "Gérer Stripe Connect" depuis la page Paramètres) |
 | `NEXT_PUBLIC_APP_URL` | URL publique de l'application |
+
+DartsOpen ne dialogue plus jamais directement avec Stripe (mission DO-003) — les paiements
+passent exclusivement par l'API interne de SterPlatform.
 
 ---
 
@@ -199,7 +197,8 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 
 - **0,10 € par joueur** retenu par DartsOpen (frais de service)
 - À la création : l'association règle `max_joueurs × 0,10 €` via PayPal
-- Inscriptions en ligne via Stripe : frais prélevés via `application_fee_amount`
+- Inscriptions en ligne : le montant total et `platformFeeCents` sont transmis à l'API de
+  paiement interne de SterPlatform, qui retient les frais via Stripe Connect
 - Inscriptions sur place (mode ONSITE) : frais couverts par le paiement PayPal initial
 
 ---
