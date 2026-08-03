@@ -4,8 +4,16 @@ FROM node:22-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+COPY package.json package-lock.json* .npmrc ./
+# @naviss29/design-system vient d'un registre privé (npm.pkg.github.com) — authentifié via
+# secret Docker Build (Coolify : interrupteur "Use Docker Build Secrets" sur la page
+# Environment Variables), même mécanisme que BSsite. Jamais un ARG : BuildKit déconseille
+# explicitement ARG/ENV pour des données sensibles (persistent dans le cache de build).
+RUN --mount=type=secret,id=npm_auth_token \
+    if [ -f /run/secrets/npm_auth_token ]; then \
+      npm config set "//npm.pkg.github.com/:_authToken" "$(cat /run/secrets/npm_auth_token)"; \
+    fi && \
+    npm ci
 
 # Build
 FROM base AS builder

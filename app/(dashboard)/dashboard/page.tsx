@@ -3,6 +3,10 @@ import { dbListTournaments, dbListAllTournaments } from "@/lib/db/tournament";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import StatusBadge from "@/components/ui/StatusBadge";
+import EmptyState from "@/components/ui/EmptyState";
 
 export const metadata: Metadata = { title: "Tableau de bord — DartsOpen" };
 
@@ -33,8 +37,8 @@ export default async function DashboardPage() {
 
   const stats = [
     { label: "Total", value: myTournaments.length, color: "bg-gray-100 text-gray-700" },
-    { label: "Ouvertes", value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-blue-50 text-blue-700" },
-    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-green-50 text-green-700" },
+    { label: "Ouvertes", value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-brand-turquoise/10 text-brand-turquoise" },
+    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-darts-green/10 text-darts-green-dark" },
     { label: "Terminés", value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-gray-50 text-gray-600" },
   ];
 
@@ -44,38 +48,29 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-        <Link
-          href="/tournaments/new"
-          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-        >
-          + Nouveau tournoi
-        </Link>
+        <Button href="/tournaments/new">+ Nouveau tournoi</Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.label} className={`rounded-xl p-4 ${stat.color}`}>
             <p className="text-3xl font-bold">{stat.value}</p>
-            <p className="text-sm mt-1">{stat.label}</p>
+            <p className="mt-1 text-sm">{stat.label}</p>
           </div>
         ))}
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Tous les opens</h2>
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Tous les opens</h2>
 
         {sorted.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center">
-            <p className="text-gray-500 mb-4">Aucun tournoi pour l&apos;instant.</p>
-            <Link
-              href="/tournaments/new"
-              className="inline-block rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-            >
-              Créer mon premier tournoi
-            </Link>
-          </div>
+          <EmptyState
+            icon="🎯"
+            title="Aucun tournoi pour l'instant"
+            action={<Button href="/tournaments/new">Créer mon premier tournoi</Button>}
+          />
         ) : (
           <div className="grid gap-3">
             {sorted.map((t) => {
@@ -88,17 +83,15 @@ export default async function DashboardPage() {
               const isClickable = t.is_mine || t.status !== "DRAFT";
 
               return isClickable ? (
-                <Link
-                  key={t.id}
-                  href={href}
-                  className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-green-300 hover:shadow-sm transition-all"
-                >
-                  <TournamentRow t={t} />
+                <Link key={t.id} href={href} className="block">
+                  <Card className="transition-all hover:border-darts-green/40 hover:shadow-sm">
+                    <TournamentRow t={t} />
+                  </Card>
                 </Link>
               ) : (
-                <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4 opacity-60">
+                <Card key={t.id} className="opacity-60">
                   <TournamentRow t={t} />
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -113,17 +106,17 @@ function TournamentRow({ t }: { t: Tournament }) {
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className="font-semibold text-gray-900 truncate">{t.name}</p>
+          <p className="truncate font-semibold text-gray-900">{t.name}</p>
           {t.is_mine && (
-            <span className="shrink-0 rounded-full bg-green-100 text-green-700 px-2 py-0.5 text-xs font-medium">
+            <span className="shrink-0 rounded-full bg-darts-green/10 px-2 py-0.5 text-xs font-medium text-darts-green-dark">
               Mon tournoi
             </span>
           )}
         </div>
-        <p className="text-sm text-gray-500 mt-0.5">
+        <p className="mt-0.5 text-sm text-gray-500">
           📅 {new Date(t.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp; 📍 {t.location}
         </p>
-        <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
           <span>👤 {t.players_paid * t.players_per_team}/{t.max_players} joueurs</span>
           <span>🔵 {t.nb_pools} poules</span>
           <span>🎯 {t.nb_boards} cibles</span>
@@ -131,32 +124,12 @@ function TournamentRow({ t }: { t: Tournament }) {
           <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
         </div>
       </div>
-      <div className="flex flex-col items-end gap-2 shrink-0">
+      <div className="flex shrink-0 flex-col items-end gap-2">
         <StatusBadge status={t.status} />
         {!t.is_mine && t.status === "OPEN" && (
-          <span className="text-xs font-semibold text-green-600">S&apos;inscrire →</span>
+          <span className="text-xs font-semibold text-darts-green-dark">S&apos;inscrire →</span>
         )}
       </div>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    DRAFT: "bg-gray-100 text-gray-600",
-    OPEN: "bg-blue-100 text-blue-700",
-    IN_PROGRESS: "bg-green-100 text-green-700",
-    FINISHED: "bg-gray-100 text-gray-500",
-  };
-  const labels: Record<string, string> = {
-    DRAFT: "Brouillon",
-    OPEN: "Inscriptions ouvertes",
-    IN_PROGRESS: "En cours",
-    FINISHED: "Terminé",
-  };
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap ${styles[status] ?? "bg-gray-100 text-gray-600"}`}>
-      {labels[status] ?? status}
-    </span>
   );
 }

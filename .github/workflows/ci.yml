@@ -10,6 +10,9 @@ jobs:
   ci:
     name: Lint · Tests · Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v5
@@ -18,9 +21,13 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@naviss29"
 
       - name: Installer les dépendances
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Générer le client Prisma
         run: npx prisma generate

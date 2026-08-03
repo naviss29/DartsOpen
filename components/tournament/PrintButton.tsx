@@ -1,12 +1,11 @@
 "use client";
 
+import Button from "@/components/ui/Button";
+
 export function PrintButton() {
   return (
-    <button
-      onClick={() => window.print()}
-      className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:border-green-500 hover:text-green-700 transition-colors print:hidden"
-    >
+    <Button variant="secondary" onClick={() => window.print()} className="print:hidden">
       🖨️ Imprimer
-    </button>
+    </Button>
   );
 }

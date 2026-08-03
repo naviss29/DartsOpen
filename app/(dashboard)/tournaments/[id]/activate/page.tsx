@@ -1,6 +1,8 @@
-import Link from "next/link";
+import { Alert } from "@naviss29/design-system";
 import { PaypalActivateButton } from "@/components/tournament/PaypalActivateButton";
 import { getOwnedTournament } from "@/lib/actions/access";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Activer le tournoi — DartsOpen" };
@@ -28,7 +30,7 @@ export default async function ActivatePage({ params }: Props) {
         <p className="text-sm text-gray-500 mt-1">{tournament.name}</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <Card className="space-y-4">
         <h2 className="font-semibold text-gray-900">Frais de plateforme</h2>
         <p className="text-sm text-gray-600">
           DartsOpen facture{" "}<strong>0,10 € par joueur</strong>{" "}pour couvrir l&apos;hébergement et le développement de la plateforme.
@@ -36,24 +38,21 @@ export default async function ActivatePage({ params }: Props) {
 
         <PaypalActivateButton baseFeeEuros={platformFeeEuros} maxPlayers={tournament.max_players} />
         <p className="text-xs text-center text-gray-400">Merci pour votre soutien !</p>
-      </div>
+      </Card>
 
       {tournament.registration_mode === "ONSITE" && (
-        <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800 space-y-1">
+        <Alert tone="warning">
           <p className="font-medium">📍 Mode : inscriptions sur place uniquement</p>
           <p>
             Les visiteurs verront un message les invitant à s&apos;inscrire directement lors de l&apos;événement.
             Chaque inscription manuelle vous coûtera{" "}<strong>0,10 € × joueurs par équipe</strong>{" "}en frais plateforme, réglés ici à l&apos;avance.
           </p>
-        </div>
+        </Alert>
       )}
 
-      <Link
-        href={`/tournaments/${id}`}
-        className="block rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white text-center hover:bg-green-700 transition-colors"
-      >
+      <Button href={`/tournaments/${id}`} className="w-full justify-center">
         Continuer vers mon tournoi →
-      </Link>
+      </Button>
     </div>
   );
 }

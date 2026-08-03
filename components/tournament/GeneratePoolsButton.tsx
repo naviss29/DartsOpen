@@ -2,6 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { generatePools } from "@/lib/actions/pool";
+import { Alert } from "@naviss29/design-system";
+import Button from "@/components/ui/Button";
 
 interface Props {
   tournamentId: string;
@@ -24,10 +26,10 @@ export function GeneratePoolsButton({ tournamentId, hasPools, nbPoolsConfigured,
 
   if (hasFinishedMatch) {
     return (
-      <div className="flex flex-col items-end gap-2 max-w-xs">
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-right">
+      <div className="max-w-xs">
+        <Alert tone="error">
           Régénération impossible : des matchs de poule sont déjà terminés. Les résultats déjà entrés ne peuvent pas être écrasés.
-        </p>
+        </Alert>
       </div>
     );
   }
@@ -35,22 +37,24 @@ export function GeneratePoolsButton({ tournamentId, hasPools, nbPoolsConfigured,
   return (
     <div className="flex flex-col items-end gap-2">
       {poolsReduced && (
-        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-right max-w-xs">
-          ⚠️ Avec les équipes actuellement inscrites, seules <strong>{effectivePools} poule{effectivePools > 1 ? "s" : ""}</strong> seront créées au lieu de {nbPoolsConfigured}.
-        </p>
+        <div className="max-w-xs">
+          <Alert tone="warning">
+            Avec les équipes actuellement inscrites, seules <strong>{effectivePools} poule{effectivePools > 1 ? "s" : ""}</strong> seront créées au lieu de {nbPoolsConfigured}.
+          </Alert>
+        </div>
       )}
 
       {isRegeneration && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 max-w-xs space-y-2">
-          <p className="text-sm text-red-700">
+        <div className="rounded-lg bg-darts-red/10 border border-darts-red/40 p-3 max-w-xs space-y-2">
+          <p className="text-sm text-darts-red">
             ⚠️ Régénérer supprimera <strong>toutes les poules et matchs actuels</strong> (y compris les scores déjà saisis) et redistribuera les équipes aléatoirement. Cette action est irréversible.
           </p>
-          <label className="flex items-start gap-2 text-sm text-red-700 cursor-pointer">
+          <label className="flex items-start gap-2 text-sm text-darts-red cursor-pointer">
             <input
               type="checkbox"
               checked={ackDestructive}
               onChange={(e) => setAckDestructive(e.target.checked)}
-              className="mt-0.5"
+              className="mt-0.5 accent-darts-red"
             />
             Je comprends et je confirme la régénération.
           </label>
@@ -58,18 +62,14 @@ export function GeneratePoolsButton({ tournamentId, hasPools, nbPoolsConfigured,
       )}
 
       {state?.error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-          {state.error}
-        </p>
+        <div className="max-w-xs">
+          <Alert tone="error">{state.error}</Alert>
+        </div>
       )}
       <form action={action}>
-        <button
-          type="submit"
-          disabled={isPending || (isRegeneration && !ackDestructive)}
-          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-        >
+        <Button type="submit" disabled={isPending || (isRegeneration && !ackDestructive)}>
           {isPending ? "Génération…" : hasPools ? "Regénérer les poules" : "Générer les poules"}
-        </button>
+        </Button>
       </form>
     </div>
   );

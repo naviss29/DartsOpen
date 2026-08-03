@@ -4,6 +4,9 @@ import { PrintButton } from "@/components/tournament/PrintButton";
 import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
 import { dbListPools, dbListRegistrations } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import NavPills from "@/components/ui/NavPills";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -73,41 +76,27 @@ export default async function PoolsPage({ params }: Props) {
         <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
         </Link>
-        <nav className="flex items-center gap-2">
+        <NavPills
+          items={[
+            { href: `/tournaments/${id}/players`, label: "👥 Joueurs" },
+            { href: `/tournaments/${id}/pools`, label: "🏆 Poules & Matchs", current: true },
+            {
+              href: `/tournaments/${id}/bracket`,
+              label: "🥇 Phases finales",
+              disabled: !["IN_PROGRESS", "FINISHED"].includes(tournament.status),
+              disabledReason: "Démarrez le tournoi pour accéder aux phases finales",
+            },
+          ]}
+        />
+        {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
           <Link
-            href={`/tournaments/${id}/players`}
-            className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
+            href={`/t/${id}/live`}
+            target="_blank"
+            className="inline-block rounded-lg border border-darts-green bg-darts-green/10 px-4 py-2 text-sm font-medium text-darts-green-dark hover:bg-darts-green/20 transition-colors"
           >
-            👥 Joueurs
+            🎯 Vue Live ↗
           </Link>
-          <Link
-            href={`/tournaments/${id}/pools`}
-            className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white"
-          >
-            🏆 Poules & Matchs
-          </Link>
-          {["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
-            <Link
-              href={`/tournaments/${id}/bracket`}
-              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
-            >
-              🥇 Phases finales
-            </Link>
-          ) : (
-            <span className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-400 cursor-not-allowed" title="Démarrez le tournoi pour accéder aux phases finales">
-              🥇 Phases finales
-            </span>
-          )}
-          {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
-            <Link
-              href={`/t/${id}/live`}
-              target="_blank"
-              className="rounded-lg border border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
-            >
-              🎯 Vue Live ↗
-            </Link>
-          )}
-        </nav>
+        )}
       </div>
 
       <div className="flex items-center justify-between">
@@ -130,7 +119,7 @@ export default async function PoolsPage({ params }: Props) {
       </div>
 
       {showQRCodes && (
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <Card as="section" className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-gray-900">QR Codes — Saisie des scores</h2>
@@ -156,52 +145,49 @@ export default async function PoolsPage({ params }: Props) {
             ))}
 
             {spectatorQR && (
-              <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-green-200 bg-green-50 p-4 text-center">
+              <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-darts-green/30 bg-darts-green/10 p-4 text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={spectatorQR} alt="QR Spectateurs" width={140} height={140} />
-                <p className="font-semibold text-green-800">Suivre le tournoi</p>
-                <p className="text-xs text-green-600">Scannez pour voir les classements et matchs en direct</p>
+                <p className="font-semibold text-darts-green-dark">Suivre le tournoi</p>
+                <p className="text-xs text-darts-green-dark">Scannez pour voir les classements et matchs en direct</p>
               </div>
             )}
           </div>
-        </section>
+        </Card>
       )}
 
       {tournament.nb_pools === 1 ? (
         ["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
-          <div className="rounded-xl bg-green-50 border border-green-200 p-10 text-center space-y-3">
-            <p className="text-green-800 font-semibold">Format élimination directe</p>
-            <p className="text-green-700 text-sm">
+          <div className="rounded-xl bg-darts-green/10 border border-darts-green/30 p-10 text-center space-y-3">
+            <p className="text-darts-green-dark font-semibold">Format élimination directe</p>
+            <p className="text-darts-green-dark text-sm">
               Tous les joueurs inscrits participent directement aux phases finales.
             </p>
             <Link
               href={`/tournaments/${id}/bracket`}
-              className="inline-block rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
+              className="inline-block rounded-lg bg-darts-green px-4 py-2 text-sm font-semibold text-white hover:bg-darts-green/90 transition-colors"
             >
               Voir les phases finales →
             </Link>
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center">
-            <p className="text-gray-500">
-              Format élimination directe — démarrez le tournoi pour accéder aux phases finales.
-            </p>
-          </div>
+          <EmptyState title="Format élimination directe" description="Démarrez le tournoi pour accéder aux phases finales." />
         )
       ) : !hasPools ? (
-        <div className="rounded-xl border border-dashed border-gray-300 p-12 text-center">
-          <p className="text-gray-500">
-            {canGenerate
+        <EmptyState
+          title="Aucune poule pour l'instant"
+          description={
+            canGenerate
               ? "Cliquez sur « Générer les poules » pour créer les poules et les matchs automatiquement."
               : tournament.status !== "OPEN"
                 ? "Passez le tournoi en « Ouvert » pour générer les poules."
-                : "Il faut au moins 2 équipes inscrites pour générer les poules."}
-          </p>
-        </div>
+                : "Il faut au moins 2 équipes inscrites pour générer les poules."
+          }
+        />
       ) : (
         <div className="space-y-6">
           {pools.map((pool) => (
-            <div key={pool.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <Card key={pool.id} className="overflow-hidden p-0">
               <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <h2 className="font-semibold text-gray-900">{pool.name}</h2>
                 <span className="text-xs text-gray-500">
@@ -240,7 +226,7 @@ export default async function PoolsPage({ params }: Props) {
                   </ul>
                 </div>
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -251,7 +237,7 @@ export default async function PoolsPage({ params }: Props) {
 function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
     PENDING: "bg-gray-300",
-    IN_PROGRESS: "bg-green-400 animate-pulse",
+    IN_PROGRESS: "bg-darts-green animate-pulse",
     FINISHED: "bg-blue-400",
   };
   return <span className={`w-2 h-2 rounded-full ${colors[status] ?? "bg-gray-300"}`} />;

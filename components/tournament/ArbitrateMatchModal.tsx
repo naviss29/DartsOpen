@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { arbitrateMatch } from "@/lib/actions/admin";
+import Button from "@/components/ui/Button";
+import Dialog from "@/components/ui/Dialog";
 
 interface MatchSet {
   id: string;
@@ -36,7 +38,7 @@ export function ArbitrateMatchButton({ match, tournamentId, laterMatchesCount = 
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-orange-500 hover:text-orange-700 transition-colors"
+        className="text-xs text-darts-gold-dark hover:text-darts-gold transition-colors"
         title="Arbitrer ce match"
       >
         Arbitrer
@@ -83,82 +85,71 @@ function ArbitrateModal({ match, tournamentId, laterMatchesCount = 0, onClose }:
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-      <div
-        className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md space-y-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div>
-          <h2 className="text-lg font-semibold text-white">Arbitrage</h2>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {match.player1.player_name} <span className="text-gray-600">vs</span> {match.player2.player_name}
-          </p>
-        </div>
-
-        <div className="space-y-3">
-          {sortedSets.map((s, i) => (
-            <div key={s.id} className="flex items-center justify-between gap-4">
-              <span className="text-sm text-gray-400 w-16 shrink-0">Manche {i + 1}</span>
-              <div className="flex gap-2 flex-1">
-                <WinnerBtn
-                  label={match.player1.player_name}
-                  active={winners[s.id] === match.player1.id}
-                  onClick={() => setWinner(s.id, match.player1.id)}
-                />
-                <WinnerBtn
-                  label={match.player2.player_name}
-                  active={winners[s.id] === match.player2.id}
-                  onClick={() => setWinner(s.id, match.player2.id)}
-                />
-                <WinnerBtn
-                  label="—"
-                  active={winners[s.id] === null}
-                  onClick={() => setWinner(s.id, null)}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {isDestructive && (
-          <div className="rounded-lg bg-red-950/50 border border-red-800 p-3 space-y-2">
-            <p className="text-sm text-red-300">
-              ⚠️ Si le vainqueur change, cette correction supprimera les{" "}
-              <strong>{laterMatchesCount} match{laterMatchesCount > 1 ? "s" : ""} déjà généré{laterMatchesCount > 1 ? "s" : ""}</strong>{" "}
-              dans les tours suivants (et leurs scores). Cette action est irréversible.
-            </p>
-            <label className="flex items-start gap-2 text-sm text-red-200 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={ackDestructive}
-                onChange={(e) => setAckDestructive(e.target.checked)}
-                className="mt-0.5"
+    <Dialog
+      title="Arbitrage"
+      description={`${match.player1.player_name} vs ${match.player2.player_name}`}
+      onClose={onClose}
+      className="space-y-5"
+    >
+      <div className="space-y-3">
+        {sortedSets.map((s, i) => (
+          <div key={s.id} className="flex items-center justify-between gap-4">
+            <span className="text-sm text-darts-text-secondary w-16 shrink-0">Manche {i + 1}</span>
+            <div className="flex gap-2 flex-1">
+              <WinnerBtn
+                label={match.player1.player_name}
+                active={winners[s.id] === match.player1.id}
+                onClick={() => setWinner(s.id, match.player1.id)}
               />
-              Je comprends et je confirme la correction.
-            </label>
+              <WinnerBtn
+                label={match.player2.player_name}
+                active={winners[s.id] === match.player2.id}
+                onClick={() => setWinner(s.id, match.player2.id)}
+              />
+              <WinnerBtn
+                label="—"
+                active={winners[s.id] === null}
+                onClick={() => setWinner(s.id, null)}
+              />
+            </div>
           </div>
-        )}
-
-        {error && <p className="text-sm text-red-400">{error}</p>}
-
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            onClick={onClose}
-            disabled={isPending}
-            className="rounded-lg border border-gray-600 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 transition-colors"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isPending || (isDestructive && !ackDestructive)}
-            className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 transition-colors disabled:opacity-50"
-          >
-            {isPending ? "Enregistrement…" : "Valider la correction"}
-          </button>
-        </div>
+        ))}
       </div>
-    </div>
+
+      {isDestructive && (
+        <div className="rounded-lg bg-darts-red/10 border border-darts-red/40 p-3 space-y-2">
+          <p className="text-sm text-darts-red">
+            ⚠️ Si le vainqueur change, cette correction supprimera les{" "}
+            <strong>{laterMatchesCount} match{laterMatchesCount > 1 ? "s" : ""} déjà généré{laterMatchesCount > 1 ? "s" : ""}</strong>{" "}
+            dans les tours suivants (et leurs scores). Cette action est irréversible.
+          </p>
+          <label className="flex items-start gap-2 text-sm text-darts-red cursor-pointer">
+            <input
+              type="checkbox"
+              checked={ackDestructive}
+              onChange={(e) => setAckDestructive(e.target.checked)}
+              className="mt-0.5 accent-darts-red"
+            />
+            Je comprends et je confirme la correction.
+          </label>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-darts-red">{error}</p>}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button variant="secondary" onClick={onClose} disabled={isPending}>
+          Annuler
+        </Button>
+        <button
+          onClick={handleSubmit}
+          disabled={isPending || (isDestructive && !ackDestructive)}
+          className="rounded-lg bg-darts-gold-dark px-4 py-2 text-sm font-semibold text-white hover:bg-darts-gold-dark/90 transition-colors disabled:opacity-50"
+        >
+          {isPending ? "Enregistrement…" : "Valider la correction"}
+        </button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -169,8 +160,8 @@ function WinnerBtn({ label, active, onClick }: { label: string; active: boolean;
       onClick={onClick}
       className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors truncate ${
         active
-          ? "border-orange-500 bg-orange-500/20 text-orange-300"
-          : "border-gray-600 bg-gray-800 text-gray-400 hover:border-gray-400"
+          ? "border-darts-gold bg-darts-gold/20 text-darts-gold-dark"
+          : "border-darts-border bg-darts-surface-raised text-darts-text-secondary hover:border-darts-text-secondary"
       }`}
     >
       {label}

@@ -34,51 +34,51 @@ export default async function RegisterPage({ params, searchParams }: Props) {
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
-          <p className="text-green-400 text-sm font-medium">🎯 DartsOpen</p>
-          <h1 className="text-2xl font-bold text-white">{tournament.name}</h1>
-          <p className="text-gray-400 text-sm">
+          <p className="text-darts-green text-sm font-medium">🎯 DartsOpen</p>
+          <h1 className="text-2xl font-bold text-darts-text">{tournament.name}</h1>
+          <p className="text-darts-text-secondary text-sm">
             📅 {new Date(tournament.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
             📍 {tournament.location}
           </p>
-          <p className="text-gray-300 text-sm">
+          <p className="text-darts-text text-sm">
             {count * tournament.players_per_team} / {tournament.max_players} joueurs inscrits
           </p>
-          <p className="text-gray-400 text-sm">
+          <p className="text-darts-text-secondary text-sm">
             👥 {tournament.players_per_team} joueur{tournament.players_per_team > 1 ? "s" : ""} par équipe
           </p>
         </div>
 
         {cancelled && (
-          <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3 text-sm text-yellow-300 text-center">
+          <div className="rounded-lg bg-darts-gold/10 border border-darts-gold/30 p-3 text-sm text-darts-gold text-center">
             Paiement annulé. Vous pouvez réessayer.
           </div>
         )}
 
         {tournament.registration_mode === "ONSITE" ? (
-          <div className="rounded-xl bg-white/5 border border-white/10 p-8 text-center space-y-3">
+          <div className="rounded-xl bg-darts-surface border border-darts-border p-8 text-center space-y-3">
             <p className="text-3xl">📍</p>
-            <p className="font-semibold text-white">Inscriptions sur place uniquement</p>
-            <p className="text-sm text-gray-400">
+            <p className="font-semibold text-darts-text">Inscriptions sur place uniquement</p>
+            <p className="text-sm text-darts-text-secondary">
               Les inscriptions pour cet open se font directement le jour de l&apos;événement.
               Rendez-vous à l&apos;accueil le{" "}
-              <strong className="text-gray-300">
+              <strong className="text-darts-text">
                 {new Date(tournament.date).toLocaleDateString("fr-FR")}
               </strong>{" "}
-              à <strong className="text-gray-300">{tournament.location}</strong>.
+              à <strong className="text-darts-text">{tournament.location}</strong>.
             </p>
           </div>
         ) : isFull ? (
-          <div className="rounded-xl bg-white/5 border border-white/10 p-8 text-center space-y-2">
+          <div className="rounded-xl bg-darts-surface border border-darts-border p-8 text-center space-y-2">
             <p className="text-2xl">😔</p>
-            <p className="font-semibold text-white">Tournoi complet</p>
-            <p className="text-gray-400 text-sm">Toutes les places sont prises.</p>
+            <p className="font-semibold text-darts-text">Tournoi complet</p>
+            <p className="text-darts-text-secondary text-sm">Toutes les places sont prises.</p>
           </div>
         ) : (
-          <div className="rounded-xl bg-white/5 border border-white/10 p-6 space-y-5">
+          <div className="rounded-xl bg-darts-surface border border-darts-border p-6 space-y-5">
             <div>
-              <h2 className="font-semibold text-white">Inscription de votre équipe</h2>
+              <h2 className="font-semibold text-darts-text">Inscription de votre équipe</h2>
               {tournament.entry_fee > 0 && (
-                <p className="text-green-400 font-medium mt-1">
+                <p className="text-darts-green font-medium mt-1">
                   {(tournament.entry_fee / 100).toFixed(2)} € / joueur &nbsp;·&nbsp;{" "}
                   <span className="font-bold">
                     {((tournament.entry_fee * tournament.players_per_team) / 100).toFixed(2)} € / équipe
