@@ -1,4 +1,5 @@
-import { Button as BaseButton, cn, type ButtonProps } from "@naviss29/design-system";
+import { Button as BaseButton, type ButtonProps } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Habillage DartsOpen du Button du design-system BApps Studio — jamais une réimplémentation :

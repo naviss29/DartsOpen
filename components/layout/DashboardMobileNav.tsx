@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { cn } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 import { dashboardNavLinks } from "./DashboardSidebar";
 
 /** Équivalent de DashboardSidebar sous md: (mission §6) — bandeau horizontal, zone tactile ≥44px. */

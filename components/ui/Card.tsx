@@ -1,4 +1,4 @@
-import { cn } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 import type { HTMLAttributes, ElementType } from "react";
 
 interface Props extends HTMLAttributes<HTMLDivElement> {

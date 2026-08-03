@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props {
   label: string;

@@ -1,4 +1,5 @@
-import { Input as BaseInput, cn, type InputProps } from "@naviss29/design-system";
+import { Input as BaseInput, type InputProps } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props extends InputProps {
   /**

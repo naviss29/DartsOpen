@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { cn } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 import LogoutButton from "@/components/LogoutButton";
 
 export const dashboardNavLinks = [

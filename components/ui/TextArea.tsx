@@ -1,4 +1,5 @@
-import { TextArea as BaseTextArea, cn, type TextAreaProps } from "@naviss29/design-system";
+import { TextArea as BaseTextArea, type TextAreaProps } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props extends TextAreaProps {
   tone?: "light" | "dark";

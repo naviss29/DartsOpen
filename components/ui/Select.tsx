@@ -1,4 +1,5 @@
-import { Select as BaseSelect, cn, type SelectProps } from "@naviss29/design-system";
+import { Select as BaseSelect, type SelectProps } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props extends SelectProps {
   tone?: "light" | "dark";

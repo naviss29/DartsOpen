@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Text, Title, cn } from "@naviss29/design-system";
+import { Text, Title } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props {
   icon?: string;

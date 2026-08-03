@@ -1,4 +1,4 @@
-import { cn } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props {
   value: number | string;

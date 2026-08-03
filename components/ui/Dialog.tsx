@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import { cn } from "@naviss29/design-system";
+import { cn } from "@/lib/utils/cn";
 
 interface Props {
   title: string;
