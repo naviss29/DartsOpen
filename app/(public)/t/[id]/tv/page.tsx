@@ -38,27 +38,27 @@ export default async function TvPage({ params }: Props) {
 
   return (
     <LandscapeGuard>
-    <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden p-6 gap-5">
+    <div className="h-screen bg-darts-bg text-darts-text flex flex-col overflow-hidden p-6 gap-5">
       {/* Header compact */}
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-3xl font-black tracking-tight">🎯 {tournament.name}</h1>
-          <p className="text-gray-600 text-xs tracking-widest uppercase mt-0.5">
+          <p className="text-darts-text-secondary text-xs tracking-widest uppercase mt-0.5">
             Affichage temps réel · actualisation toutes les 5 s
           </p>
         </div>
         <div className="flex items-center gap-4">
           {tournament.status === "IN_PROGRESS" && (
-            <span className="rounded-full bg-green-500/20 text-green-400 border border-green-500/30 px-4 py-1.5 text-sm font-bold animate-pulse">
+            <span className="rounded-full bg-darts-green/20 text-darts-green border border-darts-green/30 px-4 py-1.5 text-sm font-bold animate-pulse">
               ● EN DIRECT
             </span>
           )}
           {tournament.status === "FINISHED" && (
-            <span className="rounded-full bg-gray-700/50 text-gray-400 border border-gray-600 px-4 py-1.5 text-sm font-medium">
+            <span className="rounded-full bg-darts-surface-raised/60 text-darts-text-secondary border border-darts-border px-4 py-1.5 text-sm font-medium">
               Terminé
             </span>
           )}
-          <Link href={`/t/${id}/live`} className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+          <Link href={`/t/${id}/live`} className="text-xs text-darts-text-secondary hover:text-darts-text transition-colors">
             Vue normale →
           </Link>
         </div>
@@ -66,7 +66,7 @@ export default async function TvPage({ params }: Props) {
 
       {/* Contenu principal — occupe tout l'espace restant */}
       {!["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
-        <div className="flex-1 flex items-center justify-center text-gray-600 text-lg">
+        <div className="flex-1 flex items-center justify-center text-darts-text-secondary text-lg">
           Le tournoi n&apos;a pas encore commencé.
         </div>
       ) : (

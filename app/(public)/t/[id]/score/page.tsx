@@ -43,8 +43,8 @@ export default async function ScorePage({ params, searchParams }: Props) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center space-y-4">
         <p className="text-4xl">⚡</p>
-        <h1 className="text-xl font-bold text-white">{tournament.name}</h1>
-        <p className="text-gray-400">Les scores sont gérés par l&apos;organisateur en mode tournoi rapide.</p>
+        <h1 className="text-xl font-bold text-darts-text">{tournament.name}</h1>
+        <p className="text-darts-text-secondary">Les scores sont gérés par l&apos;organisateur en mode tournoi rapide.</p>
       </div>
     );
   }
@@ -75,8 +75,8 @@ export default async function ScorePage({ params, searchParams }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <div className="bg-gray-900 border-b border-gray-800 px-4 py-4">
-        <p className="text-gray-400 text-xs uppercase tracking-wider">🎯 {tournament.name}</p>
+      <div className="bg-darts-surface border-b border-darts-border px-4 py-4">
+        <p className="text-darts-text-secondary text-xs uppercase tracking-wider">🎯 {tournament.name}</p>
         <h1 className="text-xl font-bold mt-1">Cible {boardNumber}</h1>
       </div>
 
@@ -84,8 +84,8 @@ export default async function ScorePage({ params, searchParams }: Props) {
         {!match ? (
           <div className="text-center py-16">
             <p className="text-4xl mb-4">⏳</p>
-            <p className="text-gray-400">Aucun match en cours sur cette cible.</p>
-            <p className="text-gray-500 text-sm mt-2">Le prochain match sera annoncé ici.</p>
+            <p className="text-darts-text-secondary">Aucun match en cours sur cette cible.</p>
+            <p className="text-darts-text-secondary text-sm mt-2">Le prochain match sera annoncé ici.</p>
           </div>
         ) : (
           <ScoreForm

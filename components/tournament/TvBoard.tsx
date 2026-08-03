@@ -95,8 +95,8 @@ export function TvBoard({ tournamentId, initialMatches, nbBoards }: Props) {
 
       {/* Ticker résultats — hauteur fixe en bas */}
       {recentResults.length > 0 && (
-        <div className="shrink-0 border-t border-gray-800 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gray-600 mb-2">
+        <div className="shrink-0 border-t border-darts-border pt-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-darts-text-secondary mb-2">
             Derniers résultats
           </p>
           <div className="flex flex-wrap gap-2">
@@ -106,11 +106,11 @@ export function TvBoard({ tournamentId, initialMatches, nbBoards }: Props) {
               const p1s   = m.sets.filter((s) => s.winner_id === m.player1.id).length;
               const p2s   = m.sets.filter((s) => s.winner_id === m.player2.id).length;
               return (
-                <div key={m.id} className="rounded-lg bg-gray-800/60 border border-gray-700/40 px-3 py-1.5 text-sm flex items-center gap-2">
-                  <span className="text-xs text-gray-600 font-mono">C{m.board_number}</span>
-                  <span className={p1Won ? "text-white font-semibold" : "text-gray-500"}>{m.player1.player_name}</span>
-                  <span className="text-gray-600 font-mono text-xs">{p1s}–{p2s}</span>
-                  <span className={p2Won ? "text-white font-semibold" : "text-gray-500"}>{m.player2.player_name}</span>
+                <div key={m.id} className="rounded-lg bg-darts-surface/60 border border-darts-border/60 px-3 py-1.5 text-sm flex items-center gap-2">
+                  <span className="text-xs text-darts-text-secondary font-mono">C{m.board_number}</span>
+                  <span className={p1Won ? "text-darts-text font-semibold" : "text-darts-text-secondary"}>{m.player1.player_name}</span>
+                  <span className="text-darts-text-secondary font-mono text-xs">{p1s}–{p2s}</span>
+                  <span className={p2Won ? "text-darts-text font-semibold" : "text-darts-text-secondary"}>{m.player2.player_name}</span>
                 </div>
               );
             })}
@@ -137,19 +137,19 @@ function BoardCard({
     const p1s = active.sets.filter((s) => s.winner_id === active.player1.id).length;
     const p2s = active.sets.filter((s) => s.winner_id === active.player2.id).length;
     return (
-      <div className="h-full rounded-2xl border border-green-500/40 bg-green-950/30 p-6 relative overflow-hidden flex flex-col justify-between">
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-green-500 rounded-t-2xl" />
+      <div className="h-full rounded-2xl border border-darts-green/40 bg-darts-green/10 p-6 relative overflow-hidden flex flex-col justify-between">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-darts-green rounded-t-2xl" />
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold uppercase tracking-widest text-green-400">Cible {boardNum}</span>
-          <span className="flex items-center gap-1.5 text-sm text-green-400 font-medium">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-sm font-bold uppercase tracking-widest text-darts-green">Cible {boardNum}</span>
+          <span className="flex items-center gap-1.5 text-sm text-darts-green font-medium">
+            <span className="w-2 h-2 rounded-full bg-darts-green animate-pulse" />
             En cours
           </span>
         </div>
         <div className="text-center flex flex-col items-center gap-3">
-          <p className="text-4xl font-black text-white leading-tight truncate w-full">{active.player1.player_name}</p>
-          <p className="text-6xl font-black text-green-400 tabular-nums tracking-widest">{p1s} — {p2s}</p>
-          <p className="text-4xl font-black text-white leading-tight truncate w-full">{active.player2.player_name}</p>
+          <p className="text-4xl font-black text-darts-text leading-tight truncate w-full">{active.player1.player_name}</p>
+          <p className="font-score text-6xl font-black text-darts-green tabular-nums tracking-widest">{p1s} — {p2s}</p>
+          <p className="text-4xl font-black text-darts-text leading-tight truncate w-full">{active.player2.player_name}</p>
         </div>
         <div />
       </div>
@@ -158,15 +158,15 @@ function BoardCard({
 
   if (next) {
     return (
-      <div className="h-full rounded-2xl border border-amber-500/30 bg-amber-950/20 p-6 flex flex-col justify-between">
+      <div className="h-full rounded-2xl border border-darts-gold/30 bg-darts-gold/10 p-6 flex flex-col justify-between">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold uppercase tracking-widest text-amber-500">Cible {boardNum}</span>
-          <span className="text-sm text-amber-600/70 font-medium">Prochain</span>
+          <span className="text-sm font-bold uppercase tracking-widest text-darts-gold">Cible {boardNum}</span>
+          <span className="text-sm text-darts-gold-dark font-medium">Prochain</span>
         </div>
         <div className="text-center flex flex-col items-center gap-4">
-          <p className="text-3xl font-bold text-amber-100 truncate w-full">{next.player1.player_name}</p>
-          <p className="text-gray-600 text-xl font-medium">vs</p>
-          <p className="text-3xl font-bold text-amber-100 truncate w-full">{next.player2.player_name}</p>
+          <p className="text-3xl font-bold text-darts-text truncate w-full">{next.player1.player_name}</p>
+          <p className="text-darts-text-secondary text-xl font-medium">vs</p>
+          <p className="text-3xl font-bold text-darts-text truncate w-full">{next.player2.player_name}</p>
         </div>
         <div />
       </div>
@@ -179,15 +179,15 @@ function BoardCard({
     const p1s   = last.sets.filter((s) => s.winner_id === last.player1.id).length;
     const p2s   = last.sets.filter((s) => s.winner_id === last.player2.id).length;
     return (
-      <div className="h-full rounded-2xl border border-gray-700/40 bg-gray-800/20 p-6 flex flex-col justify-between">
+      <div className="h-full rounded-2xl border border-darts-border/60 bg-darts-surface/30 p-6 flex flex-col justify-between">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-bold uppercase tracking-widest text-gray-600">Cible {boardNum}</span>
-          <span className="text-sm text-gray-700 font-medium">Libre</span>
+          <span className="text-sm font-bold uppercase tracking-widest text-darts-text-secondary">Cible {boardNum}</span>
+          <span className="text-sm text-darts-text-secondary font-medium">Libre</span>
         </div>
         <div className="text-center flex flex-col items-center gap-3">
-          <p className={`text-3xl font-bold truncate w-full ${p1Won ? "text-gray-400" : "text-gray-600"}`}>{last.player1.player_name}</p>
-          <p className="text-5xl font-black text-gray-600 tabular-nums tracking-widest">{p1s} — {p2s}</p>
-          <p className={`text-3xl font-bold truncate w-full ${p2Won ? "text-gray-400" : "text-gray-600"}`}>{last.player2.player_name}</p>
+          <p className={`text-3xl font-bold truncate w-full ${p1Won ? "text-darts-text-secondary" : "text-darts-text-secondary/70"}`}>{last.player1.player_name}</p>
+          <p className="font-score text-5xl font-black text-darts-text-secondary tabular-nums tracking-widest">{p1s} — {p2s}</p>
+          <p className={`text-3xl font-bold truncate w-full ${p2Won ? "text-darts-text-secondary" : "text-darts-text-secondary/70"}`}>{last.player2.player_name}</p>
         </div>
         <div />
       </div>
@@ -195,9 +195,9 @@ function BoardCard({
   }
 
   return (
-    <div className="h-full rounded-2xl border border-gray-800 bg-gray-900/30 p-6 flex flex-col justify-between">
-      <span className="text-sm font-bold uppercase tracking-widest text-gray-700">Cible {boardNum}</span>
-      <p className="text-center text-gray-700 text-lg">En attente</p>
+    <div className="h-full rounded-2xl border border-darts-border bg-darts-bg/50 p-6 flex flex-col justify-between">
+      <span className="text-sm font-bold uppercase tracking-widest text-darts-text-secondary">Cible {boardNum}</span>
+      <p className="text-center text-darts-text-secondary text-lg">En attente</p>
       <div />
     </div>
   );

@@ -14,24 +14,24 @@ export default async function RegisterSuccessPage({ params, searchParams }: Prop
       <div className="w-full max-w-md text-center space-y-6">
         <div className="text-6xl">🎯</div>
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-white">Inscription confirmée !</h1>
+          <h1 className="text-2xl font-bold text-darts-text">Inscription confirmée !</h1>
           {name && (
-            <p className="text-gray-300">
-              L&apos;équipe <span className="font-semibold text-white">{decodeURIComponent(name)}</span> est bien inscrite.
+            <p className="text-darts-text">
+              L&apos;équipe <span className="font-semibold text-darts-text">{decodeURIComponent(name)}</span> est bien inscrite.
             </p>
           )}
-          <p className="text-gray-400 text-sm">
+          <p className="text-darts-text-secondary text-sm">
             Votre paiement a bien été encaissé. Rendez-vous le jour du tournoi !
           </p>
         </div>
 
-        <div className="rounded-xl bg-white/5 border border-white/10 p-4 text-sm text-gray-300 space-y-1">
+        <div className="rounded-xl bg-darts-surface border border-darts-border p-4 text-sm text-darts-text space-y-1">
           <p>Le jour J, scannez le QR code affiché sur votre cible pour saisir vos scores directement depuis votre smartphone.</p>
         </div>
 
         <Link
           href={`/t/${id}/live`}
-          className="inline-block rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-white/5 transition-colors"
+          className="inline-block rounded-lg border border-darts-border px-4 py-2 text-sm font-medium text-darts-text hover:bg-darts-surface transition-colors"
         >
           Suivre le tournoi en direct →
         </Link>
