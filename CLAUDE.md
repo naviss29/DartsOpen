@@ -3,8 +3,8 @@
 ## Stack
 - **Next.js 16** (App Router, standalone output) + TypeScript
 - **Prisma 7** + PostgreSQL (port 5433 en local)
-- **SterPlatform** — auth organisateurs (JWT, cookies httpOnly)
-- **Stripe** — inscriptions payantes
+- **SterPlatform** — auth organisateurs via le SSO central (JWT, cookies httpOnly), aucune
+  page de connexion/inscription locale — voir "Authentification (SSO central)" ci-dessous
 - **Tailwind CSS 4**
 - **Vitest** — tests unitaires
 
@@ -14,7 +14,7 @@
 docker compose up -d
 
 # 2. Variables d'env
-# Créer .env.local (aucun fichier d'exemple fourni) — voir « Variables d'environnement requises » ci-dessous
+# Créer .env.local à partir de .env.example — voir « Variables d'environnement requises » ci-dessous
 
 # 3. Dépendances + migration
 npm install
@@ -40,13 +40,68 @@ app/
 lib/
   api/      → client SterPlatform + helpers auth (cookies JWT)
   db/       → requêtes Prisma (tournament.ts, ranking.ts)
-  stripe/   → helpers paiement
   actions/  → Server Actions Next.js
 
 components/ → composants React (tournament/, ui/)
 prisma/     → schema + migrations
 scripts/    → seed de données de test
 ```
+
+## Authentification (SSO central — migration écosystème SSO)
+
+BSsite (le Portail BApps Studio) est l'unique portail de connexion visible de
+l'écosystème ; DartsOpen n'a plus aucun écran de login/register/forgot-password/
+reset-password local (retirés par cette migration, pas seulement masqués). SterPlatform
+reste l'unique fournisseur d'identité. Protocole : Authorization Code + PKCE (S256),
+échange de code serveur-à-serveur — jamais de JWT/refresh token dans une URL. Même
+architecture que BilletAsso (pilote AUTH-002) et BSsite (AUTH-005), voir leurs CLAUDE.md
+respectifs pour le détail du protocole côté SterPlatform.
+
+**Remplace l'ancien flux (obsolète, supprimé par cette migration)** : `lib/actions/auth.ts`
+(server actions `register`/`login`/`requestPasswordReset`/`updatePassword`) appelait
+directement les endpoints classiques SterPlatform (`/api/auth/register`, `/login`,
+`/forgot-password`, `/reset-password`) avec le mot de passe transmis en clair depuis un
+formulaire local. Ce fichier, `components/auth/{Login,Register,ForgotPassword,ResetPassword}
+Form.tsx` et les pages `app/(auth)/{register,forgot-password,reset-password}/page.tsx` ont
+été supprimés. Les vestiges Supabase (`app/auth/{callback,confirm}/route.ts`,
+`app/auth/verified/page.tsx`, déjà désactivés avant cette migration) ont également été
+retirés.
+
+- **`app/api/auth/sso/start/route.ts`** — point d'entrée unique de toute redirection "non
+  authentifié" (`proxy.ts`, `app/(auth)/login/page.tsx`). Ouvre une transaction locale :
+  `state` + vérificateur PKCE CSPRNG, stockés dans un cookie `do_sso_tx` (HttpOnly, à usage
+  unique, 10 min — voir `lib/sso/transaction.ts`), puis redirige vers SterPlatform
+  `GET /api/auth/sso/authorize`. Le paramètre `?next=` (chemin relatif exact demandé, validé
+  contre l'open redirect — `lib/sso/redirect.ts`) est conservé dans cette même transaction
+  pour revenir sur la page d'origine après connexion.
+- **`app/api/auth/sso/callback/route.ts`** — reçoit `?code=&state=` de SterPlatform, vérifie
+  le `state` local, échange le code contre une session via `POST /api/auth/sso/exchange`
+  (secret client serveur `STER_SSO_CLIENT_SECRET`, jamais `NEXT_PUBLIC_`), pose les cookies de
+  session existants (`ster_token`/`ster_refresh_token`, mécanisme inchangé), puis redirige
+  vers `next`. Contrairement à BilletAsso, **aucune création d'organisation** n'est déclenchée
+  ici — DartsOpen n'a pas de notion d'Organization SterPlatform, `tournament.association_id`
+  compare directement au `user.id` (voir "Contrôle d'accès organisateur" ci-dessous).
+- **`app/(auth)/login/page.tsx`** — ne rend plus de formulaire : redirige immédiatement vers
+  `/api/auth/sso/start` (compat pour tout lien historique/favori vers `/login`).
+- **`proxy.ts`** — redirige toute page protégée (`/dashboard`, `/tournaments`, `/settings`)
+  sans session vers `ssoStartPath(pathname)` au lieu d'un `/login?next=` local. Les règles de
+  rate limiting sur `/login`/`/register`/`/forgot-password`/`/reset-password` ont été retirées
+  (routes disparues ; le rate limiting du login est déjà assuré côté SterPlatform,
+  `AuthRateLimiterSubscriber`, 5 tentatives/minute/IP).
+- **Déconnexion globale** (`components/LogoutButton.tsx`) — un vrai POST de formulaire
+  top-level (pas `fetch()`) vers SterPlatform `/api/auth/sso/logout` coupe la session partout
+  dans l'écosystème, pas seulement sur DartsOpen (utile en contexte tournoi : un ordinateur/
+  une tablette partagé(e) entre plusieurs organisateurs). `app/api/auth/logout/route.ts`
+  révoque en plus le refresh token local avant ce POST global.
+
+### Variables d'environnement SSO
+- `STER_SSO_CLIENT_SECRET` — secret client échangé côté serveur uniquement avec SterPlatform
+  (`/api/auth/sso/exchange`), doit être identique à `SSO_CLIENT_SECRET_DARTSOPEN` côté
+  SterPlatform.
+- En local, DartsOpen et BSsite tournent tous deux par défaut sur le port 3000 : pour valider
+  le parcours SSO complet en local (les deux apps démarrées simultanément), lancer DartsOpen
+  sur le port 3002 (`SSO_CALLBACK_DARTSOPEN`/`SSO_DEFAULT_URL_DARTSOPEN` déjà configurés sur ce
+  port dans `SterPlatform/.env.local` et `.env.example`).
 
 ## Contrôle d'accès organisateur
 
@@ -66,6 +121,15 @@ scripts/    → seed de données de test
 - **Arbitrage destructeur** : en mode standard, corriger un match de bracket dont le vainqueur change supprime les matchs des tours suivants déjà générés (`dbArbitrateMatch`). `ArbitrateMatchModal` calcule ce risque côté client (`laterMatchesCount`, transmis par `BracketView`) et bloque le bouton de validation tant qu'une case à cocher explicite n'a pas été confirmée. Les matchs de poule (`bracket_round` null) et le mode rapide (jamais destructeur) ne sont pas concernés.
 - **Régénération des poules** : `generatePools` refuse la régénération dès qu'au moins un match de poule est `FINISHED` (contrôle serveur, dans l'action). Tant qu'aucun match n'est terminé, `GeneratePoolsButton` affiche un avertissement et exige une case à cocher avant de permettre la régénération (poules + matchs existants supprimés, joueurs redistribués aléatoirement).
 
+## Inscriptions et paiement
+
+- `lib/actions/registration.ts` (`createRegistration`) — inscription publique, confirmée
+  immédiatement (`status: "PAID"`), sans étape de paiement en ligne. Aucune dépendance à un
+  prestataire de paiement (Stripe retiré, voir DO-002 dans `docs/CHANGELOG.md`).
+- `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) restent en base comme
+  information de prix/mode, mais ne déclenchent plus aucun paiement en ligne réel. Un
+  paiement en ligne pourra être réintroduit via un branchement sur SterPlatform.
+
 ## Algorithme de classement (lib/db/ranking.ts)
 - Participation : +1 pt
 - Victoire en poule : +1 pt
@@ -76,9 +140,10 @@ scripts/    → seed de données de test
 ## Variables d'environnement requises
 - `DATABASE_URL` — PostgreSQL
 - `NEXT_PUBLIC_API_URL` — URL SterPlatform
-- `STER_ORG_SLUG` — slug org dans SterPlatform (`dartsopen`)
-- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` — Stripe
-- `STRIPE_WEBHOOK_SECRET` — webhook Stripe
+- `NEXT_PUBLIC_APP_URL` — URL publique de DartsOpen (utilisée pour construire `redirect_uri`
+  côté SSO, jamais `request.url` — voir "Authentification (SSO central)")
+- `STER_ORG_SLUG` / `NEXT_PUBLIC_STER_ORG_SLUG` — slug org dans SterPlatform (`dartsopen`)
+- `STER_SSO_CLIENT_SECRET` — secret client SSO, voir "Authentification (SSO central)"
 - `NEXT_PUBLIC_MERCURE_PUBLIC_URL` — URL publique du hub (navigateur → hub)
 - `MERCURE_PRIVATE_URL` — URL privée du hub (Next.js → hub, peut être identique)
 - `MERCURE_JWT_SECRET` — secret HS256 partagé avec le hub (voir docker-compose.yml)
@@ -110,16 +175,12 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 
 ## Gestion des erreurs
 
-### Webhook Stripe
-- Les erreurs DB doivent **remonter** (ne pas swallower) : retourner `status: 500` pour que Stripe retente
-- Pattern : `try { await dbMarkRegistrationPaid(...) } catch (err) { console.error(...); return NextResponse.json(..., { status: 500 }) }`
-
 ### Routes publiques
 - `.catch(() => null)` est interdit sans log — utiliser `.catch((err) => { console.warn(..., err); return null })`
 - Cela garantit que les erreurs DB inattendues (connexion perdue, timeout) sont tracées
 
 ### Logs
-- `console.error` pour les erreurs inattendues (DB, Stripe)
+- `console.error` pour les erreurs inattendues (DB)
 - `console.warn` pour les best-effort (email, opérations non-bloquantes)
 - Toujours passer l'objet `err` en dernier argument pour avoir la stack trace
 

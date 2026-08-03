@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@naviss29/design-system";
-import { logout } from "@/lib/actions/auth";
+import LogoutButton from "@/components/LogoutButton";
 
 export const dashboardNavLinks = [
   { href: "/dashboard", label: "Tableau de bord", icon: "📊" },
@@ -62,14 +62,7 @@ export default function DashboardSidebar({ userEmail }: { userEmail: string }) {
         >
           <span aria-hidden="true">💛</span> Soutenir le projet
         </Link>
-        <form action={logout}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
-          >
-            <span aria-hidden="true">🚪</span> Se déconnecter
-          </button>
-        </form>
+        <LogoutButton />
         <div className="pt-3 text-center">
           <p className="mb-1 text-xs text-gray-400">Développé par</p>
           <Image

@@ -5,9 +5,6 @@ import DashboardSidebar from "./DashboardSidebar";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tournaments",
 }));
-vi.mock("@/lib/actions/auth", () => ({
-  logout: vi.fn(),
-}));
 
 describe("DashboardSidebar", () => {
   it("marque comme actif le lien correspondant à la page courante", () => {

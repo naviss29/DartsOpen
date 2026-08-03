@@ -1,13 +1,12 @@
-import { LoginForm } from "@/components/auth/LoginForm";
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { ssoStartPath } from "@/lib/sso/redirect";
 
-export const metadata: Metadata = { title: "Connexion — DartsOpen" };
-
+/**
+ * Plus de formulaire local (migration écosystème SSO) — BSsite est l'unique portail de
+ * connexion visible. Toute visite de /login (lien historique, favori...) est immédiatement
+ * redirigée vers /api/auth/sso/start, qui ouvre sa propre transaction avant de renvoyer vers
+ * SterPlatform puis BSsite.
+ */
 export default function LoginPage() {
-  return (
-    <>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Connexion</h2>
-      <LoginForm />
-    </>
-  );
+  redirect(ssoStartPath());
 }
