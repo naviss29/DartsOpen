@@ -5,6 +5,10 @@ import { BracketView } from "@/components/tournament/BracketView";
 import { QuickBracketView } from "@/components/tournament/QuickBracketView";
 import { dbListMatches } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import NavPills from "@/components/ui/NavPills";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -114,24 +118,22 @@ export default async function BracketPage({ params }: Props) {
         <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
         </Link>
-        <nav className="flex items-center gap-2 flex-wrap">
-          <Link href={`/tournaments/${id}/players`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
-            👥 Joueurs
+        <NavPills
+          items={[
+            { href: `/tournaments/${id}/players`, label: "👥 Joueurs" },
+            ...(tournament.quick_mode ? [] : [{ href: `/tournaments/${id}/pools`, label: "🏆 Poules & Matchs" }]),
+            { href: `/tournaments/${id}/bracket`, label: tournament.quick_mode ? "⚡ Bracket rapide" : "🥇 Phases finales", current: true },
+          ]}
+        />
+        {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
+          <Link
+            href={`/t/${id}/live`}
+            target="_blank"
+            className="inline-block rounded-lg border border-darts-green bg-darts-green/10 px-4 py-2 text-sm font-medium text-darts-green-dark hover:bg-darts-green/20 transition-colors"
+          >
+            🎯 Vue Live ↗
           </Link>
-          {!tournament.quick_mode && (
-            <Link href={`/tournaments/${id}/pools`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
-              🏆 Poules & Matchs
-            </Link>
-          )}
-          <Link href={`/tournaments/${id}/bracket`} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white">
-            {tournament.quick_mode ? "⚡ Bracket rapide" : "🥇 Phases finales"}
-          </Link>
-          {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
-            <Link href={`/t/${id}/live`} target="_blank" className="rounded-lg border border-green-500 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors">
-              🎯 Vue Live ↗
-            </Link>
-          )}
-        </nav>
+        )}
       </div>
 
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -156,27 +158,21 @@ export default async function BracketPage({ params }: Props) {
           <div className="flex flex-col items-end gap-2">
             {tournament.quick_mode ? (
               <form action={doGenerateQuickBracket}>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
-                >
-                  ⚡ Générer le bracket rapide
-                </button>
+                <Button type="submit">⚡ Générer le bracket rapide</Button>
               </form>
             ) : (
               <>
                 <form action={doGenerateBracket}>
-                  <button
+                  <Button
                     type="submit"
                     disabled={poolsPending}
                     title={poolsPending ? "Des matchs de poules sont encore en cours" : ""}
-                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Générer les phases finales
-                  </button>
+                  </Button>
                 </form>
                 {poolsPending && (
-                  <p className="text-xs text-orange-600">
+                  <p className="text-xs text-darts-gold-dark">
                     Des matchs de poule sont encore en cours.
                   </p>
                 )}
@@ -190,27 +186,22 @@ export default async function BracketPage({ params }: Props) {
       {!tournament.quick_mode && hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS" && (
         <div className="flex justify-end">
           <form action={doAdvanceToNextRound}>
-            <button
-              type="submit"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
-            >
-              Tour suivant →
-            </button>
+            <Button type="submit">Tour suivant →</Button>
           </form>
         </div>
       )}
 
       {/* Bandeau vainqueur */}
       {tournamentFinished && winnerName && (
-        <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-6 text-center space-y-2">
+        <div className="rounded-xl bg-darts-gold/10 border border-darts-gold/30 p-6 text-center space-y-2">
           <p className="text-4xl">🏆</p>
-          <h2 className="text-xl font-bold text-yellow-800">Vainqueur du tournoi</h2>
-          <p className="text-2xl font-bold text-yellow-900">{winnerName}</p>
+          <h2 className="text-xl font-bold text-darts-gold-dark">Vainqueur du tournoi</h2>
+          <p className="text-2xl font-bold text-darts-gold-dark">{winnerName}</p>
         </div>
       )}
 
       {hasBracket ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <Card>
           {tournament.quick_mode ? (
             <QuickBracketView matches={bracketMatches} tournamentId={id} />
           ) : (
@@ -220,11 +211,12 @@ export default async function BracketPage({ params }: Props) {
               tournamentId={id}
             />
           )}
-        </div>
+        </Card>
       ) : (
-        <div className="rounded-xl border border-dashed border-gray-300 p-16 text-center">
-          <p className="text-gray-500">
-            {tournament.quick_mode
+        <EmptyState
+          title="Phases finales pas encore disponibles"
+          description={
+            tournament.quick_mode
               ? "Cliquez sur « Générer le bracket rapide » pour démarrer le tournoi."
               : poolsPending
               ? "Terminez tous les matchs de poules pour débloquer les phases finales."
@@ -232,9 +224,9 @@ export default async function BracketPage({ params }: Props) {
               ? "Génération des phases finales en cours…"
               : tournament.status !== "IN_PROGRESS"
               ? "Démarrez le tournoi pour accéder aux phases finales."
-              : "Cliquez sur « Générer les phases finales » pour créer le tableau."}
-          </p>
-        </div>
+              : "Cliquez sur « Générer les phases finales » pour créer le tableau."
+          }
+        />
       )}
     </div>
   );

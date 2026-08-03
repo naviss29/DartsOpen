@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { roundLabel } from "@/lib/utils/bracket";
+import { CARD_H, CARD_W, CONN_W, BASE_SLOT, deriveR1Slots, expectedCount, slotHasCard } from "@/lib/utils/bracketLayout";
 
 const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
 
@@ -20,36 +21,11 @@ interface Props {
   initialMatches: BracketMatch[];
 }
 
-const CARD_H = 72;
-const CARD_W = 220;
-const CONN_W = 48;
-const BASE_SLOT = CARD_H + 32;
-
 async function fetchBracketMatches(tournamentId: string): Promise<BracketMatch[]> {
   const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
   if (!res.ok) return [];
   const all = await res.json() as BracketMatch[];
   return all.filter((m) => m.bracket_round !== null);
-}
-
-function deriveR1Slots(matches: BracketMatch[]): number {
-  const maxR = Math.max(...matches.map((m) => m.bracket_round));
-  for (let r = 1; r <= maxR; r++) {
-    const rMatches = matches.filter((m) => m.bracket_round === r);
-    if (rMatches.length === 0) continue;
-    const maxPos = Math.max(...rMatches.map((m) => m.bracket_position));
-    return (maxPos + 1) * Math.pow(2, r - 1);
-  }
-  return 0;
-}
-
-function expectedCount(r1Slots: number, round: number): number {
-  return Math.round(r1Slots / Math.pow(2, round - 1));
-}
-
-function slotHasCard(round: number, pos: number, roundMap: Map<number, BracketMatch>, r1Slots: number): boolean {
-  if (round === 1) return roundMap.has(pos);
-  return pos < expectedCount(r1Slots, round);
 }
 
 export function BracketLive({ tournamentId, initialMatches }: Props) {
@@ -125,19 +101,19 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary">
         Phases finales
       </h2>
 
       {winner && (
-        <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-5 text-center space-y-1">
+        <div className="rounded-xl bg-darts-gold/10 border border-darts-gold/30 p-5 text-center space-y-1">
           <p className="text-2xl">🏆</p>
-          <p className="text-sm text-yellow-400 font-semibold">Vainqueur</p>
-          <p className="text-xl font-bold text-yellow-300">{winner}</p>
+          <p className="text-sm text-darts-gold font-semibold">Vainqueur</p>
+          <p className="text-xl font-bold text-darts-gold">{winner}</p>
         </div>
       )}
 
-      <div className="bg-gray-800 rounded-xl border border-gray-700 p-5 overflow-x-auto">
+      <div className="bg-darts-surface rounded-xl border border-darts-border p-5 overflow-x-auto">
         <div className="pb-2">
           <div className="flex mb-4">
             {rounds.map((round, i) => (
@@ -145,7 +121,7 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
                 {i > 0 && <div style={{ width: CONN_W }} />}
                 <div
                   style={{ width: CARD_W }}
-                  className="text-xs font-semibold text-gray-500 uppercase tracking-widest text-center"
+                  className="text-xs font-semibold text-darts-text-secondary uppercase tracking-widest text-center"
                 >
                   {roundLabel(round, totalRounds)}
                 </div>
@@ -180,10 +156,10 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
                         if (!h0 && !h1) return null;
                         return (
                           <g key={j}>
-                            {h0 && <line x1={0} y1={py0} x2={mx} y2={py0} stroke="#374151" strokeWidth={1.5} />}
-                            {h0 && h1 && <line x1={mx} y1={py0} x2={mx} y2={py1} stroke="#374151" strokeWidth={1.5} />}
-                            {h1 && <line x1={0} y1={py1} x2={mx} y2={py1} stroke="#374151" strokeWidth={1.5} />}
-                            <line x1={mx} y1={cy} x2={CONN_W} y2={cy} stroke="#374151" strokeWidth={1.5} />
+                            {h0 && <line x1={0} y1={py0} x2={mx} y2={py0} stroke="var(--color-darts-border)" strokeWidth={1.5} />}
+                            {h0 && h1 && <line x1={mx} y1={py0} x2={mx} y2={py1} stroke="var(--color-darts-border)" strokeWidth={1.5} />}
+                            {h1 && <line x1={0} y1={py1} x2={mx} y2={py1} stroke="var(--color-darts-border)" strokeWidth={1.5} />}
+                            <line x1={mx} y1={cy} x2={CONN_W} y2={cy} stroke="var(--color-darts-border)" strokeWidth={1.5} />
                           </g>
                         );
                       })}
@@ -225,13 +201,13 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
 function PlaceholderCard() {
   return (
-    <div className="rounded-lg border border-dashed border-gray-600 bg-gray-700/30 overflow-hidden opacity-50">
+    <div className="rounded-lg border border-dashed border-darts-border bg-darts-surface-raised/50 overflow-hidden opacity-50">
       <div className="px-3 flex items-center gap-2" style={{ height: 36 }}>
-        <span className="text-sm text-gray-500">?</span>
+        <span className="text-sm text-darts-text-secondary">?</span>
       </div>
-      <div className="border-t border-gray-600" />
+      <div className="border-t border-darts-border" />
       <div className="px-3 flex items-center gap-2" style={{ height: 36 }}>
-        <span className="text-sm text-gray-500">?</span>
+        <span className="text-sm text-darts-text-secondary">?</span>
       </div>
     </div>
   );
@@ -242,25 +218,25 @@ function BracketCard({ match }: { match: BracketMatch }) {
 
   if (isBye) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-600 bg-gray-700/40 px-3 py-2.5">
-        <p className="text-xs text-gray-500 mb-0.5">BYE</p>
-        <p className="text-sm font-semibold text-gray-300">{match.player1?.player_name}</p>
+      <div className="rounded-lg border border-dashed border-darts-border bg-darts-surface-raised/60 px-3 py-2.5">
+        <p className="text-xs text-darts-text-secondary mb-0.5">BYE</p>
+        <p className="text-sm font-semibold text-darts-text">{match.player1?.player_name}</p>
       </div>
     );
   }
 
   const hasResult = match.winner_id !== null;
-  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-green-500" : "border-l-transparent";
+  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-darts-green" : "border-l-transparent";
 
   return (
-    <div className={`rounded-lg border border-gray-600 bg-gray-700 overflow-hidden border-l-4 ${accentBorder}`}>
+    <div className={`rounded-lg border border-darts-border bg-darts-surface-raised overflow-hidden border-l-4 ${accentBorder}`}>
       <PlayerRow
         name={match.player1?.player_name ?? "En attente"}
         isWinner={hasResult && match.winner_id === match.player1?.id}
         isLoser={hasResult && match.winner_id !== match.player1?.id}
         inProgress={match.status === "IN_PROGRESS"}
       />
-      <div className="border-t border-gray-600" />
+      <div className="border-t border-darts-border" />
       <PlayerRow
         name={match.player2?.player_name ?? "En attente"}
         isWinner={hasResult && match.winner_id === match.player2?.id}
@@ -284,25 +260,25 @@ function PlayerRow({
 }) {
   return (
     <div
-      className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-green-500/10" : ""}`}
+      className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-darts-green/10" : ""}`}
       style={{ height: 36 }}
     >
       <span
         className={`text-sm truncate ${
           isWinner
-            ? "text-green-400 font-semibold"
+            ? "text-darts-green font-semibold"
             : isLoser
-            ? "text-gray-500"
+            ? "text-darts-text-secondary"
             : inProgress
-            ? "text-gray-100 font-medium"
-            : "text-gray-200"
+            ? "text-darts-text font-medium"
+            : "text-darts-text"
         }`}
       >
         {name}
       </span>
-      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-green-400">✓</span>}
+      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-darts-green">✓</span>}
       {inProgress && !isWinner && !isLoser && (
-        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-darts-green animate-pulse" />
       )}
     </div>
   );

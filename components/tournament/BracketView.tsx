@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { roundLabel } from "@/lib/utils/bracket";
+import { CARD_H, CARD_W, CONN_W, BASE_SLOT, deriveR1Slots, expectedCount, slotHasCard } from "@/lib/utils/bracketLayout";
 import { ArbitrateMatchButton } from "./ArbitrateMatchModal";
 
 interface BracketMatch {
@@ -17,32 +18,6 @@ interface Props {
   matches: BracketMatch[];
   maxRound: number;
   tournamentId?: string;
-}
-
-const CARD_H = 72;
-const CARD_W = 220;
-const CONN_W = 48;
-const BASE_SLOT = CARD_H + 32;
-
-function deriveR1Slots(matches: BracketMatch[]): number {
-  const maxR = Math.max(...matches.map((m) => m.bracket_round));
-  for (let r = 1; r <= maxR; r++) {
-    const rMatches = matches.filter((m) => m.bracket_round === r);
-    if (rMatches.length === 0) continue;
-    const maxPos = Math.max(...rMatches.map((m) => m.bracket_position));
-    return (maxPos + 1) * Math.pow(2, r - 1);
-  }
-  return 0;
-}
-
-function expectedCount(r1Slots: number, round: number): number {
-  return Math.round(r1Slots / Math.pow(2, round - 1));
-}
-
-// Un "slot" a une carte si : R1 → match DB réel, R2+ → toujours (réel ou placeholder)
-function slotHasCard(round: number, pos: number, roundMap: Map<number, BracketMatch>, r1Slots: number): boolean {
-  if (round === 1) return roundMap.has(pos);
-  return pos < expectedCount(r1Slots, round);
 }
 
 export function BracketView({ matches, maxRound, tournamentId }: Props) {
@@ -174,7 +149,7 @@ function BracketCard({ match, tournamentId, laterMatchesCount = 0 }: { match: Br
   }
 
   const hasResult = match.winner_id !== null;
-  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-green-500" : "border-l-transparent";
+  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-darts-green" : "border-l-transparent";
 
   return (
     <div className={`rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden border-l-4 ${accentBorder}`}>
@@ -208,12 +183,12 @@ function PlayerRow({ name, isWinner, isLoser, inProgress }: {
   name: string; isWinner: boolean; isLoser: boolean; inProgress: boolean;
 }) {
   return (
-    <div className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-green-50" : ""}`} style={{ height: 36 }}>
-      <span className={`text-sm truncate ${isWinner ? "text-green-700 font-semibold" : isLoser ? "text-gray-400" : inProgress ? "text-gray-800 font-medium" : "text-gray-700"}`}>
+    <div className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-darts-green/10" : ""}`} style={{ height: 36 }}>
+      <span className={`text-sm truncate ${isWinner ? "text-darts-green-dark font-semibold" : isLoser ? "text-gray-400" : inProgress ? "text-gray-800 font-medium" : "text-gray-700"}`}>
         {name}
       </span>
-      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-green-500">✓</span>}
-      {inProgress && !isWinner && !isLoser && <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
+      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-darts-green">✓</span>}
+      {inProgress && !isWinner && !isLoser && <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-darts-green animate-pulse" />}
     </div>
   );
 }
