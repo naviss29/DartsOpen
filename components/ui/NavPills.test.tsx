@@ -18,4 +18,9 @@ describe("NavPills", () => {
     render(<NavPills items={items} />);
     expect(screen.getByRole("link", { name: "Joueurs" })).toHaveAttribute("href", "/a");
   });
+
+  it("affiche le compteur optionnel quand il est fourni", () => {
+    render(<NavPills items={[{ href: "/a", label: "Joueurs", badge: "4/8" }]} />);
+    expect(screen.getByText("4/8")).toBeInTheDocument();
+  });
 });

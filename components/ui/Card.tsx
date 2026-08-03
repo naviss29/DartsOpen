@@ -1,5 +1,5 @@
 import { cn } from "@naviss29/design-system";
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ElementType } from "react";
 
 interface Props extends HTMLAttributes<HTMLDivElement> {
   /**
@@ -11,11 +11,13 @@ interface Props extends HTMLAttributes<HTMLDivElement> {
    * adapté aux écrans sombres, d'où ce composant local plutôt qu'une extension de celui-ci.
    */
   tone?: "light" | "dark";
+  /** Élément HTML rendu — `section`/`article` là où la sémantique du document le justifie. */
+  as?: ElementType;
 }
 
-export default function Card({ tone = "light", className, children, ...props }: Props) {
+export default function Card({ tone = "light", as: Component = "div", className, children, ...props }: Props) {
   return (
-    <div
+    <Component
       className={cn(
         "rounded-xl border p-4 sm:p-6",
         tone === "light" ? "border-gray-200 bg-white" : "border-darts-border bg-darts-surface text-darts-text",
@@ -24,6 +26,6 @@ export default function Card({ tone = "light", className, children, ...props }: 
       {...props}
     >
       {children}
-    </div>
+    </Component>
   );
 }

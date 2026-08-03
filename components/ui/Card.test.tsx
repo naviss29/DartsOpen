@@ -18,4 +18,9 @@ describe("Card", () => {
     expect(el.className).toMatch(/bg-darts-surface/);
     expect(el.className).not.toMatch(/bg-white/);
   });
+
+  it("rend l'élément HTML demandé via la prop as", () => {
+    render(<Card as="section">contenu</Card>);
+    expect(screen.getByText("contenu").tagName).toBe("SECTION");
+  });
 });

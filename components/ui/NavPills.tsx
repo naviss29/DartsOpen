@@ -5,6 +5,8 @@ interface Item {
   href: string;
   label: string;
   current?: boolean;
+  /** Compteur optionnel affiché à droite du libellé (ex. nombre de joueurs inscrits). */
+  badge?: string | number;
 }
 
 /**
@@ -29,6 +31,16 @@ export default function NavPills({ items }: { items: Item[] }) {
           )}
         >
           {item.label}
+          {item.badge !== undefined && (
+            <span
+              className={cn(
+                "ml-2 rounded-full px-2 py-0.5 text-xs",
+                item.current ? "bg-white/20" : "bg-gray-100 text-gray-600",
+              )}
+            >
+              {item.badge}
+            </span>
+          )}
         </Link>
       ))}
     </nav>

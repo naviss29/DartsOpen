@@ -5,6 +5,10 @@ import { dbListRegistrations } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import NavPills from "@/components/ui/NavPills";
+import { Pill } from "@naviss29/design-system";
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -50,54 +54,45 @@ export default async function PlayersPage({ params }: Props) {
         <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
           ← {tournament.name}
         </Link>
-        <nav className="flex items-center gap-2">
-          <Link href={`/tournaments/${id}/players`} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white">
-            👥 Joueurs
-          </Link>
-          {!isQuick && (
-            <Link href={`/tournaments/${id}/pools`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
-              🏆 Poules & Matchs
-            </Link>
-          )}
-          <Link href={`/tournaments/${id}/bracket`} className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors">
-            {isQuick ? "⚡ Bracket rapide" : "🥇 Phases finales"}
-          </Link>
-        </nav>
+        <NavPills
+          items={[
+            { href: `/tournaments/${id}/players`, label: "👥 Joueurs", current: true },
+            ...(!isQuick ? [{ href: `/tournaments/${id}/pools`, label: "🏆 Poules & Matchs" }] : []),
+            { href: `/tournaments/${id}/bracket`, label: isQuick ? "⚡ Bracket rapide" : "🥇 Phases finales" },
+          ]}
+        />
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
             {isTeam ? "Équipes inscrites" : "Joueurs inscrits"}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="mt-1 text-sm text-gray-500">
             {playerCount} / {tournament.max_players} joueurs
             {isTeam && ` (${count} équipe${count > 1 ? "s" : ""})`}
             {!isQuick && <>&nbsp;·&nbsp; {tournament.nb_pools} poule{tournament.nb_pools > 1 ? "s" : ""} prévue{tournament.nb_pools > 1 ? "s" : ""}</>}
           </p>
         </div>
-        {isFull && (
-          <span className="rounded-full bg-orange-100 text-orange-700 px-3 py-1 text-xs font-medium">
-            Complet
-          </span>
-        )}
+        {isFull && <Pill tone="warning">Complet</Pill>}
       </div>
 
       {canEdit && !isFull && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-medium text-gray-900 mb-4">
+        <Card>
+          <h2 className="mb-4 font-medium text-gray-900">
             {isTeam ? "Ajouter une équipe" : "Ajouter un joueur"}
           </h2>
           <AddPlayerForm tournamentId={id} playersPerTeam={tournament.players_per_team} quickMode={isQuick} />
-        </div>
+        </Card>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {!registrations.length ? (
-          <div className="p-12 text-center text-gray-500">
-            Aucun{isTeam ? "e équipe" : " joueur"} inscrit{isTeam ? "e" : ""} pour l&apos;instant.
-          </div>
-        ) : (
+      {!registrations.length ? (
+        <EmptyState
+          icon="👥"
+          title={`Aucun${isTeam ? "e équipe" : " joueur"} inscrit${isTeam ? "e" : ""} pour l'instant`}
+        />
+      ) : (
+        <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead className="border-b border-gray-100 bg-gray-50">
               <tr>
@@ -140,8 +135,8 @@ export default async function PlayersPage({ params }: Props) {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </Card>
+      )}
     </div>
   );
 }

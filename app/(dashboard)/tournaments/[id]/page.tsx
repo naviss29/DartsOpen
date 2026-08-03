@@ -6,6 +6,10 @@ import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
+import Card from "@/components/ui/Card";
+import StatusBadge from "@/components/ui/StatusBadge";
+import NavPills from "@/components/ui/NavPills";
+import { Pill } from "@naviss29/design-system";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -69,17 +73,13 @@ export default async function TournamentDetailPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{tournament.name}</h1>
-            {tournament.quick_mode && (
-              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                ⚡ Mode rapide
-              </span>
-            )}
+            {tournament.quick_mode && <Pill tone="success">⚡ Mode rapide</Pill>}
           </div>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="mt-1 text-sm text-gray-500">
             📅 {new Date(tournament.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
             📍 {tournament.location}
           </p>
@@ -96,7 +96,7 @@ export default async function TournamentDetailPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         {[
           { label: "Joueurs max", value: tournament.max_players },
           { label: "Joueurs / équipe", value: tournament.players_per_team },
@@ -104,48 +104,35 @@ export default async function TournamentDetailPage({ params }: Props) {
           { label: "Cibles", value: tournament.nb_boards },
           { label: "Inscription", value: `${(tournament.entry_fee / 100).toFixed(2)} €` },
         ].map((item) => (
-          <div key={item.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+          <Card key={item.label} className="text-center">
             <p className="text-2xl font-bold text-gray-900">{item.value}</p>
-            <p className="text-xs text-gray-500 mt-1">{item.label}</p>
-          </div>
+            <p className="mt-1 text-xs text-gray-500">{item.label}</p>
+          </Card>
         ))}
       </div>
 
-      <nav className="flex items-center gap-3 flex-wrap">
-        <Link
-          href={`/tournaments/${id}/players`}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
-        >
-          👥 Joueurs
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-            {playerCount * tournament.players_per_team}/{tournament.max_players}
-          </span>
-        </Link>
-
-        <Link
-          href={`/tournaments/${id}/pools`}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
-        >
-          🏆 Poules & Matchs
-          {poolCount > 0 && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-              {poolCount}
-            </span>
-          )}
-        </Link>
-
-        <Link
-          href={`/tournaments/${id}/bracket`}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 transition-colors"
-        >
-          🥇 Phases finales
-        </Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <NavPills
+          items={[
+            {
+              href: `/tournaments/${id}/players`,
+              label: "👥 Joueurs",
+              badge: `${playerCount * tournament.players_per_team}/${tournament.max_players}`,
+            },
+            {
+              href: `/tournaments/${id}/pools`,
+              label: "🏆 Poules & Matchs",
+              badge: poolCount > 0 ? poolCount : undefined,
+            },
+            { href: `/tournaments/${id}/bracket`, label: "🥇 Phases finales" },
+          ]}
+        />
 
         {tournament.status === "OPEN" && tournament.registration_mode === "ONLINE" && (
           <Link
             href={`/t/${id}/register`}
             target="_blank"
-            className="flex items-center gap-2 rounded-lg border border-blue-500 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+            className="flex items-center gap-2 rounded-lg border border-brand-turquoise bg-brand-turquoise/10 px-4 py-2.5 text-sm font-medium text-brand-turquoise transition-colors hover:bg-brand-turquoise/20"
           >
             📝 Page d&apos;inscription
             <span className="text-xs opacity-70">↗</span>
@@ -153,7 +140,10 @@ export default async function TournamentDetailPage({ params }: Props) {
         )}
         {tournament.status === "OPEN" && tournament.registration_mode === "ONSITE" && (
           <p className="text-sm text-gray-500 italic">
-            📍 Inscriptions sur place — ajoutez les équipes via <Link href={`/tournaments/${id}/players`} className="text-green-700 font-medium underline underline-offset-2">Joueurs</Link>
+            📍 Inscriptions sur place — ajoutez les équipes via{" "}
+            <Link href={`/tournaments/${id}/players`} className="font-medium text-darts-green-dark underline underline-offset-2">
+              Joueurs
+            </Link>
           </p>
         )}
 
@@ -162,7 +152,7 @@ export default async function TournamentDetailPage({ params }: Props) {
             <Link
               href={`/t/${id}/live`}
               target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-green-500 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+              className="flex items-center gap-2 rounded-lg border border-darts-green bg-darts-green/10 px-4 py-2.5 text-sm font-medium text-darts-green-dark transition-colors hover:bg-darts-green/20"
             >
               🎯 Vue Live
               <span className="text-xs opacity-70">↗</span>
@@ -170,32 +160,32 @@ export default async function TournamentDetailPage({ params }: Props) {
             <Link
               href={`/t/${id}/tv`}
               target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
             >
               📺 Mode TV
               <span className="text-xs opacity-70">↗</span>
             </Link>
           </>
         )}
-      </nav>
+      </div>
 
       {tournament.status === "DRAFT" && (
-        <section className="bg-white rounded-xl border border-gray-200 p-6">
+        <Card as="section">
           <EditTournamentForm tournament={tournament} />
-        </section>
+        </Card>
       )}
 
       {tournament.quick_mode && tournament.status !== "DRAFT" && (
-        <div className="rounded-xl bg-green-50 border border-green-200 p-4">
-          <p className="text-sm font-medium text-green-800">⚡ Mode tournoi rapide</p>
-          <p className="text-xs text-green-700 mt-1">
+        <div className="rounded-xl border border-darts-green/30 bg-darts-green/10 p-4">
+          <p className="text-sm font-medium text-darts-green-dark">⚡ Mode tournoi rapide</p>
+          <p className="mt-1 text-xs text-darts-green-dark/80">
             Double élimination — 2 vies par joueur. Les manches (501 → Cricket → 701) sont générées automatiquement selon la phase.
           </p>
         </div>
       )}
 
       {!tournament.quick_mode && (
-      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      <Card as="section" className="space-y-4">
         <h2 className="font-semibold text-gray-900">
           Manches ({rounds.length})
         </h2>
@@ -208,7 +198,7 @@ export default async function TournamentDetailPage({ params }: Props) {
                 className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3"
               >
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium text-gray-500 w-6">
+                  <span className="w-6 text-sm font-medium text-gray-500">
                     #{round.order}
                   </span>
                   <span className="font-medium text-gray-900">
@@ -228,7 +218,7 @@ export default async function TournamentDetailPage({ params }: Props) {
 
         {tournament.status === "DRAFT" && (
           <div className="border-t border-gray-100 pt-4">
-            <p className="text-xs text-gray-500 mb-3">Ajouter une manche</p>
+            <p className="mb-3 text-xs text-gray-500">Ajouter une manche</p>
             <RoundForm tournamentId={id} />
           </div>
         )}
@@ -236,28 +226,8 @@ export default async function TournamentDetailPage({ params }: Props) {
         {rounds.length === 0 && tournament.status !== "DRAFT" && (
           <p className="text-sm text-gray-500">Aucune manche configurée.</p>
         )}
-      </section>
+      </Card>
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    DRAFT: "bg-gray-100 text-gray-600",
-    OPEN: "bg-blue-100 text-blue-700",
-    IN_PROGRESS: "bg-green-100 text-green-700",
-    FINISHED: "bg-gray-100 text-gray-500",
-  };
-  const labels: Record<string, string> = {
-    DRAFT: "Brouillon",
-    OPEN: "Inscriptions ouvertes",
-    IN_PROGRESS: "En cours",
-    FINISHED: "Terminé",
-  };
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
   );
 }
