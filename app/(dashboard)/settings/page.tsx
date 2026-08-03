@@ -29,14 +29,15 @@ export default async function SettingsPage() {
         <Card className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-brand-dark">Paiements Stripe</h2>
-            <Pill tone="neutral">Non connecté</Pill>
+            <Pill tone="neutral">Non disponible</Pill>
           </div>
           <p className="text-sm text-brand-text-secondary">
-            Connectez votre compte Stripe pour recevoir les droits d&apos;inscription directement sur votre compte bancaire.
-            La plateforme retient <strong>0,10 € par inscription</strong> comme frais de service.
+            Les droits d&apos;inscription payants ne peuvent pas encore être reversés directement sur un compte
+            bancaire d&apos;organisateur. La plateforme retient <strong>0,10 € par inscription</strong> comme
+            frais de service.
           </p>
-          <Alert tone="warning">
-            La connexion Stripe sera disponible après la migration complète vers SterPlatform (Phase 5c).
+          <Alert tone="info">
+            Le versement des droits d&apos;inscription à l&apos;organisateur n&apos;est pas encore disponible.
           </Alert>
         </Card>
       </section>

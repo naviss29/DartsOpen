@@ -18,4 +18,15 @@ describe("DashboardSidebar", () => {
     render(<DashboardSidebar userEmail="organisateur@example.com" />);
     expect(screen.getByText("organisateur@example.com")).toBeInTheDocument();
   });
+
+  it("utilise le logo officiel DartsOpen, jamais un emoji comme identité produit", () => {
+    render(<DashboardSidebar userEmail="organisateur@example.com" />);
+    const logo = screen.getByRole("img", { name: "DartsOpen" });
+    expect(logo).toHaveAttribute("src", "/brand/logo-horizontal.svg");
+  });
+
+  it("porte la signature discrète de l'écosystème", () => {
+    render(<DashboardSidebar userEmail="organisateur@example.com" />);
+    expect(screen.getByText("by BApps Studio")).toBeInTheDocument();
+  });
 });

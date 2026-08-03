@@ -9,7 +9,8 @@ export default function DonsPage() {
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg space-y-8 text-center">
         <div className="space-y-2">
-          <p className="text-brand-turquoise text-sm font-medium">🎯 DartsOpen</p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- SVG local de confiance, next/image bloque le SVG par défaut */}
+          <img src="/brand/logo-horizontal.svg" alt="DartsOpen" width={118} height={50} className="h-6 w-auto mx-auto" />
           <h1 className="text-3xl font-bold text-brand-dark">Soutenir le projet</h1>
           <p className="text-brand-text-secondary">
             DartsOpen est développé et maintenu par{" "}
