@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest",
     "test:run": "vitest run",
-    "seed:players": "tsx scripts/seed-tournament.ts"
+    "seed:players": "tsx scripts/seed-tournament.ts",
+    "verify": "npm ci && npx prisma generate && npm run lint && npm run test:run && npm run build"
   },
   "dependencies": {
     "@naviss29/design-system": "^0.1.1",

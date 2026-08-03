@@ -16,6 +16,31 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /**
+   * Identité DartsOpen (mission UI/UX — refonte charte graphique).
+   * Palette inspirée de la cible : rouge/vert des segments, or de la mouche centrale.
+   * `brand-turquoise`/`brand-mint` (BApps Studio) restent utilisés en accent secondaire
+   * (lien retour, mention de plateforme) — jamais remplacés, DartsOpen reste identifiable
+   * comme un produit de l'écosystème, pas une marque isolée.
+   */
+  --color-darts-bg: #0b1120;
+  --color-darts-surface: #131c31;
+  --color-darts-surface-raised: #1c2740;
+  --color-darts-border: #2a3654;
+  --color-darts-text: #f1f5f9;
+  --color-darts-text-secondary: #94a3b8;
+
+  /* Rouge cible — erreur, "en direct"/urgent, segment perdant. */
+  --color-darts-red: #dc2626;
+  --color-darts-red-dark: #991b1b;
+  /* Vert cible — succès, checkout, devient aussi la couleur d'action principale du produit
+     (déjà la teinte utilisée, à la main, par la quasi-totalité des boutons existants). */
+  --color-darts-green: #16a34a;
+  --color-darts-green-dark: #15803d;
+  /* Or mouche centrale — mise en avant (joueur actif, prochain sur la cible, champion). */
+  --color-darts-gold: #eab308;
+  --color-darts-gold-dark: #a16207;
 }
 
 body {
@@ -27,4 +52,12 @@ body {
 *:focus-visible {
   outline: 3px solid var(--color-brand-turquoise);
   outline-offset: 2px;
+}
+
+/* Chiffres de score : chasse fixe pour un alignement stable, essentiel à la lisibilité à
+   distance (mission §7) — c'est la seule raison de ne pas tout migrer vers une police unique
+   Inter comme le reste de l'écosystème BApps Studio (mission §3, "sauf raison forte"). */
+.font-score {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
 }
