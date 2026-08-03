@@ -153,19 +153,19 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
       )}
 
       {lastSetAlerts.map(({ board, next }) => (
-        <div key={board} className="rounded-xl border border-darts-gold/40 bg-darts-gold/10 px-4 py-3 flex items-center gap-3">
-          <span className="text-darts-gold text-lg">⚡</span>
-          <p className="text-sm text-darts-gold">
+        <div key={board} className="rounded-xl border border-warning-solid/40 bg-warning-solid/10 px-4 py-3 flex items-center gap-3">
+          <span className="text-warning-solid text-lg">⚡</span>
+          <p className="text-sm text-warning-solid">
             <span className="font-semibold">Cible {board} — Dernière manche en cours.</span>
             {" "}Prochain match :{" "}
-            <span className="font-semibold text-darts-text">{next!.player1.player_name} vs {next!.player2.player_name}</span>
+            <span className="font-semibold text-text-primary">{next!.player1.player_name} vs {next!.player2.player_name}</span>
           </p>
         </div>
       ))}
 
       {allFinished.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary mb-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">
             Derniers résultats
           </h2>
           <div className="grid gap-2 md:grid-cols-2">
@@ -178,7 +178,7 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
 
       {inProgress.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary mb-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">
             En cours ({inProgress.length})
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
@@ -190,7 +190,7 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
       {pending.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
               À venir ({pending.length})
             </h2>
             {totalPendingPages > 1 && (
@@ -199,7 +199,7 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
                   <button
                     key={i}
                     onClick={() => { setPendingPage(i); }}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === safePendingPage ? "bg-darts-text-secondary" : "bg-darts-border"}`}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors ${i === safePendingPage ? "bg-text-secondary" : "bg-border-default"}`}
                   />
                 ))}
               </div>
@@ -223,7 +223,7 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
       )}
 
       {inProgress.length === 0 && pending.length === 0 && (
-        <div className="rounded-xl bg-darts-surface/50 border border-darts-border p-8 text-center text-darts-text-secondary">
+        <div className="rounded-xl bg-surface-secondary/50 border border-border-default p-8 text-center text-text-secondary">
           Tous les matchs sont terminés.
         </div>
       )}
@@ -258,9 +258,9 @@ function MatchCard({
           <span className="text-xs font-mono text-blue-300/70">{p1SetsWon} — {p2SetsWon}</span>
         </div>
         <div className="font-semibold text-base flex items-center gap-2">
-          <span className={p1Won ? "text-blue-300" : "text-darts-text-secondary"}>{match.player1.player_name}</span>
-          <span className="text-darts-text-secondary text-sm">vs</span>
-          <span className={p2Won ? "text-blue-300" : "text-darts-text-secondary"}>{match.player2.player_name}</span>
+          <span className={p1Won ? "text-blue-300" : "text-text-secondary"}>{match.player1.player_name}</span>
+          <span className="text-text-secondary text-sm">vs</span>
+          <span className={p2Won ? "text-blue-300" : "text-text-secondary"}>{match.player2.player_name}</span>
         </div>
       </div>
     );
@@ -269,21 +269,21 @@ function MatchCard({
   // ── EN COURS ──────────────────────────────────────────────────────────────────
   if (match.status === "IN_PROGRESS") {
     return (
-      <div className="rounded-xl bg-darts-green/10 border border-darts-green/50 px-5 py-4 relative overflow-hidden">
-        <div className="absolute top-0 left-0 bottom-0 w-1 rounded-l-xl bg-darts-green" />
+      <div className="rounded-xl bg-success-solid/10 border border-success-solid/50 px-5 py-4 relative overflow-hidden">
+        <div className="absolute top-0 left-0 bottom-0 w-1 rounded-l-xl bg-success-solid" />
         <div className="flex items-center justify-between mb-2 pl-2">
-          <span className="text-xs font-medium text-darts-green flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-darts-green animate-pulse inline-block" />
+          <span className="text-xs font-medium text-success-solid flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-success-solid animate-pulse inline-block" />
             Cible {match.board_number}
           </span>
           {totalSets > 0 && (
-            <span className="text-xs text-darts-text-secondary">Manche {setsPlayed}/{totalSets}</span>
+            <span className="text-xs text-text-secondary">Manche {setsPlayed}/{totalSets}</span>
           )}
         </div>
         <div className="font-semibold text-base pl-2">
-          <span className="text-darts-text">{match.player1.player_name}</span>
-          <span className="text-darts-text-secondary mx-2">vs</span>
-          <span className="text-darts-text">{match.player2.player_name}</span>
+          <span className="text-text-primary">{match.player1.player_name}</span>
+          <span className="text-text-secondary mx-2">vs</span>
+          <span className="text-text-primary">{match.player2.player_name}</span>
         </div>
       </div>
     );
@@ -308,15 +308,15 @@ function MatchCard({
 
   // ── À VENIR — file d'attente ──────────────────────────────────────────────────
   return (
-    <div className={`rounded-xl bg-darts-surface border border-darts-border ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
+    <div className={`rounded-xl bg-surface-secondary border border-border-default ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs text-darts-text-secondary">{position ? `#${position}` : ""}</span>
-        {totalSets > 0 && <span className="text-xs text-darts-text-secondary">Manche 0/{totalSets}</span>}
+        <span className="text-xs text-text-secondary">{position ? `#${position}` : ""}</span>
+        {totalSets > 0 && <span className="text-xs text-text-secondary">Manche 0/{totalSets}</span>}
       </div>
       <div className={`font-semibold ${compact ? "text-sm" : "text-base"}`}>
-        <span className="text-darts-text">{match.player1.player_name}</span>
-        <span className="text-darts-text-secondary mx-2">vs</span>
-        <span className="text-darts-text">{match.player2.player_name}</span>
+        <span className="text-text-primary">{match.player1.player_name}</span>
+        <span className="text-text-secondary mx-2">vs</span>
+        <span className="text-text-primary">{match.player2.player_name}</span>
       </div>
     </div>
   );

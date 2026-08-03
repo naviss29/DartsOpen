@@ -11,7 +11,7 @@ const SUBJECTS = [
 ];
 
 const inputCn =
-  "w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
 
 // TODO: remplacer par l'email réel de contact DartsOpen / Stêr Eo
 const CONTACT_EMAIL = "prod.ster.eo@gmail.com";
@@ -41,8 +41,8 @@ export function ContactForm() {
     return (
       <div className="text-center space-y-3 py-6">
         <p className="text-4xl">✉️</p>
-        <p className="font-semibold text-white">Votre client mail s&apos;est ouvert</p>
-        <p className="text-sm text-gray-400">
+        <p className="font-semibold text-brand-dark">Votre client mail s&apos;est ouvert</p>
+        <p className="text-sm text-brand-text-secondary">
           Envoyez le message pré-rempli pour nous contacter. Merci !
         </p>
       </div>
@@ -53,17 +53,17 @@ export function ContactForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Nom *</label>
+          <label className="block text-sm font-medium text-brand-dark mb-1">Nom *</label>
           <input name="name" type="text" required placeholder="Jean Dupont" className={inputCn} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Email *</label>
+          <label className="block text-sm font-medium text-brand-dark mb-1">Email *</label>
           <input name="email" type="email" required placeholder="jean@exemple.fr" className={inputCn} />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Sujet *</label>
+        <label className="block text-sm font-medium text-brand-dark mb-1">Sujet *</label>
         <select
           name="subject"
           required
@@ -71,15 +71,15 @@ export function ContactForm() {
           onChange={(e) => setSubject(e.target.value)}
           className={inputCn}
         >
-          <option value="" disabled className="bg-gray-900">Choisir un sujet…</option>
+          <option value="" disabled>Choisir un sujet…</option>
           {SUBJECTS.map((s) => (
-            <option key={s.value} value={s.value} className="bg-gray-900">{s.label}</option>
+            <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Message *</label>
+        <label className="block text-sm font-medium text-brand-dark mb-1">Message *</label>
         <textarea
           name="message"
           required
@@ -91,7 +91,7 @@ export function ContactForm() {
 
       <button
         type="submit"
-        className="w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors"
+        className="w-full rounded-lg bg-brand-turquoise px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-turquoise/90 transition-colors"
       >
         Envoyer le message →
       </button>

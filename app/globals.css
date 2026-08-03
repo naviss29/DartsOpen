@@ -1,52 +1,35 @@
 @import "tailwindcss";
 @source "../node_modules/@naviss29/design-system/dist";
 
-:root {
-  --background: #f8fafc;
-  --foreground: #111827;
-}
+/*
+ * Couche de tokens sémantiques du design-system (DS-004, @naviss29/design-system@0.4.0) —
+ * surface/text-primary/accent/danger/... consommés en interne par ses composants (Button,
+ * Alert, Pill, FormField, EmptyState, Dialog). Fournit aussi le mode sombre officiel via
+ * `[data-theme="dark"]` (même identité de marque, accent turquoise inchangé) — c'est ce
+ * mécanisme, pas une palette maison, qui sert l'exception TV/score en salle (Lot 4).
+ */
+@import "@naviss29/design-system/theme.css";
 
+/*
+ * Palette officielle BApps Studio (BApps-Studio/02-Brand/BrandGuide.md), reprise à l'identique
+ * de BSsite (seul produit désigné référence de qualité — voir 02-Brand/DesignSystem.md).
+ * DartsOpen est un produit de l'écosystème, pas une marque isolée : aucun token de couleur
+ * propre au produit. `--color-brand-text-secondary` suit la valeur réellement livrée par
+ * BSsite (#475569), qui a corrigé après coup le #94a3b8 documenté dans le Brand Guide —
+ * #94a3b8 ne donne que ~2.6:1 de contraste sur fond clair, sous le seuil AA (4.5:1).
+ */
 @theme {
   --color-brand-turquoise: #078099;
   --color-brand-mint: #2ed9b4;
   --color-brand-dark: #111827;
   --color-brand-light: #f8fafc;
-  --color-brand-text-secondary: #64748b;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-
-  /**
-   * Identité DartsOpen (mission UI/UX — refonte charte graphique).
-   * Palette inspirée de la cible : rouge/vert des segments, or de la mouche centrale.
-   * `brand-turquoise`/`brand-mint` (BApps Studio) restent utilisés en accent secondaire
-   * (lien retour, mention de plateforme) — jamais remplacés, DartsOpen reste identifiable
-   * comme un produit de l'écosystème, pas une marque isolée.
-   */
-  --color-darts-bg: #0b1120;
-  --color-darts-surface: #131c31;
-  --color-darts-surface-raised: #1c2740;
-  --color-darts-border: #2a3654;
-  --color-darts-text: #f1f5f9;
-  --color-darts-text-secondary: #94a3b8;
-
-  /* Rouge cible — erreur, "en direct"/urgent, segment perdant. */
-  --color-darts-red: #dc2626;
-  --color-darts-red-dark: #991b1b;
-  /* Vert cible — succès, checkout, devient aussi la couleur d'action principale du produit
-     (déjà la teinte utilisée, à la main, par la quasi-totalité des boutons existants). */
-  --color-darts-green: #16a34a;
-  --color-darts-green-dark: #15803d;
-  /* Or mouche centrale — mise en avant (joueur actif, prochain sur la cible, champion). */
-  --color-darts-gold: #eab308;
-  --color-darts-gold-dark: #a16207;
+  --color-brand-text-secondary: #475569;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-light);
 }
 
 *:focus-visible {
@@ -54,10 +37,8 @@ body {
   outline-offset: 2px;
 }
 
-/* Chiffres de score : chasse fixe pour un alignement stable, essentiel à la lisibilité à
-   distance (mission §7) — c'est la seule raison de ne pas tout migrer vers une police unique
-   Inter comme le reste de l'écosystème BApps Studio (mission §3, "sauf raison forte"). */
-.font-score {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+/* Chiffres de score : uniquement l'alignement tabulaire (Inter le supporte nativement), pas
+   un changement de police — écrans TV/score en salle, seule exception thème autorisée. */
+.tabular-score {
   font-variant-numeric: tabular-nums;
 }

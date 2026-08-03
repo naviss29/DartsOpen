@@ -52,12 +52,12 @@ export default async function LivePage({ params }: Props) {
 
   if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
+      <div data-theme="dark" className="min-h-screen bg-surface flex items-center justify-center px-4">
         <div className="text-center space-y-4">
           <div className="text-5xl">🎯</div>
-          <h1 className="text-2xl font-bold text-darts-text">{tournament.name}</h1>
-          <p className="text-darts-text-secondary">Le tournoi n&apos;a pas encore commencé.</p>
-          <p className="text-darts-text-secondary text-sm">Cette page se mettra à jour automatiquement au démarrage.</p>
+          <h1 className="text-2xl font-bold text-text-primary">{tournament.name}</h1>
+          <p className="text-text-secondary">Le tournoi n&apos;a pas encore commencé.</p>
+          <p className="text-text-secondary text-sm">Cette page se mettra à jour automatiquement au démarrage.</p>
         </div>
       </div>
     );
@@ -146,21 +146,22 @@ export default async function LivePage({ params }: Props) {
 
   return (
     <LandscapeGuard>
+    <div data-theme="dark" className="min-h-screen bg-surface text-text-primary">
     <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">🎯 {tournament.name}</h1>
-          <p className="text-darts-text-secondary text-sm mt-1">Tableau de bord en direct</p>
+          <p className="text-text-secondary text-sm mt-1">Tableau de bord en direct</p>
         </div>
         <div className="flex items-center gap-3">
           {tournament.status === "IN_PROGRESS" && (
-            <span className="rounded-full bg-darts-green/20 text-darts-green border border-darts-green/30 px-3 py-1 text-xs font-medium animate-pulse">
+            <span className="rounded-full bg-success-subtle text-success border border-success-border px-3 py-1 text-xs font-medium animate-pulse">
               ● EN DIRECT
             </span>
           )}
           <Link
             href={`/t/${id}/tv`}
-            className="rounded-lg border border-darts-border px-3 py-1.5 text-xs text-darts-text-secondary hover:text-darts-text hover:border-darts-text-secondary transition-colors"
+            className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:border-text-secondary transition-colors"
           >
             📺 Mode TV
           </Link>
@@ -197,6 +198,7 @@ export default async function LivePage({ params }: Props) {
           finishedMatches={finishedPoolMatches}
         />
       )}
+    </div>
     </div>
     </LandscapeGuard>
   );

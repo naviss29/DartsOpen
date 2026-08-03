@@ -8,7 +8,7 @@ export default function MentionsLegalesPage() {
     <LegalLayout title="Mentions légales" updatedAt="24/07/2026">
       <h2>Éditeur du site</h2>
       <p>
-        DartsOpen est développé et édité par <strong className="text-white">Stêr Eo Production</strong>,{" "}
+        DartsOpen est développé et édité par <strong className="text-brand-dark">Stêr Eo Production</strong>,{" "}
         <TodoField>[forme juridique à compléter]</TodoField>, immatriculée sous le numéro{" "}
         <TodoField>[SIRET à compléter]</TodoField>, dont le siège social est situé{" "}
         <TodoField>[adresse du siège à compléter]</TodoField>.

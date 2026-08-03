@@ -4,7 +4,7 @@ import { useTransition, useState } from "react";
 import { createRegistration } from "@/lib/actions/stripe";
 
 const inputCn =
-  "w-full rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
 
 interface Props {
   tournamentId: string;
@@ -52,14 +52,14 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-300">
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {isTeam && (
         <div>
-          <label htmlFor="team_name" className="block text-sm font-medium text-gray-300 mb-1">
+          <label htmlFor="team_name" className="block text-sm font-medium text-brand-dark mb-1">
             Nom de l&apos;équipe *
           </label>
           <input
@@ -75,7 +75,7 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       )}
 
       <div className="space-y-3">
-        <label htmlFor="player_0" className="block text-sm font-medium text-gray-300">
+        <label htmlFor="player_0" className="block text-sm font-medium text-brand-dark">
           {isTeam ? "Pseudos des joueurs *" : "Votre pseudo *"}
         </label>
         {Array.from({ length: playersPerTeam }, (_, i) => (
@@ -93,7 +93,7 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       </div>
 
       <div>
-        <label htmlFor="contact_email" className="block text-sm font-medium text-gray-300 mb-1">
+        <label htmlFor="contact_email" className="block text-sm font-medium text-brand-dark mb-1">
           Email de contact *
         </label>
         <input
@@ -104,13 +104,13 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
           placeholder="capitaine@monequipe.fr"
           className={inputCn}
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-brand-text-secondary">
           Utilisé uniquement pour les rappels et informations du tournoi.
         </p>
       </div>
 
       <div>
-        <label htmlFor="phone" className="block text-sm font-medium text-gray-300 mb-1">
+        <label htmlFor="phone" className="block text-sm font-medium text-brand-dark mb-1">
           Téléphone (optionnel)
         </label>
         <input
@@ -126,7 +126,7 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       <button
         type="submit"
         disabled={isPending}
-        className="w-full rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        className="w-full rounded-lg bg-brand-turquoise px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-turquoise/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
         {isPending
           ? "Redirection…"

@@ -73,10 +73,10 @@ export function QuickBracketLive({ tournamentId, initialMatches }: Props) {
 
   return (
     <div className="space-y-2">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
         Bracket double élimination
       </h2>
-      <div className="rounded-xl bg-gray-900 border border-gray-700 p-4">
+      <div className="rounded-xl bg-surface-secondary border border-border-default p-4">
         <QuickBracketView matches={matches} />
       </div>
     </div>

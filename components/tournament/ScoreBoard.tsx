@@ -87,7 +87,7 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
         Classements par poule
       </h2>
 
@@ -113,13 +113,13 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
           );
 
           return (
-            <div key={pool.id} className="bg-darts-surface rounded-xl border border-darts-border overflow-hidden">
-              <div className="px-4 py-3 bg-darts-surface-raised/60 border-b border-darts-border">
-                <h3 className="font-semibold text-darts-text text-sm">{pool.name}</h3>
+            <div key={pool.id} className="bg-surface-secondary rounded-xl border border-border-default overflow-hidden">
+              <div className="px-4 py-3 bg-surface-secondary/60 border-b border-border-default">
+                <h3 className="font-semibold text-text-primary text-sm">{pool.name}</h3>
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-xs text-darts-text-secondary">
+                  <tr className="text-xs text-text-secondary">
                     <th className="px-4 py-2 text-left">#</th>
                     <th className="px-4 py-2 text-left">Joueur</th>
                     <th className="px-3 py-2 text-center" title="Victoires">V</th>
@@ -128,15 +128,15 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
                     <th className="px-3 py-2 text-center" title="Manches perdues">MP</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-darts-border/60">
+                <tbody className="divide-y divide-border-default/60">
                   {standings.map((s, i) => (
-                    <tr key={s.registration_id} className="hover:bg-darts-surface-raised/40">
-                      <td className="px-4 py-2.5 text-darts-text-secondary text-xs">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium text-darts-text">{s.player_name}</td>
-                      <td className="px-3 py-2.5 text-center text-darts-green font-medium">{s.wins}</td>
-                      <td className="px-3 py-2.5 text-center text-darts-red">{s.losses}</td>
-                      <td className="px-3 py-2.5 text-center text-darts-text">{s.sets_won}</td>
-                      <td className="px-3 py-2.5 text-center text-darts-text-secondary">{s.sets_lost}</td>
+                    <tr key={s.registration_id} className="hover:bg-surface-secondary/40">
+                      <td className="px-4 py-2.5 text-text-secondary text-xs">{i + 1}</td>
+                      <td className="px-4 py-2.5 font-medium text-text-primary">{s.player_name}</td>
+                      <td className="px-3 py-2.5 text-center text-success-solid font-medium">{s.wins}</td>
+                      <td className="px-3 py-2.5 text-center text-danger-solid">{s.losses}</td>
+                      <td className="px-3 py-2.5 text-center text-text-primary">{s.sets_won}</td>
+                      <td className="px-3 py-2.5 text-center text-text-secondary">{s.sets_lost}</td>
                     </tr>
                   ))}
                 </tbody>

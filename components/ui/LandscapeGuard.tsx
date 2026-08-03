@@ -36,12 +36,12 @@ export function LandscapeGuard({ children }: Props) {
     <>
       {children}
       {showOverlay && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gray-950 text-white px-6 text-center">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-brand-light text-brand-dark px-6 text-center">
           <div className="text-6xl mb-5 animate-spin" style={{ animationDuration: "2s", animationIterationCount: 1 }}>
             📱
           </div>
           <p className="text-xl font-bold mb-2">Tournez votre téléphone</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-brand-text-secondary">
             Cette vue est optimisée pour le mode paysage.
           </p>
         </div>

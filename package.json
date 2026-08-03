@@ -13,7 +13,7 @@
     "verify": "npm ci && npx prisma generate && npm run lint && npm run test:run && npm run build"
   },
   "dependencies": {
-    "@naviss29/design-system": "^0.1.1",
+    "@naviss29/design-system": "^0.4.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "clsx": "^2.1.1",

@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils/cn";
+import { cn } from "@naviss29/design-system";
 import LogoutButton from "@/components/LogoutButton";
 
 export const dashboardNavLinks = [
@@ -14,20 +13,20 @@ export const dashboardNavLinks = [
 
 /**
  * L'utilisateur ne savait jusqu'ici jamais où il se trouvait dans la navigation (aucun état
- * actif) — mission §5, "l'utilisateur doit toujours comprendre où il se trouve". Repliée sous
- * `md:` (mission §6, mobile first) — voir DashboardMobileNav.tsx pour l'équivalent en dessous
- * de ce seuil, même liste de liens, même logique d'état actif.
+ * actif) — repliée sous `md:` (mobile first) — voir DashboardMobileNav.tsx pour l'équivalent
+ * en dessous de ce seuil, même liste de liens, même logique d'état actif.
  */
 export default function DashboardSidebar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r border-gray-200 bg-white md:flex">
-      <div className="border-b border-gray-200 p-6">
-        <Link href="/dashboard" className="text-xl font-bold text-gray-900">
-          🎯 DartsOpen
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
+      <div className="border-b border-slate-200 p-6">
+        <Link href="/dashboard">
+          {/* eslint-disable-next-line @next/next/no-img-element -- SVG local de confiance, next/image bloque le SVG par défaut */}
+          <img src="/brand/logo-horizontal.svg" alt="DartsOpen" width={166} height={70} className="h-9 w-auto" />
         </Link>
-        <p className="mt-1 truncate text-xs text-gray-500">{userEmail}</p>
+        <p className="mt-1 truncate text-xs text-brand-text-secondary">{userEmail}</p>
       </div>
 
       <nav className="flex-1 space-y-1 p-4">
@@ -40,7 +39,7 @@ export default function DashboardSidebar({ userEmail }: { userEmail: string }) {
               aria-current={current ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                current ? "bg-darts-green/10 text-darts-green-dark" : "text-gray-700 hover:bg-gray-100",
+                current ? "bg-brand-turquoise/10 text-brand-turquoise" : "text-brand-dark hover:bg-slate-100",
               )}
             >
               <span aria-hidden="true">{link.icon}</span> {link.label}
@@ -49,32 +48,23 @@ export default function DashboardSidebar({ userEmail }: { userEmail: string }) {
         })}
       </nav>
 
-      <div className="space-y-1 border-t border-gray-200 p-4">
+      <div className="space-y-1 border-t border-slate-200 p-4">
         <Link
           href="/contact"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-brand-text-secondary transition-colors hover:bg-slate-100"
         >
           <span aria-hidden="true">✉️</span> Contact
         </Link>
         <Link
           href="/dons"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100"
+          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-brand-text-secondary transition-colors hover:bg-slate-100"
         >
           <span aria-hidden="true">💛</span> Soutenir le projet
         </Link>
         <LogoutButton />
-        <div className="pt-3 text-center">
-          <p className="mb-1 text-xs text-gray-400">Développé par</p>
-          <Image
-            src="/logoSEP.svg"
-            alt="Stêr Eo Production"
-            width={80}
-            height={0}
-            priority
-            style={{ height: "auto" }}
-            className="mx-auto w-20 opacity-60 transition-opacity hover:opacity-100"
-          />
-        </div>
+        <p className="pt-3 text-center text-xs text-brand-text-secondary">
+          DartsOpen · <span className="font-medium">by BApps Studio</span>
+        </p>
       </div>
     </aside>
   );

@@ -46,8 +46,8 @@ export function ScoreForm({ match, rounds, scoringMode, tournamentId }: Props) {
     return (
       <div className="text-center py-16 space-y-3">
         <p className="text-4xl">⚠️</p>
-        <p className="text-darts-gold font-semibold">Aucune manche configurée</p>
-        <p className="text-darts-text-secondary text-sm">L&apos;organisateur n&apos;a pas encore configuré les manches de ce tournoi.</p>
+        <p className="text-warning-solid font-semibold">Aucune manche configurée</p>
+        <p className="text-text-secondary text-sm">L&apos;organisateur n&apos;a pas encore configuré les manches de ce tournoi.</p>
       </div>
     );
   }
@@ -70,18 +70,18 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
     return (
       <div className="space-y-6">
         <div className="text-center">
-          <h2 className="text-xl font-bold text-darts-text mb-1">Qui êtes-vous ?</h2>
-          <p className="text-darts-text-secondary text-sm">Sélectionnez votre nom pour entrer le score</p>
+          <h2 className="text-xl font-bold text-text-primary mb-1">Qui êtes-vous ?</h2>
+          <p className="text-text-secondary text-sm">Sélectionnez votre nom pour entrer le score</p>
         </div>
         <div className="space-y-3">
           {[match.player1, match.player2].map((p, i) => (
             <button
               key={p.id}
               onClick={() => setSide(i === 0 ? 1 : 2)}
-              className="w-full rounded-xl bg-darts-surface border-2 border-darts-border hover:border-darts-green px-6 py-5 text-left transition-colors"
+              className="w-full rounded-xl bg-surface-secondary border-2 border-border-default hover:border-success-solid px-6 py-5 text-left transition-colors"
             >
-              <p className="text-xs text-darts-text-secondary mb-1">Joueur {i + 1}</p>
-              <p className="text-xl font-bold text-darts-text">{p.player_name}</p>
+              <p className="text-xs text-text-secondary mb-1">Joueur {i + 1}</p>
+              <p className="text-xl font-bold text-text-primary">{p.player_name}</p>
             </button>
           ))}
         </div>
@@ -96,10 +96,10 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-darts-text-secondary">Vous jouez en tant que</p>
-          <p className="font-bold text-darts-text">{me.player_name}</p>
+          <p className="text-xs text-text-secondary">Vous jouez en tant que</p>
+          <p className="font-bold text-text-primary">{me.player_name}</p>
         </div>
-        <button onClick={() => setSide(null)} className="text-xs text-darts-text-secondary hover:text-darts-text">
+        <button onClick={() => setSide(null)} className="text-xs text-text-secondary hover:text-text-primary">
           Changer
         </button>
       </div>
@@ -113,37 +113,37 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
           return (
             <div
               key={set.id}
-              className={`rounded-xl border p-4 ${isComplete ? "bg-darts-green/10 border-darts-green/40" : "bg-darts-surface border-darts-border"}`}
+              className={`rounded-xl border p-4 ${isComplete ? "bg-success-solid/10 border-success-solid/40" : "bg-surface-secondary border-border-default"}`}
             >
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-medium text-darts-text-secondary uppercase tracking-wider">
+                <p className="text-xs font-medium text-text-secondary uppercase tracking-wider">
                   Manche {set.round_order}
                   {round && ` — ${GAME_LABELS[round.game_type]} ${ENTRY_LABELS[round.entry_type]}/${FINISH_LABELS[round.finish_type]}`}
                 </p>
-                {isComplete && <span className="text-xs text-darts-green font-medium">✓ Validé</span>}
+                {isComplete && <span className="text-xs text-success-solid font-medium">✓ Validé</span>}
               </div>
 
               {isComplete ? (
-                <p className="text-darts-text font-semibold">🏆 {set.winner?.player_name ?? "Gagnant inconnu"}</p>
+                <p className="text-text-primary font-semibold">🏆 {set.winner?.player_name ?? "Gagnant inconnu"}</p>
               ) : set.winner_id && myValidated ? (
-                <p className="text-sm text-darts-gold">En attente de confirmation de {opponent.player_name}…</p>
+                <p className="text-sm text-warning-solid">En attente de confirmation de {opponent.player_name}…</p>
               ) : set.winner_id && !myValidated ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-darts-text">
-                    <span className="font-medium text-darts-text">{set.winner?.player_name ?? "?"}</span> a été désigné·e gagnant·e. Confirmez-vous ?
+                  <p className="text-sm text-text-primary">
+                    <span className="font-medium text-text-primary">{set.winner?.player_name ?? "?"}</span> a été désigné·e gagnant·e. Confirmez-vous ?
                   </p>
                   <div className="flex gap-2">
                     <button
                       disabled={isPending}
                       onClick={() => startTransition(() => void confirmWinner(set.id, side, tournamentId))}
-                      className="flex-1 rounded-lg bg-darts-green py-2.5 text-sm font-semibold text-white hover:bg-darts-green/90 disabled:opacity-60 transition-colors"
+                      className="flex-1 rounded-lg bg-success-solid py-2.5 text-sm font-semibold text-white hover:bg-success-solid/90 disabled:opacity-60 transition-colors"
                     >
                       ✓ Confirmer
                     </button>
                     <button
                       disabled={isPending}
                       onClick={() => startTransition(() => void disputeResult(set.id, tournamentId))}
-                      className="rounded-lg border border-darts-red/60 text-darts-red px-4 py-2.5 text-sm font-semibold hover:bg-darts-red/10 disabled:opacity-60 transition-colors"
+                      className="rounded-lg border border-danger-solid/60 text-danger-solid px-4 py-2.5 text-sm font-semibold hover:bg-danger-solid/10 disabled:opacity-60 transition-colors"
                     >
                       Contester
                     </button>
@@ -151,7 +151,7 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-sm text-darts-text-secondary">Qui a gagné cette manche ?</p>
+                  <p className="text-sm text-text-secondary">Qui a gagné cette manche ?</p>
                   <div className="grid grid-cols-2 gap-2">
                     {[match.player1, match.player2].map((player) => (
                       <button
@@ -160,8 +160,8 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
                         onClick={() => startTransition(() => void proposeWinner(set.id, player.id, side, tournamentId))}
                         className={`rounded-lg border py-3 px-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
                           player.id === me.id
-                            ? "border-darts-green text-darts-green hover:bg-darts-green/10"
-                            : "border-darts-border text-darts-text-secondary hover:bg-darts-surface-raised"
+                            ? "border-success-solid text-success-solid hover:bg-success-solid/10"
+                            : "border-border-default text-text-secondary hover:bg-surface-secondary"
                         }`}
                       >
                         {player.player_name}
@@ -191,15 +191,15 @@ function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Ma
   return (
     <div className="space-y-4">
       {/* Tableau des sets */}
-      <div className="flex items-center justify-center gap-6 rounded-xl bg-darts-surface px-6 py-4">
+      <div className="flex items-center justify-center gap-6 rounded-xl bg-surface-secondary px-6 py-4">
         <div className="text-center">
-          <p className="text-sm text-darts-text-secondary truncate max-w-[120px]">{match.player1.player_name}</p>
-          <p className="font-score text-4xl font-bold text-darts-text">{p1Wins}</p>
+          <p className="text-sm text-text-secondary truncate max-w-[120px]">{match.player1.player_name}</p>
+          <p className="tabular-score text-4xl font-bold text-text-primary">{p1Wins}</p>
         </div>
-        <p className="text-darts-text-secondary text-lg font-medium">–</p>
+        <p className="text-text-secondary text-lg font-medium">–</p>
         <div className="text-center">
-          <p className="text-sm text-darts-text-secondary truncate max-w-[120px]">{match.player2.player_name}</p>
-          <p className="font-score text-4xl font-bold text-darts-text">{p2Wins}</p>
+          <p className="text-sm text-text-secondary truncate max-w-[120px]">{match.player2.player_name}</p>
+          <p className="tabular-score text-4xl font-bold text-text-primary">{p2Wins}</p>
         </div>
       </div>
 
@@ -207,11 +207,11 @@ function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Ma
       {completedSets.map((set) => {
         const round = rounds.find((r) => r.order === set.round_order);
         return (
-          <div key={set.id} className="rounded-xl border border-darts-green/40 bg-darts-green/10 px-4 py-3 flex items-center justify-between">
-            <p className="text-xs text-darts-text-secondary">
+          <div key={set.id} className="rounded-xl border border-success-solid/40 bg-success-solid/10 px-4 py-3 flex items-center justify-between">
+            <p className="text-xs text-text-secondary">
               Manche {set.round_order}{round && ` — ${GAME_LABELS[round.game_type]}`}
             </p>
-            <p className="text-sm font-semibold text-darts-green">🏆 {set.winner?.player_name}</p>
+            <p className="text-sm font-semibold text-success-solid">🏆 {set.winner?.player_name}</p>
           </div>
         );
       })}
@@ -229,10 +229,10 @@ function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Ma
           tournamentId={tournamentId}
         />
       ) : (
-        <div className="rounded-xl bg-darts-surface border border-darts-border p-8 text-center">
+        <div className="rounded-xl bg-surface-secondary border border-border-default p-8 text-center">
           <p className="text-3xl mb-3">🏆</p>
-          <p className="font-bold text-darts-text text-lg">Match terminé !</p>
-          <p className="text-darts-text-secondary text-sm mt-1">
+          <p className="font-bold text-text-primary text-lg">Match terminé !</p>
+          <p className="text-text-secondary text-sm mt-1">
             {p1Wins > p2Wins ? match.player1.player_name : p2Wins > p1Wins ? match.player2.player_name : "Égalité"} remporte le match.
           </p>
         </div>
@@ -320,26 +320,26 @@ function SetScoreTracker({
   const recentThrows = throws.slice(-10).reverse();
 
   return (
-    <div className="rounded-xl bg-darts-surface border border-darts-border p-5 space-y-5">
+    <div className="rounded-xl bg-surface-secondary border border-border-default p-5 space-y-5">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-darts-text-secondary uppercase tracking-wider">
+        <p className="text-xs text-text-secondary uppercase tracking-wider">
           Manche {setNumber}/{totalSets}
         </p>
         {round && (
-          <p className="text-xs text-darts-text-secondary">
+          <p className="text-xs text-text-secondary">
             {GAME_LABELS[round.game_type]} · {ENTRY_LABELS[round.entry_type]} / {FINISH_LABELS[round.finish_type]}
           </p>
         )}
       </div>
 
       {bustMsg && (
-        <div className="rounded-lg bg-darts-red/10 border border-darts-red/40 px-4 py-2 text-sm text-darts-red text-center">
+        <div className="rounded-lg bg-danger-solid/10 border border-danger-solid/40 px-4 py-2 text-sm text-danger-solid text-center">
           {bustMsg}
         </div>
       )}
 
       {warnMsg && !bustMsg && (
-        <div className="rounded-lg bg-darts-gold/10 border border-darts-gold/40 px-4 py-2 text-sm text-darts-gold text-center">
+        <div className="rounded-lg bg-warning-solid/10 border border-warning-solid/40 px-4 py-2 text-sm text-warning-solid text-center">
           ⚠ {warnMsg}
         </div>
       )}
@@ -347,14 +347,14 @@ function SetScoreTracker({
       {isCricket ? (
         /* Cricket : désignation directe */
         <div className="space-y-3">
-          <p className="text-sm text-darts-text-secondary text-center">Cricket — désignez le gagnant de la manche :</p>
+          <p className="text-sm text-text-secondary text-center">Cricket — désignez le gagnant de la manche :</p>
           <div className="grid grid-cols-2 gap-3">
             {[p1, p2].map((p) => (
               <button
                 key={p.id}
                 disabled={isPending}
                 onClick={() => forceWinner(p.id)}
-                className="rounded-xl border border-darts-border py-4 text-sm font-bold text-darts-text hover:border-darts-green hover:bg-darts-green/10 disabled:opacity-60 transition-colors"
+                className="rounded-xl border border-border-default py-4 text-sm font-bold text-text-primary hover:border-success-solid hover:bg-success-solid/10 disabled:opacity-60 transition-colors"
               >
                 🏆 {p.player_name}
               </button>
@@ -367,8 +367,8 @@ function SetScoreTracker({
           <div className="grid grid-cols-2 gap-4">
             {/* P1 */}
             <div className="space-y-3 text-center">
-              <p className="text-sm text-darts-text-secondary truncate">{p1.player_name}</p>
-              <p className={`font-score text-5xl font-bold ${rp1 === 0 ? "text-darts-green" : "text-darts-text"}`}>
+              <p className="text-sm text-text-secondary truncate">{p1.player_name}</p>
+              <p className={`tabular-score text-5xl font-bold ${rp1 === 0 ? "text-success-solid" : "text-text-primary"}`}>
                 {rp1}
               </p>
               <div className="flex gap-2">
@@ -380,12 +380,12 @@ function SetScoreTracker({
                   value={inputP1}
                   onChange={(e) => setInputP1(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleVolee("p1")}
-                  className="w-full rounded-lg bg-darts-bg border border-darts-border px-3 py-2 text-sm text-darts-text placeholder:text-darts-text-secondary focus:border-darts-green focus:outline-none text-center"
+                  className="w-full rounded-lg bg-surface border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-success-solid focus:outline-none text-center"
                 />
                 <button
                   disabled={isPending || !inputP1}
                   onClick={() => handleVolee("p1")}
-                  className="rounded-lg bg-darts-green px-3 py-2 text-sm font-bold text-white hover:bg-darts-green/90 disabled:opacity-40 transition-colors"
+                  className="rounded-lg bg-success-solid px-3 py-2 text-sm font-bold text-white hover:bg-success-solid/90 disabled:opacity-40 transition-colors"
                 >
                   OK
                 </button>
@@ -394,8 +394,8 @@ function SetScoreTracker({
 
             {/* P2 */}
             <div className="space-y-3 text-center">
-              <p className="text-sm text-darts-text-secondary truncate">{p2.player_name}</p>
-              <p className={`font-score text-5xl font-bold ${rp2 === 0 ? "text-darts-green" : "text-darts-text"}`}>
+              <p className="text-sm text-text-secondary truncate">{p2.player_name}</p>
+              <p className={`tabular-score text-5xl font-bold ${rp2 === 0 ? "text-success-solid" : "text-text-primary"}`}>
                 {rp2}
               </p>
               <div className="flex gap-2">
@@ -407,12 +407,12 @@ function SetScoreTracker({
                   value={inputP2}
                   onChange={(e) => setInputP2(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleVolee("p2")}
-                  className="w-full rounded-lg bg-darts-bg border border-darts-border px-3 py-2 text-sm text-darts-text placeholder:text-darts-text-secondary focus:border-darts-green focus:outline-none text-center"
+                  className="w-full rounded-lg bg-surface border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-success-solid focus:outline-none text-center"
                 />
                 <button
                   disabled={isPending || !inputP2}
                   onClick={() => handleVolee("p2")}
-                  className="rounded-lg bg-darts-green px-3 py-2 text-sm font-bold text-white hover:bg-darts-green/90 disabled:opacity-40 transition-colors"
+                  className="rounded-lg bg-success-solid px-3 py-2 text-sm font-bold text-white hover:bg-success-solid/90 disabled:opacity-40 transition-colors"
                 >
                   OK
                 </button>
@@ -422,14 +422,14 @@ function SetScoreTracker({
 
           {/* Historique des volées */}
           {recentThrows.length > 0 && (
-            <div className="border-t border-darts-border pt-3">
-              <p className="text-xs text-darts-text-secondary mb-2">Volées</p>
+            <div className="border-t border-border-default pt-3">
+              <p className="text-xs text-text-secondary mb-2">Volées</p>
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {recentThrows.map((t, i) => (
                   <div
                     key={i}
                     className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg ${
-                      t.bust ? "bg-darts-red/10 text-darts-red" : "bg-darts-bg/60 text-darts-text"
+                      t.bust ? "bg-danger-solid/10 text-danger-solid" : "bg-surface/60 text-text-primary"
                     }`}
                   >
                     <span className="font-medium truncate max-w-[100px]">
@@ -438,7 +438,7 @@ function SetScoreTracker({
                     <span className={`font-mono font-bold ${t.bust ? "" : "text-white"}`}>
                       {t.bust ? `${t.score} — Bust` : `+${t.score}`}
                     </span>
-                    <span className="font-mono text-darts-text-secondary w-10 text-right">
+                    <span className="font-mono text-text-secondary w-10 text-right">
                       {t.bust ? "" : t.remaining}
                     </span>
                   </div>
@@ -448,15 +448,15 @@ function SetScoreTracker({
           )}
 
           {/* Override manuel */}
-          <div className="border-t border-darts-border pt-4">
-            <p className="text-xs text-darts-text-secondary text-center mb-3">Ou désigner manuellement le gagnant</p>
+          <div className="border-t border-border-default pt-4">
+            <p className="text-xs text-text-secondary text-center mb-3">Ou désigner manuellement le gagnant</p>
             <div className="grid grid-cols-2 gap-2">
               {[p1, p2].map((p) => (
                 <button
                   key={p.id}
                   disabled={isPending}
                   onClick={() => forceWinner(p.id)}
-                  className="rounded-lg border border-darts-border py-2 text-xs font-semibold text-darts-text-secondary hover:border-darts-green hover:text-darts-green disabled:opacity-60 transition-colors"
+                  className="rounded-lg border border-border-default py-2 text-xs font-semibold text-text-secondary hover:border-success-solid hover:text-success-solid disabled:opacity-60 transition-colors"
                 >
                   🏆 {p.player_name}
                 </button>

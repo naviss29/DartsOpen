@@ -43,7 +43,7 @@ export function BracketView({ matches, maxRound, tournamentId }: Props) {
             {i > 0 && <div style={{ width: CONN_W }} />}
             <div
               style={{ width: CARD_W }}
-              className="text-xs font-semibold text-gray-400 uppercase tracking-widest text-center"
+              className="text-xs font-semibold text-brand-text-secondary uppercase tracking-widest text-center"
             >
               {roundLabel(round, totalRounds)}
             </div>
@@ -125,13 +125,13 @@ export function BracketView({ matches, maxRound, tournamentId }: Props) {
 
 function PlaceholderCard() {
   return (
-    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 overflow-hidden opacity-60">
+    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 overflow-hidden opacity-60">
       <div className="px-3 flex items-center gap-2" style={{ height: 36 }}>
-        <span className="text-sm text-gray-400">?</span>
+        <span className="text-sm text-brand-text-secondary">?</span>
       </div>
-      <div className="border-t border-gray-200" />
+      <div className="border-t border-slate-200" />
       <div className="px-3 flex items-center gap-2" style={{ height: 36 }}>
-        <span className="text-sm text-gray-400">?</span>
+        <span className="text-sm text-brand-text-secondary">?</span>
       </div>
     </div>
   );
@@ -141,25 +141,25 @@ function BracketCard({ match, tournamentId, laterMatchesCount = 0 }: { match: Br
   const isBye = match.player2 === null;
   if (isBye) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2.5">
-        <p className="text-xs text-gray-400 mb-0.5">BYE</p>
-        <p className="text-sm font-semibold text-gray-600">{match.player1?.player_name}</p>
+      <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2.5">
+        <p className="text-xs text-brand-text-secondary mb-0.5">BYE</p>
+        <p className="text-sm font-semibold text-brand-text-secondary">{match.player1?.player_name}</p>
       </div>
     );
   }
 
   const hasResult = match.winner_id !== null;
-  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-darts-green" : "border-l-transparent";
+  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-brand-turquoise" : "border-l-transparent";
 
   return (
-    <div className={`rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden border-l-4 ${accentBorder}`}>
+    <div className={`rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden border-l-4 ${accentBorder}`}>
       <PlayerRow
         name={match.player1?.player_name ?? "?"}
         isWinner={hasResult && match.winner_id === match.player1?.id}
         isLoser={hasResult && match.winner_id !== match.player1?.id}
         inProgress={match.status === "IN_PROGRESS"}
       />
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-100" />
       <PlayerRow
         name={match.player2?.player_name ?? "?"}
         isWinner={hasResult && match.winner_id === match.player2?.id}
@@ -167,7 +167,7 @@ function BracketCard({ match, tournamentId, laterMatchesCount = 0 }: { match: Br
         inProgress={match.status === "IN_PROGRESS"}
       />
       {tournamentId && match.player1 && match.player2 && match.sets && match.sets.length > 0 && (
-        <div className="border-t border-gray-100 px-2 py-1 flex justify-end">
+        <div className="border-t border-slate-100 px-2 py-1 flex justify-end">
           <ArbitrateMatchButton
             match={{ ...match, player1: match.player1, player2: match.player2, sets: match.sets }}
             tournamentId={tournamentId}
@@ -183,12 +183,12 @@ function PlayerRow({ name, isWinner, isLoser, inProgress }: {
   name: string; isWinner: boolean; isLoser: boolean; inProgress: boolean;
 }) {
   return (
-    <div className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-darts-green/10" : ""}`} style={{ height: 36 }}>
-      <span className={`text-sm truncate ${isWinner ? "text-darts-green-dark font-semibold" : isLoser ? "text-gray-400" : inProgress ? "text-gray-800 font-medium" : "text-gray-700"}`}>
+    <div className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-emerald-50" : ""}`} style={{ height: 36 }}>
+      <span className={`text-sm truncate ${isWinner ? "text-emerald-800 font-semibold" : isLoser ? "text-brand-text-secondary" : inProgress ? "text-brand-dark font-medium" : "text-brand-dark"}`}>
         {name}
       </span>
-      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-darts-green">✓</span>}
-      {inProgress && !isWinner && !isLoser && <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-darts-green animate-pulse" />}
+      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-emerald-600">✓</span>}
+      {inProgress && !isWinner && !isLoser && <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-brand-turquoise animate-pulse" />}
     </div>
   );
 }

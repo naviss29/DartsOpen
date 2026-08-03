@@ -1,8 +1,7 @@
-import { Alert } from "@naviss29/design-system";
+import { Alert, Card } from "@naviss29/design-system";
 import { PaypalActivateButton } from "@/components/tournament/PaypalActivateButton";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Activer le tournoi — DartsOpen" };
@@ -26,18 +25,18 @@ export default async function ActivatePage({ params }: Props) {
   return (
     <div className="max-w-lg mx-auto space-y-6 py-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Tournoi créé ✓</h1>
-        <p className="text-sm text-gray-500 mt-1">{tournament.name}</p>
+        <h1 className="text-2xl font-bold text-brand-dark">Tournoi créé ✓</h1>
+        <p className="text-sm text-brand-text-secondary mt-1">{tournament.name}</p>
       </div>
 
       <Card className="space-y-4">
-        <h2 className="font-semibold text-gray-900">Frais de plateforme</h2>
-        <p className="text-sm text-gray-600">
+        <h2 className="font-semibold text-brand-dark">Frais de plateforme</h2>
+        <p className="text-sm text-brand-text-secondary">
           DartsOpen facture{" "}<strong>0,10 € par joueur</strong>{" "}pour couvrir l&apos;hébergement et le développement de la plateforme.
         </p>
 
         <PaypalActivateButton baseFeeEuros={platformFeeEuros} maxPlayers={tournament.max_players} />
-        <p className="text-xs text-center text-gray-400">Merci pour votre soutien !</p>
+        <p className="text-xs text-center text-brand-text-secondary">Merci pour votre soutien !</p>
       </Card>
 
       {tournament.registration_mode === "ONSITE" && (

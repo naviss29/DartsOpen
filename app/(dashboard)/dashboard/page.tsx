@@ -3,10 +3,9 @@ import { dbListTournaments, dbListAllTournaments } from "@/lib/db/tournament";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { Card, EmptyState } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
-import EmptyState from "@/components/ui/EmptyState";
 
 export const metadata: Metadata = { title: "Tableau de bord — DartsOpen" };
 
@@ -36,10 +35,10 @@ export default async function DashboardPage() {
   ]);
 
   const stats = [
-    { label: "Total", value: myTournaments.length, color: "bg-gray-100 text-gray-700" },
+    { label: "Total", value: myTournaments.length, color: "bg-slate-100 text-brand-dark" },
     { label: "Ouvertes", value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-brand-turquoise/10 text-brand-turquoise" },
-    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-darts-green/10 text-darts-green-dark" },
-    { label: "Terminés", value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-gray-50 text-gray-600" },
+    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-emerald-100 text-emerald-800" },
+    { label: "Terminés", value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-slate-50 text-brand-text-secondary" },
   ];
 
   // Trier : OPEN en premier, puis IN_PROGRESS, puis FINISHED, puis DRAFT (les miens)
@@ -49,7 +48,7 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
+        <h1 className="text-2xl font-bold text-brand-dark">Tableau de bord</h1>
         <Button href="/tournaments/new">+ Nouveau tournoi</Button>
       </div>
 
@@ -63,11 +62,11 @@ export default async function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">Tous les opens</h2>
+        <h2 className="mb-4 text-lg font-semibold text-brand-dark">Tous les opens</h2>
 
         {sorted.length === 0 ? (
           <EmptyState
-            icon="🎯"
+            icon={<span aria-hidden="true">🎯</span>}
             title="Aucun tournoi pour l'instant"
             action={<Button href="/tournaments/new">Créer mon premier tournoi</Button>}
           />
@@ -84,7 +83,7 @@ export default async function DashboardPage() {
 
               return isClickable ? (
                 <Link key={t.id} href={href} className="block">
-                  <Card className="transition-all hover:border-darts-green/40 hover:shadow-sm">
+                  <Card className="transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
                     <TournamentRow t={t} />
                   </Card>
                 </Link>
@@ -106,17 +105,17 @@ function TournamentRow({ t }: { t: Tournament }) {
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className="truncate font-semibold text-gray-900">{t.name}</p>
+          <p className="truncate font-semibold text-brand-dark">{t.name}</p>
           {t.is_mine && (
-            <span className="shrink-0 rounded-full bg-darts-green/10 px-2 py-0.5 text-xs font-medium text-darts-green-dark">
+            <span className="shrink-0 rounded-full bg-brand-turquoise/10 px-2 py-0.5 text-xs font-medium text-brand-turquoise">
               Mon tournoi
             </span>
           )}
         </div>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <p className="mt-0.5 text-sm text-brand-text-secondary">
           📅 {new Date(t.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp; 📍 {t.location}
         </p>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+        <div className="mt-2 flex flex-wrap gap-3 text-xs text-brand-text-secondary">
           <span>👤 {t.players_paid * t.players_per_team}/{t.max_players} joueurs</span>
           <span>🔵 {t.nb_pools} poules</span>
           <span>🎯 {t.nb_boards} cibles</span>
@@ -127,7 +126,7 @@ function TournamentRow({ t }: { t: Tournament }) {
       <div className="flex shrink-0 flex-col items-end gap-2">
         <StatusBadge status={t.status} />
         {!t.is_mine && t.status === "OPEN" && (
-          <span className="text-xs font-semibold text-darts-green-dark">S&apos;inscrire →</span>
+          <span className="text-xs font-semibold text-brand-turquoise">S&apos;inscrire →</span>
         )}
       </div>
     </div>

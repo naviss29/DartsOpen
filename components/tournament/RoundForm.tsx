@@ -32,7 +32,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       )}
 
       <div>
-        <label htmlFor="game_type" className="block text-xs font-medium text-gray-600 mb-1">Type de jeu</label>
+        <label htmlFor="game_type" className="block text-xs font-medium text-brand-text-secondary mb-1">Type de jeu</label>
         <select id="game_type" name="game_type" required value={gameType} onChange={e => setGameType(e.target.value)} className={selectCn}>
           <option value="501">501</option>
           <option value="701">701</option>
@@ -43,7 +43,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       </div>
 
       <div>
-        <label htmlFor="entry_type" className="block text-xs font-medium text-gray-600 mb-1">Entrée</label>
+        <label htmlFor="entry_type" className="block text-xs font-medium text-brand-text-secondary mb-1">Entrée</label>
         <select id="entry_type" name="entry_type" required key={`entry-${gameType}`} defaultValue={defaults.entry} className={selectCn}>
           <option value="SINGLE">Simple</option>
           <option value="DOUBLE">Double</option>
@@ -52,7 +52,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       </div>
 
       <div>
-        <label htmlFor="finish_type" className="block text-xs font-medium text-gray-600 mb-1">Sortie</label>
+        <label htmlFor="finish_type" className="block text-xs font-medium text-brand-text-secondary mb-1">Sortie</label>
         <select id="finish_type" name="finish_type" required key={`finish-${gameType}`} defaultValue={defaults.finish} className={selectCn}>
           <option value="MASTER">Master</option>
           <option value="DOUBLE">Double</option>
@@ -65,7 +65,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
         <button
           type="submit"
           disabled={isPending}
-          className="w-full rounded-lg border border-dashed border-green-400 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+          className="w-full rounded-lg border border-dashed border-brand-turquoise/50 px-4 py-2 text-sm font-medium text-brand-turquoise hover:bg-brand-turquoise/10 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >
           {isPending ? "Ajout…" : "+ Ajouter cette manche"}
         </button>
@@ -75,4 +75,4 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
 }
 
 const selectCn =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent";

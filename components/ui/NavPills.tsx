@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { cn } from "@/lib/utils/cn";
+import { cn } from "@naviss29/design-system";
 
 interface Item {
   href: string;
@@ -27,7 +27,7 @@ export default function NavPills({ items }: { items: Item[] }) {
           <span
             key={item.href}
             title={item.disabledReason}
-            className="cursor-not-allowed rounded-lg border border-gray-100 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-400"
+            className="cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-400"
           >
             {item.label}
           </span>
@@ -39,8 +39,8 @@ export default function NavPills({ items }: { items: Item[] }) {
             className={cn(
               "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
               item.current
-                ? "bg-darts-green text-white"
-                : "border border-gray-200 bg-white text-gray-700 hover:border-darts-green hover:text-darts-green",
+                ? "bg-brand-turquoise text-white"
+                : "border border-slate-200 bg-white text-brand-dark hover:border-brand-turquoise hover:text-brand-turquoise",
             )}
           >
             {item.label}
@@ -48,7 +48,7 @@ export default function NavPills({ items }: { items: Item[] }) {
               <span
                 className={cn(
                   "ml-2 rounded-full px-2 py-0.5 text-xs",
-                  item.current ? "bg-white/20" : "bg-gray-100 text-gray-600",
+                  item.current ? "bg-white/20" : "bg-slate-100 text-brand-text-secondary",
                 )}
               >
                 {item.badge}

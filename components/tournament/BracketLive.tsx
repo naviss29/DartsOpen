@@ -101,19 +101,19 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
         Phases finales
       </h2>
 
       {winner && (
-        <div className="rounded-xl bg-darts-gold/10 border border-darts-gold/30 p-5 text-center space-y-1">
+        <div className="rounded-xl bg-warning-solid/10 border border-warning-solid/30 p-5 text-center space-y-1">
           <p className="text-2xl">🏆</p>
-          <p className="text-sm text-darts-gold font-semibold">Vainqueur</p>
-          <p className="text-xl font-bold text-darts-gold">{winner}</p>
+          <p className="text-sm text-warning-solid font-semibold">Vainqueur</p>
+          <p className="text-xl font-bold text-warning-solid">{winner}</p>
         </div>
       )}
 
-      <div className="bg-darts-surface rounded-xl border border-darts-border p-5 overflow-x-auto">
+      <div className="bg-surface-secondary rounded-xl border border-border-default p-5 overflow-x-auto">
         <div className="pb-2">
           <div className="flex mb-4">
             {rounds.map((round, i) => (
@@ -121,7 +121,7 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
                 {i > 0 && <div style={{ width: CONN_W }} />}
                 <div
                   style={{ width: CARD_W }}
-                  className="text-xs font-semibold text-darts-text-secondary uppercase tracking-widest text-center"
+                  className="text-xs font-semibold text-text-secondary uppercase tracking-widest text-center"
                 >
                   {roundLabel(round, totalRounds)}
                 </div>
@@ -156,10 +156,10 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
                         if (!h0 && !h1) return null;
                         return (
                           <g key={j}>
-                            {h0 && <line x1={0} y1={py0} x2={mx} y2={py0} stroke="var(--color-darts-border)" strokeWidth={1.5} />}
-                            {h0 && h1 && <line x1={mx} y1={py0} x2={mx} y2={py1} stroke="var(--color-darts-border)" strokeWidth={1.5} />}
-                            {h1 && <line x1={0} y1={py1} x2={mx} y2={py1} stroke="var(--color-darts-border)" strokeWidth={1.5} />}
-                            <line x1={mx} y1={cy} x2={CONN_W} y2={cy} stroke="var(--color-darts-border)" strokeWidth={1.5} />
+                            {h0 && <line x1={0} y1={py0} x2={mx} y2={py0} stroke="var(--color-border-default)" strokeWidth={1.5} />}
+                            {h0 && h1 && <line x1={mx} y1={py0} x2={mx} y2={py1} stroke="var(--color-border-default)" strokeWidth={1.5} />}
+                            {h1 && <line x1={0} y1={py1} x2={mx} y2={py1} stroke="var(--color-border-default)" strokeWidth={1.5} />}
+                            <line x1={mx} y1={cy} x2={CONN_W} y2={cy} stroke="var(--color-border-default)" strokeWidth={1.5} />
                           </g>
                         );
                       })}
@@ -201,13 +201,13 @@ export function BracketLive({ tournamentId, initialMatches }: Props) {
 
 function PlaceholderCard() {
   return (
-    <div className="rounded-lg border border-dashed border-darts-border bg-darts-surface-raised/50 overflow-hidden opacity-50">
+    <div className="rounded-lg border border-dashed border-border-default bg-surface-secondary/50 overflow-hidden opacity-50">
       <div className="px-3 flex items-center gap-2" style={{ height: 36 }}>
-        <span className="text-sm text-darts-text-secondary">?</span>
+        <span className="text-sm text-text-secondary">?</span>
       </div>
-      <div className="border-t border-darts-border" />
+      <div className="border-t border-border-default" />
       <div className="px-3 flex items-center gap-2" style={{ height: 36 }}>
-        <span className="text-sm text-darts-text-secondary">?</span>
+        <span className="text-sm text-text-secondary">?</span>
       </div>
     </div>
   );
@@ -218,25 +218,25 @@ function BracketCard({ match }: { match: BracketMatch }) {
 
   if (isBye) {
     return (
-      <div className="rounded-lg border border-dashed border-darts-border bg-darts-surface-raised/60 px-3 py-2.5">
-        <p className="text-xs text-darts-text-secondary mb-0.5">BYE</p>
-        <p className="text-sm font-semibold text-darts-text">{match.player1?.player_name}</p>
+      <div className="rounded-lg border border-dashed border-border-default bg-surface-secondary/60 px-3 py-2.5">
+        <p className="text-xs text-text-secondary mb-0.5">BYE</p>
+        <p className="text-sm font-semibold text-text-primary">{match.player1?.player_name}</p>
       </div>
     );
   }
 
   const hasResult = match.winner_id !== null;
-  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-darts-green" : "border-l-transparent";
+  const accentBorder = match.status === "IN_PROGRESS" ? "border-l-success-solid" : "border-l-transparent";
 
   return (
-    <div className={`rounded-lg border border-darts-border bg-darts-surface-raised overflow-hidden border-l-4 ${accentBorder}`}>
+    <div className={`rounded-lg border border-border-default bg-surface-secondary overflow-hidden border-l-4 ${accentBorder}`}>
       <PlayerRow
         name={match.player1?.player_name ?? "En attente"}
         isWinner={hasResult && match.winner_id === match.player1?.id}
         isLoser={hasResult && match.winner_id !== match.player1?.id}
         inProgress={match.status === "IN_PROGRESS"}
       />
-      <div className="border-t border-darts-border" />
+      <div className="border-t border-border-default" />
       <PlayerRow
         name={match.player2?.player_name ?? "En attente"}
         isWinner={hasResult && match.winner_id === match.player2?.id}
@@ -260,25 +260,25 @@ function PlayerRow({
 }) {
   return (
     <div
-      className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-darts-green/10" : ""}`}
+      className={`px-3 flex items-center justify-between gap-2 ${isWinner ? "bg-success-solid/10" : ""}`}
       style={{ height: 36 }}
     >
       <span
         className={`text-sm truncate ${
           isWinner
-            ? "text-darts-green font-semibold"
+            ? "text-success-solid font-semibold"
             : isLoser
-            ? "text-darts-text-secondary"
+            ? "text-text-secondary"
             : inProgress
-            ? "text-darts-text font-medium"
-            : "text-darts-text"
+            ? "text-text-primary font-medium"
+            : "text-text-primary"
         }`}
       >
         {name}
       </span>
-      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-darts-green">✓</span>}
+      {isWinner && <span className="flex-shrink-0 text-xs font-bold text-success-solid">✓</span>}
       {inProgress && !isWinner && !isLoser && (
-        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-darts-green animate-pulse" />
+        <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-success-solid animate-pulse" />
       )}
     </div>
   );

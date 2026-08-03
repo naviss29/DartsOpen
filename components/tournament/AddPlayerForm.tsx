@@ -2,10 +2,8 @@
 
 import { useActionState } from "react";
 import { addPlayer } from "@/lib/actions/player";
-import { Alert } from "@naviss29/design-system";
+import { Alert, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
-import FormField from "@/components/ui/FormField";
-import Input from "@/components/ui/Input";
 
 interface Props {
   tournamentId: string;
@@ -27,7 +25,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam, quickMode = false 
       <div className="grid grid-cols-2 gap-3">
         {isTeam && (
           <div className="col-span-2">
-            <FormField label="Nom de l'équipe *" htmlFor="player_name" error={state?.errors?.player_name?.[0]}>
+            <FormField label="Nom de l'équipe *" id="player_name" error={state?.errors?.player_name?.[0]}>
               <Input
                 id="player_name"
                 name="player_name"
@@ -41,7 +39,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam, quickMode = false 
         )}
 
         <div className={isTeam ? "col-span-2" : "col-span-1"}>
-          <label htmlFor="player_pseudo_0" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="player_pseudo_0" className="mb-1 block text-sm font-medium text-brand-dark">
             {isTeam ? `Pseudos des joueurs *` : "Nom complet *"}
           </label>
           <div className={isTeam ? "grid grid-cols-2 gap-2" : ""}>
@@ -62,7 +60,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam, quickMode = false 
 
         {!quickMode && (
           <>
-            <FormField label="Email *" htmlFor="player_email" error={state?.errors?.player_email?.[0]}>
+            <FormField label="Email *" id="player_email" error={state?.errors?.player_email?.[0]}>
               <Input
                 id="player_email"
                 name="player_email"
@@ -73,7 +71,7 @@ export function AddPlayerForm({ tournamentId, playersPerTeam, quickMode = false 
               />
             </FormField>
 
-            <FormField label="Téléphone" htmlFor="player_phone" error={state?.errors?.player_phone?.[0]}>
+            <FormField label="Téléphone" id="player_phone" error={state?.errors?.player_phone?.[0]}>
               <Input
                 id="player_phone"
                 name="player_phone"

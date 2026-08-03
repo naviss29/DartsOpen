@@ -31,7 +31,7 @@ export function SeedToggleButton({ registrationId, tournamentId, seeded: initial
       className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-50 ${
         seeded
           ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
-          : "bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+          : "bg-slate-100 text-brand-text-secondary hover:bg-slate-200 hover:text-brand-dark"
       }`}
     >
       {seeded ? "★ Tête de série" : "☆"}

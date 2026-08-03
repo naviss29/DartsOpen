@@ -16,15 +16,15 @@ export function PaypalActivateButton({ baseFeeEuros, maxPlayers }: Props) {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 space-y-3">
+      <div className="rounded-lg bg-slate-50 border border-slate-200 p-4 space-y-3">
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">{maxPlayers} joueurs × 0,10 €</span>
-          <span className="font-medium text-gray-900">{baseFeeEuros.toFixed(2)} €</span>
+          <span className="text-brand-text-secondary">{maxPlayers} joueurs × 0,10 €</span>
+          <span className="font-medium text-brand-dark">{baseFeeEuros.toFixed(2)} €</span>
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-600 whitespace-nowrap">Montant libre :</label>
+            <label className="text-sm text-brand-text-secondary whitespace-nowrap">Montant libre :</label>
             <div className="relative flex-1">
               <input
                 type="number"
@@ -33,20 +33,20 @@ export function PaypalActivateButton({ baseFeeEuros, maxPlayers }: Props) {
                 placeholder="0.00"
                 value={extra}
                 onChange={(e) => setExtra(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 pr-8 text-sm text-gray-900 placeholder:text-gray-400 focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                className="w-full rounded-lg border border-slate-300 px-3 py-1.5 pr-8 text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent"
               />
-              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-gray-400">€</span>
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-brand-text-secondary">€</span>
             </div>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-brand-text-secondary">
             Un coup de pouce pour aider Stêr Eo Production à grandir et continuer à développer DartsOpen. 💚
           </p>
         </div>
 
         {extraAmount > 0 && (
-          <div className="flex justify-between text-sm font-semibold border-t border-gray-200 pt-2">
-            <span className="text-gray-700">Total</span>
-            <span className="text-green-700">{total} €</span>
+          <div className="flex justify-between text-sm font-semibold border-t border-slate-200 pt-2">
+            <span className="text-brand-dark">Total</span>
+            <span className="text-emerald-700">{total} €</span>
           </div>
         )}
       </div>

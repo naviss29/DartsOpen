@@ -17,9 +17,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 const RESULT_LABELS = {
-  champion: { label: "Champion", color: "text-darts-gold", icon: "👑" },
-  bracket: { label: "Bracket", color: "text-blue-400", icon: "🎯" },
-  poules: { label: "Poules", color: "text-darts-text-secondary", icon: "" },
+  champion: { label: "Champion", color: "text-amber-600", icon: "👑" },
+  bracket: { label: "Bracket", color: "text-blue-600", icon: "🎯" },
+  poules: { label: "Poules", color: "text-brand-text-secondary", icon: "" },
 } as const;
 
 export default async function PlayerProfilePage({ params }: Props) {
@@ -34,18 +34,18 @@ export default async function PlayerProfilePage({ params }: Props) {
   return (
     <div className="max-w-xl mx-auto px-4 py-10 space-y-8">
       {/* Nav */}
-      <Link href="/classement" className="text-xs text-darts-text-secondary hover:text-darts-text transition-colors">
+      <Link href="/classement" className="text-xs text-brand-text-secondary hover:text-brand-dark transition-colors">
         ← Classement
       </Link>
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-darts-surface-raised border border-darts-border flex items-center justify-center text-2xl font-black text-darts-text shrink-0">
+        <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-2xl font-black text-brand-dark shrink-0">
           {profile.player_name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
-          <h1 className="text-2xl font-black text-darts-text truncate">{profile.player_name}</h1>
-          <p className="text-darts-text-secondary text-sm">
+          <h1 className="text-2xl font-black text-brand-dark truncate">{profile.player_name}</h1>
+          <p className="text-brand-text-secondary text-sm">
             {stats.tournaments} tournoi{stats.tournaments > 1 ? "s" : ""}
           </p>
         </div>
@@ -68,27 +68,27 @@ export default async function PlayerProfilePage({ params }: Props) {
         ].map(({ label, value, accent }) => (
           <div
             key={label}
-            className="rounded-xl bg-darts-surface border border-darts-border p-4 text-center"
+            className="rounded-xl bg-white border border-slate-200 p-4 text-center"
           >
-            <p className={`font-score text-3xl font-black ${accent ? "text-darts-text" : "text-darts-text-secondary"}`}>
+            <p className={`tabular-score text-3xl font-black ${accent ? "text-brand-dark" : "text-brand-text-secondary"}`}>
               {value}
             </p>
-            <p className="text-xs text-darts-text-secondary mt-1">{label}</p>
+            <p className="text-xs text-brand-text-secondary mt-1">{label}</p>
           </div>
         ))}
       </div>
 
       {/* Détail wins */}
       {stats.wins > 0 && (
-        <div className="rounded-xl bg-darts-surface border border-darts-border px-5 py-4 flex gap-6">
+        <div className="rounded-xl bg-white border border-slate-200 px-5 py-4 flex gap-6">
           <div className="text-center">
-            <p className="text-xl font-bold text-darts-text">{stats.pool_wins}</p>
-            <p className="text-xs text-darts-text-secondary mt-0.5">poule</p>
+            <p className="text-xl font-bold text-brand-dark">{stats.pool_wins}</p>
+            <p className="text-xs text-brand-text-secondary mt-0.5">poule</p>
           </div>
-          <div className="w-px bg-darts-border" />
+          <div className="w-px bg-slate-200" />
           <div className="text-center">
-            <p className="text-xl font-bold text-darts-text">{stats.bracket_wins}</p>
-            <p className="text-xs text-darts-text-secondary mt-0.5">bracket</p>
+            <p className="text-xl font-bold text-brand-dark">{stats.bracket_wins}</p>
+            <p className="text-xs text-brand-text-secondary mt-0.5">bracket</p>
           </div>
         </div>
       )}
@@ -96,7 +96,7 @@ export default async function PlayerProfilePage({ params }: Props) {
       {/* Historique */}
       {history.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-darts-text-secondary">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-brand-text-secondary">
             Historique
           </h2>
           {history.map((t) => {
@@ -104,11 +104,11 @@ export default async function PlayerProfilePage({ params }: Props) {
             return (
               <div
                 key={t.tournament_id}
-                className="flex items-center gap-4 rounded-xl bg-darts-surface border border-darts-border px-5 py-4"
+                className="flex items-center gap-4 rounded-xl bg-white border border-slate-200 px-5 py-4"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-darts-text truncate">{t.tournament_name}</p>
-                  <p className="text-xs text-darts-text-secondary mt-0.5">
+                  <p className="font-semibold text-brand-dark truncate">{t.tournament_name}</p>
+                  <p className="text-xs text-brand-text-secondary mt-0.5">
                     {t.tournament_date} · {t.wins} victoire{t.wins !== 1 ? "s" : ""}
                   </p>
                 </div>

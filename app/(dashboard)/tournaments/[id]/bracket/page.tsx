@@ -6,9 +6,8 @@ import { QuickBracketView } from "@/components/tournament/QuickBracketView";
 import { dbListMatches } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
-import EmptyState from "@/components/ui/EmptyState";
 import NavPills from "@/components/ui/NavPills";
+import { Card, EmptyState } from "@naviss29/design-system";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -115,7 +114,7 @@ export default async function BracketPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
+        <Link href={`/tournaments/${id}`} className="text-sm text-brand-text-secondary hover:text-brand-dark">
           ← {tournament.name}
         </Link>
         <NavPills
@@ -129,7 +128,7 @@ export default async function BracketPage({ params }: Props) {
           <Link
             href={`/t/${id}/live`}
             target="_blank"
-            className="inline-block rounded-lg border border-darts-green bg-darts-green/10 px-4 py-2 text-sm font-medium text-darts-green-dark hover:bg-darts-green/20 transition-colors"
+            className="inline-block rounded-lg border border-brand-turquoise bg-brand-turquoise/10 px-4 py-2 text-sm font-medium text-brand-turquoise hover:bg-brand-turquoise/20 transition-colors"
           >
             🎯 Vue Live ↗
           </Link>
@@ -140,13 +139,13 @@ export default async function BracketPage({ params }: Props) {
         <div>
           {tournament.quick_mode ? (
             <>
-              <h1 className="text-2xl font-bold text-gray-900">Tournoi rapide ⚡</h1>
-              <p className="text-sm text-gray-500 mt-1">Double élimination — 2 vies par joueur</p>
+              <h1 className="text-2xl font-bold text-brand-dark">Tournoi rapide ⚡</h1>
+              <p className="text-sm text-brand-text-secondary mt-1">Double élimination — 2 vies par joueur</p>
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-bold text-gray-900">Phases finales</h1>
-              <p className="text-sm text-gray-500 mt-1">
+              <h1 className="text-2xl font-bold text-brand-dark">Phases finales</h1>
+              <p className="text-sm text-brand-text-secondary mt-1">
                 {tournament.nb_pools} poules · {tournament.advancement_per_pool} qualifié(s)/poule
                 · {tournament.nb_pools * tournament.advancement_per_pool} participants
               </p>
@@ -172,7 +171,7 @@ export default async function BracketPage({ params }: Props) {
                   </Button>
                 </form>
                 {poolsPending && (
-                  <p className="text-xs text-darts-gold-dark">
+                  <p className="text-xs text-amber-600">
                     Des matchs de poule sont encore en cours.
                   </p>
                 )}
@@ -193,10 +192,10 @@ export default async function BracketPage({ params }: Props) {
 
       {/* Bandeau vainqueur */}
       {tournamentFinished && winnerName && (
-        <div className="rounded-xl bg-darts-gold/10 border border-darts-gold/30 p-6 text-center space-y-2">
+        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-6 text-center space-y-2">
           <p className="text-4xl">🏆</p>
-          <h2 className="text-xl font-bold text-darts-gold-dark">Vainqueur du tournoi</h2>
-          <p className="text-2xl font-bold text-darts-gold-dark">{winnerName}</p>
+          <h2 className="text-xl font-bold text-emerald-800">Vainqueur du tournoi</h2>
+          <p className="text-2xl font-bold text-emerald-800">{winnerName}</p>
         </div>
       )}
 

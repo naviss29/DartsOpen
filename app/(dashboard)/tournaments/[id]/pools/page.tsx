@@ -4,9 +4,8 @@ import { PrintButton } from "@/components/tournament/PrintButton";
 import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
 import { dbListPools, dbListRegistrations } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
-import Card from "@/components/ui/Card";
-import EmptyState from "@/components/ui/EmptyState";
 import NavPills from "@/components/ui/NavPills";
+import { Card, EmptyState } from "@naviss29/design-system";
 import Link from "next/link";
 import type { Metadata } from "next";
 
@@ -73,7 +72,7 @@ export default async function PoolsPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <Link href={`/tournaments/${id}`} className="text-sm text-gray-500 hover:text-gray-900">
+        <Link href={`/tournaments/${id}`} className="text-sm text-brand-text-secondary hover:text-brand-dark">
           ← {tournament.name}
         </Link>
         <NavPills
@@ -92,7 +91,7 @@ export default async function PoolsPage({ params }: Props) {
           <Link
             href={`/t/${id}/live`}
             target="_blank"
-            className="inline-block rounded-lg border border-darts-green bg-darts-green/10 px-4 py-2 text-sm font-medium text-darts-green-dark hover:bg-darts-green/20 transition-colors"
+            className="inline-block rounded-lg border border-brand-turquoise bg-brand-turquoise/10 px-4 py-2 text-sm font-medium text-brand-turquoise hover:bg-brand-turquoise/20 transition-colors"
           >
             🎯 Vue Live ↗
           </Link>
@@ -101,8 +100,8 @@ export default async function PoolsPage({ params }: Props) {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Poules & Matchs</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-bold text-brand-dark">Poules & Matchs</h1>
+          <p className="text-sm text-brand-text-secondary mt-1">
             {tournament.nb_pools} poules · {tournament.nb_boards} cibles · {totalPlayers} joueurs
           </p>
         </div>
@@ -119,11 +118,11 @@ export default async function PoolsPage({ params }: Props) {
       </div>
 
       {showQRCodes && (
-        <Card as="section" className="space-y-4">
+        <section><Card className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-gray-900">QR Codes — Saisie des scores</h2>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <h2 className="font-semibold text-brand-dark">QR Codes — Saisie des scores</h2>
+              <p className="text-sm text-brand-text-secondary mt-0.5">
                 Scannez-les ou imprimez-les pour les coller sur chaque fléchier avant le tournoi.
               </p>
             </div>
@@ -133,39 +132,39 @@ export default async function PoolsPage({ params }: Props) {
             {boardQRCodes.map(({ board, dataUrl }) => (
               <div
                 key={board}
-                className="flex flex-col items-center gap-2 rounded-xl border border-gray-100 p-4 text-center"
+                className="flex flex-col items-center gap-2 rounded-xl border border-slate-100 p-4 text-center"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={dataUrl} alt={`QR Cible ${board}`} width={140} height={140} />
-                <p className="font-semibold text-gray-900">Cible {board}</p>
-                <p className="text-xs text-gray-400 font-mono break-all">
+                <p className="font-semibold text-brand-dark">Cible {board}</p>
+                <p className="text-xs text-brand-text-secondary font-mono break-all">
                   {baseUrl}/t/{id}/score?board={board}
                 </p>
               </div>
             ))}
 
             {spectatorQR && (
-              <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-darts-green/30 bg-darts-green/10 p-4 text-center">
+              <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-brand-turquoise/30 bg-brand-turquoise/10 p-4 text-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={spectatorQR} alt="QR Spectateurs" width={140} height={140} />
-                <p className="font-semibold text-darts-green-dark">Suivre le tournoi</p>
-                <p className="text-xs text-darts-green-dark">Scannez pour voir les classements et matchs en direct</p>
+                <p className="font-semibold text-brand-turquoise">Suivre le tournoi</p>
+                <p className="text-xs text-brand-turquoise">Scannez pour voir les classements et matchs en direct</p>
               </div>
             )}
           </div>
-        </Card>
+        </Card></section>
       )}
 
       {tournament.nb_pools === 1 ? (
         ["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
-          <div className="rounded-xl bg-darts-green/10 border border-darts-green/30 p-10 text-center space-y-3">
-            <p className="text-darts-green-dark font-semibold">Format élimination directe</p>
-            <p className="text-darts-green-dark text-sm">
+          <div className="rounded-xl bg-brand-turquoise/10 border border-brand-turquoise/30 p-10 text-center space-y-3">
+            <p className="text-brand-turquoise font-semibold">Format élimination directe</p>
+            <p className="text-brand-turquoise text-sm">
               Tous les joueurs inscrits participent directement aux phases finales.
             </p>
             <Link
               href={`/tournaments/${id}/bracket`}
-              className="inline-block rounded-lg bg-darts-green px-4 py-2 text-sm font-semibold text-white hover:bg-darts-green/90 transition-colors"
+              className="inline-block rounded-lg bg-brand-turquoise px-4 py-2 text-sm font-semibold text-white hover:bg-brand-turquoise/90 transition-colors"
             >
               Voir les phases finales →
             </Link>
@@ -188,9 +187,9 @@ export default async function PoolsPage({ params }: Props) {
         <div className="space-y-6">
           {pools.map((pool) => (
             <Card key={pool.id} className="overflow-hidden p-0">
-              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-900">{pool.name}</h2>
-                <span className="text-xs text-gray-500">
+              <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                <h2 className="font-semibold text-brand-dark">{pool.name}</h2>
+                <span className="text-xs text-brand-text-secondary">
                   {tournament.players_per_team > 1
                     ? `${pool.players.length} équipes (${pool.players.length * tournament.players_per_team} joueurs)`
                     : `${pool.players.length} joueurs`
@@ -200,23 +199,23 @@ export default async function PoolsPage({ params }: Props) {
 
               <div className="p-5 grid md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Joueurs</p>
+                  <p className="text-xs font-medium text-brand-text-secondary uppercase tracking-wider mb-2">Joueurs</p>
                   <ul className="space-y-1">
                     {pool.players.map((p) => (
-                      <li key={p.id} className="text-sm text-gray-700">{p.player_name}</li>
+                      <li key={p.id} className="text-sm text-brand-dark">{p.player_name}</li>
                     ))}
                   </ul>
                 </div>
 
                 <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Matchs</p>
+                  <p className="text-xs font-medium text-brand-text-secondary uppercase tracking-wider mb-2">Matchs</p>
                   <ul className="space-y-1">
                     {pool.matches.map((m) => (
                       <li key={m.id} className="text-sm flex items-center gap-2">
-                        <span className="text-xs text-gray-400 w-16">
+                        <span className="text-xs text-brand-text-secondary w-16">
                           {m.board_number > 0 ? `Cible ${m.board_number}` : "—"}
                         </span>
-                        <span className="text-gray-700 flex-1">
+                        <span className="text-brand-dark flex-1">
                           {m.player1.player_name} vs {m.player2.player_name}
                         </span>
                         <StatusDot status={m.status} />
@@ -236,9 +235,9 @@ export default async function PoolsPage({ params }: Props) {
 
 function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    PENDING: "bg-gray-300",
-    IN_PROGRESS: "bg-darts-green animate-pulse",
+    PENDING: "bg-slate-300",
+    IN_PROGRESS: "bg-brand-turquoise animate-pulse",
     FINISHED: "bg-blue-400",
   };
-  return <span className={`w-2 h-2 rounded-full ${colors[status] ?? "bg-gray-300"}`} />;
+  return <span className={`w-2 h-2 rounded-full ${colors[status] ?? "bg-slate-300"}`} />;
 }

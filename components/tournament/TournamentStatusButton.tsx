@@ -46,7 +46,7 @@ export function TournamentStatusButton({ tournamentId, nextStatus, label }: Prop
       <button
         onClick={handleClick}
         disabled={isPending || (isFinishing && !ackFinish)}
-        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 disabled:opacity-50 transition-colors"
       >
         {isPending ? "…" : label}
       </button>

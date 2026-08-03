@@ -9,9 +9,9 @@ export function DonsPaypalButton() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-3">
+      <div className="rounded-xl bg-white border border-slate-200 p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <label className="text-sm text-gray-300 whitespace-nowrap">Montant :</label>
+          <label className="text-sm text-brand-dark whitespace-nowrap">Montant :</label>
           <div className="relative flex-1">
             <input
               type="number"
@@ -19,9 +19,9 @@ export function DonsPaypalButton() {
               step="1"
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
-              className="w-full rounded-lg bg-gray-900 border border-gray-600 px-3 py-2 pr-8 text-sm text-white focus:border-green-500 focus:outline-none text-center"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 pr-8 text-sm text-brand-dark focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent text-center"
             />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">€</span>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-brand-text-secondary">€</span>
           </div>
         </div>
         <div className="flex gap-2 justify-center">
@@ -30,7 +30,7 @@ export function DonsPaypalButton() {
               key={v}
               onClick={() => setExtra(v)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                extra === v ? "bg-green-600 text-white" : "bg-white/10 text-gray-300 hover:bg-white/20"
+                extra === v ? "bg-brand-turquoise text-white" : "bg-slate-100 text-brand-dark hover:bg-slate-200"
               }`}
             >
               {v} €
@@ -50,7 +50,7 @@ export function DonsPaypalButton() {
         </svg>
         Faire un don de {amount} € via PayPal
       </a>
-      <p className="text-xs text-gray-500 text-center">Vous serez redirigé vers PayPal. Chaque coup de pouce compte !</p>
+      <p className="text-xs text-brand-text-secondary text-center">Vous serez redirigé vers PayPal. Chaque coup de pouce compte !</p>
     </div>
   );
 }

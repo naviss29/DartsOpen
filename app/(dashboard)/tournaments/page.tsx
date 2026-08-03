@@ -2,10 +2,9 @@ import { dbListTournaments } from "@/lib/db/tournament";
 import { getUser } from "@/lib/api/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { Card, EmptyState } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
-import EmptyState from "@/components/ui/EmptyState";
 
 export const metadata: Metadata = { title: "Mes tournois — DartsOpen" };
 
@@ -31,13 +30,13 @@ export default async function TournamentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-gray-900">Mes tournois</h1>
+        <h1 className="text-2xl font-bold text-brand-dark">Mes tournois</h1>
         <Button href="/tournaments/new">+ Nouveau tournoi</Button>
       </div>
 
       {!tournaments?.length ? (
         <EmptyState
-          icon="🏆"
+          icon={<span aria-hidden="true">🏆</span>}
           title="Aucun tournoi créé"
           action={<Button href="/tournaments/new">Créer mon premier tournoi</Button>}
         />
@@ -45,15 +44,15 @@ export default async function TournamentsPage() {
         <div className="grid gap-4">
           {tournaments.map((t) => (
             <Link key={t.id} href={`/tournaments/${t.id}`} className="block">
-              <Card className="p-5 transition-all hover:border-darts-green/40 hover:shadow-sm">
+              <Card className="p-5 transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <h2 className="truncate font-semibold text-gray-900">{t.name}</h2>
-                    <p className="mt-1 text-sm text-gray-500">
+                    <h2 className="truncate font-semibold text-brand-dark">{t.name}</h2>
+                    <p className="mt-1 text-sm text-brand-text-secondary">
                       📅 {new Date(t.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
                       📍 {t.location}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500">
+                    <div className="mt-3 flex flex-wrap gap-4 text-xs text-brand-text-secondary">
                       <span>👤 {t.players_paid * t.players_per_team}/{t.max_players} joueurs</span>
                       <span>🔵 {t.nb_pools} poules</span>
                       <span>🎯 {t.nb_boards} cibles</span>

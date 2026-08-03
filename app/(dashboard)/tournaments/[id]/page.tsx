@@ -6,10 +6,9 @@ import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
 import type { Metadata } from "next";
-import Card from "@/components/ui/Card";
+import { Card, Pill } from "@naviss29/design-system";
 import StatusBadge from "@/components/ui/StatusBadge";
 import NavPills from "@/components/ui/NavPills";
-import { Pill } from "@naviss29/design-system";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -76,10 +75,10 @@ export default async function TournamentDetailPage({ params }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{tournament.name}</h1>
+            <h1 className="text-2xl font-bold text-brand-dark">{tournament.name}</h1>
             {tournament.quick_mode && <Pill tone="success">⚡ Mode rapide</Pill>}
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-brand-text-secondary">
             📅 {new Date(tournament.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
             📍 {tournament.location}
           </p>
@@ -105,8 +104,8 @@ export default async function TournamentDetailPage({ params }: Props) {
           { label: "Inscription", value: `${(tournament.entry_fee / 100).toFixed(2)} €` },
         ].map((item) => (
           <Card key={item.label} className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{item.value}</p>
-            <p className="mt-1 text-xs text-gray-500">{item.label}</p>
+            <p className="text-2xl font-bold text-brand-dark">{item.value}</p>
+            <p className="mt-1 text-xs text-brand-text-secondary">{item.label}</p>
           </Card>
         ))}
       </div>
@@ -139,9 +138,9 @@ export default async function TournamentDetailPage({ params }: Props) {
           </Link>
         )}
         {tournament.status === "OPEN" && tournament.registration_mode === "ONSITE" && (
-          <p className="text-sm text-gray-500 italic">
+          <p className="text-sm text-brand-text-secondary italic">
             📍 Inscriptions sur place — ajoutez les équipes via{" "}
-            <Link href={`/tournaments/${id}/players`} className="font-medium text-darts-green-dark underline underline-offset-2">
+            <Link href={`/tournaments/${id}/players`} className="font-medium text-brand-turquoise underline underline-offset-2">
               Joueurs
             </Link>
           </p>
@@ -152,7 +151,7 @@ export default async function TournamentDetailPage({ params }: Props) {
             <Link
               href={`/t/${id}/live`}
               target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-darts-green bg-darts-green/10 px-4 py-2.5 text-sm font-medium text-darts-green-dark transition-colors hover:bg-darts-green/20"
+              className="flex items-center gap-2 rounded-lg border border-brand-turquoise bg-brand-turquoise/10 px-4 py-2.5 text-sm font-medium text-brand-turquoise transition-colors hover:bg-brand-turquoise/20"
             >
               🎯 Vue Live
               <span className="text-xs opacity-70">↗</span>
@@ -160,7 +159,7 @@ export default async function TournamentDetailPage({ params }: Props) {
             <Link
               href={`/t/${id}/tv`}
               target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
             >
               📺 Mode TV
               <span className="text-xs opacity-70">↗</span>
@@ -170,63 +169,67 @@ export default async function TournamentDetailPage({ params }: Props) {
       </div>
 
       {tournament.status === "DRAFT" && (
-        <Card as="section">
-          <EditTournamentForm tournament={tournament} />
-        </Card>
+        <section>
+          <Card>
+            <EditTournamentForm tournament={tournament} />
+          </Card>
+        </section>
       )}
 
       {tournament.quick_mode && tournament.status !== "DRAFT" && (
-        <div className="rounded-xl border border-darts-green/30 bg-darts-green/10 p-4">
-          <p className="text-sm font-medium text-darts-green-dark">⚡ Mode tournoi rapide</p>
-          <p className="mt-1 text-xs text-darts-green-dark/80">
+        <div className="rounded-xl border border-brand-turquoise/30 bg-brand-turquoise/10 p-4">
+          <p className="text-sm font-medium text-brand-turquoise">⚡ Mode tournoi rapide</p>
+          <p className="mt-1 text-xs text-brand-turquoise/80">
             Double élimination — 2 vies par joueur. Les manches (501 → Cricket → 701) sont générées automatiquement selon la phase.
           </p>
         </div>
       )}
 
       {!tournament.quick_mode && (
-      <Card as="section" className="space-y-4">
-        <h2 className="font-semibold text-gray-900">
-          Manches ({rounds.length})
-        </h2>
+      <section>
+        <Card className="space-y-4">
+          <h2 className="font-semibold text-brand-dark">
+            Manches ({rounds.length})
+          </h2>
 
-        {rounds.length > 0 && (
-          <div className="space-y-2">
-            {rounds.map((round) => (
-              <div
-                key={round.id}
-                className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3"
-              >
-                <div className="flex items-center gap-4">
-                  <span className="w-6 text-sm font-medium text-gray-500">
-                    #{round.order}
-                  </span>
-                  <span className="font-medium text-gray-900">
-                    {GAME_LABELS[round.game_type]}
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    Entrée : {TYPE_LABELS[round.entry_type]} · Sortie : {TYPE_LABELS[round.finish_type]}
-                  </span>
+          {rounds.length > 0 && (
+            <div className="space-y-2">
+              {rounds.map((round) => (
+                <div
+                  key={round.id}
+                  className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3"
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="w-6 text-sm font-medium text-brand-text-secondary">
+                      #{round.order}
+                    </span>
+                    <span className="font-medium text-brand-dark">
+                      {GAME_LABELS[round.game_type]}
+                    </span>
+                    <span className="text-sm text-brand-text-secondary">
+                      Entrée : {TYPE_LABELS[round.entry_type]} · Sortie : {TYPE_LABELS[round.finish_type]}
+                    </span>
+                  </div>
+                  {tournament.status === "DRAFT" && (
+                    <DeleteRoundButton roundId={round.id} tournamentId={id} />
+                  )}
                 </div>
-                {tournament.status === "DRAFT" && (
-                  <DeleteRoundButton roundId={round.id} tournamentId={id} />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {tournament.status === "DRAFT" && (
-          <div className="border-t border-gray-100 pt-4">
-            <p className="mb-3 text-xs text-gray-500">Ajouter une manche</p>
-            <RoundForm tournamentId={id} />
-          </div>
-        )}
+          {tournament.status === "DRAFT" && (
+            <div className="border-t border-slate-100 pt-4">
+              <p className="mb-3 text-xs text-brand-text-secondary">Ajouter une manche</p>
+              <RoundForm tournamentId={id} />
+            </div>
+          )}
 
-        {rounds.length === 0 && tournament.status !== "DRAFT" && (
-          <p className="text-sm text-gray-500">Aucune manche configurée.</p>
-        )}
-      </Card>
+          {rounds.length === 0 && tournament.status !== "DRAFT" && (
+            <p className="text-sm text-brand-text-secondary">Aucune manche configurée.</p>
+          )}
+        </Card>
+      </section>
       )}
     </div>
   );

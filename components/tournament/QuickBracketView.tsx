@@ -19,6 +19,13 @@ interface Props {
   tournamentId?: string;
 }
 
+/**
+ * Utilise exclusivement les tokens sémantiques du design-system (bg-surface, text-text-*,
+ * border-border-*, accent/success/warning) plutôt que des couleurs littérales — ce composant
+ * est partagé entre le tableau de bord organisateur (thème clair) et la vue live publique
+ * (thème sombre, exception mission §4) : il s'adapte automatiquement au `data-theme="dark"`
+ * posé par l'ancêtre, sans prop ni variante à gérer ici.
+ */
 export function QuickBracketView({ matches, tournamentId }: Props) {
   const wbMatches = matches
     .filter((m) => m.bracket_type === "WINNERS")
@@ -39,7 +46,7 @@ export function QuickBracketView({ matches, tournamentId }: Props) {
         <BracketSection
           title="Winners Bracket"
           subtitle="2 vies"
-          color="blue"
+          color="accent"
           matches={wbMatches}
           tournamentId={tournamentId}
         />
@@ -50,7 +57,7 @@ export function QuickBracketView({ matches, tournamentId }: Props) {
         <BracketSection
           title="Losers Bracket"
           subtitle="1 vie restante"
-          color="orange"
+          color="warning"
           matches={lbMatches}
           tournamentId={tournamentId}
         />
@@ -61,7 +68,7 @@ export function QuickBracketView({ matches, tournamentId }: Props) {
         <BracketSection
           title="Grande Finale"
           subtitle="701 finish double"
-          color="gold"
+          color="success"
           matches={gfMatches}
           tournamentId={tournamentId}
         />
@@ -72,12 +79,12 @@ export function QuickBracketView({ matches, tournamentId }: Props) {
 
 // ── Section par type de bracket ───────────────────────────────────────────────
 
-type SectionColor = "blue" | "orange" | "gold";
+type SectionColor = "accent" | "warning" | "success";
 
 const sectionStyles: Record<SectionColor, { header: string; dot: string }> = {
-  blue:   { header: "text-blue-700 border-blue-200 bg-blue-50",   dot: "bg-blue-500" },
-  orange: { header: "text-orange-700 border-orange-200 bg-orange-50", dot: "bg-orange-500" },
-  gold:   { header: "text-yellow-700 border-yellow-200 bg-yellow-50", dot: "bg-yellow-500" },
+  accent: { header: "text-accent border-border-default bg-surface-secondary", dot: "bg-accent" },
+  warning: { header: "text-warning border-warning-border bg-warning-subtle", dot: "bg-warning-solid" },
+  success: { header: "text-success border-success-border bg-success-subtle", dot: "bg-success-solid" },
 };
 
 function BracketSection({
@@ -125,29 +132,29 @@ function QuickMatchCard({ match, tournamentId }: { match: QuickMatch; tournament
     : "Terminé";
 
   const statusColor = isInProgress
-    ? "text-green-700 bg-green-50"
+    ? "text-success bg-success-subtle"
     : isPending
-    ? "text-gray-500 bg-gray-50"
-    : "text-gray-400 bg-gray-50";
+    ? "text-text-secondary bg-surface-secondary"
+    : "text-text-muted bg-surface-secondary";
 
   return (
-    <div className={`rounded-xl border bg-white shadow-sm overflow-hidden ${isInProgress ? "border-green-300" : "border-gray-200"}`}>
+    <div className={`rounded-xl border bg-surface shadow-sm overflow-hidden ${isInProgress ? "border-success-border" : "border-border-muted"}`}>
       {/* En-tête : statut */}
-      <div className={`px-3 py-1.5 flex items-center justify-between text-xs font-medium border-b border-gray-100 ${statusColor}`}>
+      <div className={`px-3 py-1.5 flex items-center justify-between text-xs font-medium border-b border-border-muted ${statusColor}`}>
         <span>{statusLabel}</span>
-        {isInProgress && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />}
+        {isInProgress && <span className="w-1.5 h-1.5 rounded-full bg-success-solid animate-pulse" />}
       </div>
 
       {/* Joueurs */}
       <div className="p-3 space-y-1">
         <PlayerRow player={match.player1} winnerId={match.winner_id} />
-        <p className="text-center text-xs text-gray-300 py-0.5">vs</p>
+        <p className="text-center text-xs text-text-secondary py-0.5">vs</p>
         <PlayerRow player={match.player2} winnerId={match.winner_id} />
       </div>
 
       {/* Bouton arbitrage (admin uniquement — tournamentId absent sur la vue publique) */}
       {tournamentId && isInProgress && match.player1 && match.player2 && match.sets.length > 0 && (
-        <div className="border-t border-gray-100 px-3 py-2 flex justify-end">
+        <div className="border-t border-border-muted px-3 py-2 flex justify-end">
           <ArbitrateMatchButton
             match={{
               id: match.id,
@@ -175,8 +182,8 @@ function PlayerRow({
 }) {
   if (!player) {
     return (
-      <div className="flex items-center justify-between rounded-lg px-2 py-1.5 bg-gray-50">
-        <span className="text-sm text-gray-400 italic">?</span>
+      <div className="flex items-center justify-between rounded-lg px-2 py-1.5 bg-surface-secondary">
+        <span className="text-sm text-text-secondary italic">?</span>
       </div>
     );
   }
@@ -185,14 +192,14 @@ function PlayerRow({
   const isLoser  = winnerId !== null && winnerId !== player.id;
 
   return (
-    <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${isWinner ? "bg-green-50" : ""}`}>
+    <div className={`flex items-center justify-between rounded-lg px-2 py-1.5 ${isWinner ? "bg-success-subtle" : ""}`}>
       <span
         className={`text-sm truncate ${
-          isWinner ? "text-green-700 font-semibold" : isLoser ? "text-gray-400" : "text-gray-800 font-medium"
+          isWinner ? "text-success font-semibold" : isLoser ? "text-text-secondary" : "text-text-primary font-medium"
         }`}
       >
         {player.player_name}
-        {isWinner && <span className="ml-1 text-green-500 text-xs">✓</span>}
+        {isWinner && <span className="ml-1 text-success-solid text-xs">✓</span>}
       </span>
       <Lives count={player.lives} />
     </div>
@@ -207,7 +214,7 @@ function Lives({ count }: { count: number }) {
       {Array.from({ length: 2 }, (_, i) => (
         <span
           key={i}
-          className={`text-base leading-none ${i < count ? "text-red-500" : "text-gray-200"}`}
+          className={`text-base leading-none ${i < count ? "text-danger-solid" : "text-border-default"}`}
         >
           ♥
         </span>

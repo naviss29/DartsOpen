@@ -10,7 +10,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <LandscapeGuard>
-      <div className="flex min-h-screen bg-gray-50">
+      <div className="flex min-h-screen bg-brand-light">
         <DashboardSidebar userEmail={user.email} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <DashboardMobileNav />
