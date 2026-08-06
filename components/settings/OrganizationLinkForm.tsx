@@ -28,7 +28,7 @@ export function OrganizationLinkForm({ organizations }: Props) {
   return (
     <form action={action} className="space-y-3">
       {state?.error && <Alert tone="error">{state.error}</Alert>}
-      <Select name="slug" required defaultValue="">
+      <Select name="slug" required defaultValue="" aria-label="Choisir l'organisation">
         <option value="" disabled>Choisir une organisation…</option>
         {eligible.map((o) => (
           <option key={o.slug} value={o.slug}>{o.name}</option>
