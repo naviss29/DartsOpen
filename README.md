@@ -18,6 +18,8 @@ DartsOpen est né d'un besoin terrain : gérer les tournois de fléchettes (open
 
 L'application permet aux associations d'organiser leurs tournois de A à Z : configuration des poules, gestion des matchs, saisie des scores sur smartphone via QR code, tableaux de bord en temps réel en salle et sur mobile.
 
+DartsOpen fait partie de l'écosystème [BApps Studio](https://github.com/naviss29/BApps-Studio) : même identité, même compte, que votre club utilise déjà [Connect](https://github.com/naviss29/Connect) pour sa vitrine publique ou [BilletAsso](https://github.com/naviss29/BilletAsso) pour d'autres événements.
+
 ---
 
 ## Fonctionnalités
