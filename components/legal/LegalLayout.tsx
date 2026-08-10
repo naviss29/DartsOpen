@@ -19,11 +19,3 @@ export function LegalLayout({ title, updatedAt, children }: { title: string; upd
     </div>
   );
 }
-
-export function TodoField({ children }: { children: ReactNode }) {
-  return (
-    <span className="rounded bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 text-amber-300 font-medium">
-      {children}
-    </span>
-  );
-}
