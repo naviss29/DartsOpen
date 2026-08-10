@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { LegalLayout, TodoField } from "@/components/legal/LegalLayout";
+import { LegalLayout } from "@/components/legal/LegalLayout";
 
 export const metadata: Metadata = { title: "Conditions générales d'utilisation — DartsOpen" };
 
 export default function CguPage() {
   return (
-    <LegalLayout title="Conditions générales d'utilisation et de vente" updatedAt="24/07/2026">
+    <LegalLayout title="Conditions générales d'utilisation" updatedAt="10/08/2026">
       <h2>Objet</h2>
       <p>
         Les présentes conditions régissent l&apos;utilisation de DartsOpen, plateforme de
@@ -20,12 +20,31 @@ export default function CguPage() {
         de compte.
       </p>
 
-      <h2>Frais de plateforme</h2>
+      <h2>Organisation d&apos;un tournoi et contenu publié</h2>
       <p>
-        DartsOpen applique des frais de plateforme de 0,10&nbsp;€ par joueur inscrit à un
-        tournoi payant, prélevés automatiquement lors du paiement. Le solde de l&apos;inscription
-        est reversé à l&apos;association organisatrice sur le compte Stripe Connect de son
-        organisation BApps Studio.
+        L&apos;association organisatrice est seule responsable des informations qu&apos;elle
+        publie sur un tournoi (description, règlement, lieu, horaires) et des décisions prises
+        pendant son déroulement (validation des résultats, arbitrage, gestion des litiges entre
+        joueurs). DartsOpen fournit l&apos;outil technique, pas l&apos;organisation de
+        l&apos;événement lui-même.
+      </p>
+      <p>
+        Les organisateurs et les joueurs s&apos;engagent à ne publier aucun contenu manifestement
+        illicite (propos injurieux, discriminatoires, ou contraires à la loi). DartsOpen peut
+        masquer ou supprimer un tournoi, un profil ou un contenu en cas d&apos;abus signalé ou
+        d&apos;obligation légale.
+      </p>
+
+      <h2>Frais de plateforme — état actuel, non contractuel</h2>
+      <p>
+        À la date de cette page, DartsOpen prélève 0,10&nbsp;€ par joueur inscrit en ligne à un
+        tournoi payant (prélevés automatiquement lors du paiement, le solde étant reversé à
+        l&apos;association organisatrice), et propose une contribution équivalente lors de la
+        création d&apos;un tournoi. Ce fonctionnement correspond à l&apos;implémentation
+        technique actuelle du service et ne constitue pas un tarif contractuel arrêté : le
+        modèle économique définitif de DartsOpen n&apos;est pas encore décidé par l&apos;éditeur
+        et pourra évoluer. Cette section sera mise à jour dès qu&apos;une décision définitive
+        sera prise.
       </p>
 
       <h2>Paiement</h2>
@@ -33,7 +52,7 @@ export default function CguPage() {
         Les paiements d&apos;inscription sont initiés par DartsOpen mais traités et encaissés par
         Stripe via l&apos;infrastructure de paiement de BApps Studio (SterPlatform). DartsOpen
         n&apos;a accès à aucune donnée bancaire et n&apos;intervient pas dans la transaction
-        financière au-delà du prélèvement des frais de plateforme.
+        financière au-delà du prélèvement décrit ci-dessus.
       </p>
 
       <h2>Annulation et remboursement</h2>
@@ -41,7 +60,13 @@ export default function CguPage() {
         La politique d&apos;annulation et de remboursement d&apos;une inscription est définie
         par l&apos;association organisatrice de chaque tournoi. DartsOpen ne rembourse pas
         directement les frais de plateforme déjà prélevés, sauf disposition légale contraire.
-        Modalités précises : <TodoField>[à définir]</TodoField>.
+      </p>
+
+      <h2>Résultats et classement</h2>
+      <p>
+        Les résultats saisis (scores, vainqueurs) et le classement inter-tournois qui en découle
+        reflètent les données validées par les organisateurs et arbitres. DartsOpen ne garantit
+        pas l&apos;exactitude d&apos;une saisie effectuée par un tiers.
       </p>
 
       <h2>Responsabilités</h2>
