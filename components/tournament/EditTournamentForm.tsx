@@ -21,9 +21,12 @@ interface Props {
     scoring_mode: string;
     quick_mode: boolean;
   };
+  /** État Stripe Connect de l'organisation courante — recalculé serveur (DO-PAYMENT-GUARD-001). */
+  canReceivePayments: boolean;
+  stripeConnectUrl: string;
 }
 
-export function EditTournamentForm({ tournament }: Props) {
+export function EditTournamentForm({ tournament, canReceivePayments, stripeConnectUrl }: Props) {
   const [state, action, isPending] = useActionState(updateTournament, undefined);
   const [isOpen, setIsOpen] = useState(false);
   const [quickMode, setQuickMode] = useState(
@@ -96,10 +99,38 @@ export function EditTournamentForm({ tournament }: Props) {
           <Input id="edit_max_players" name="max_players" type="number" min="2" max="512" required defaultValue={state?.fields?.max_players ?? tournament.max_players} />
         </FormField>
 
-        <FormField label="Droits d'inscription (€ / joueur)" id="edit_entry_fee" error={state?.errors?.entry_fee?.[0]}>
-          <Input id="edit_entry_fee" name="entry_fee" type="number" min="0" required defaultValue={state?.fields?.entry_fee ?? tournament.entry_fee / 100} />
+        <FormField
+          label="Droits d'inscription (€ / joueur)"
+          id="edit_entry_fee"
+          error={state?.errors?.entry_fee?.[0]}
+          hint={canReceivePayments ? undefined : "Paiement en ligne indisponible — voir ci-dessous"}
+        >
+          {canReceivePayments ? (
+            <Input id="edit_entry_fee" name="entry_fee" type="number" min="0" required defaultValue={state?.fields?.entry_fee ?? tournament.entry_fee / 100} />
+          ) : (
+            <>
+              <Input id="edit_entry_fee" type="number" min="0" value="0" disabled />
+              <input type="hidden" name="entry_fee" value="0" />
+            </>
+          )}
         </FormField>
+      </div>
 
+      {!canReceivePayments && (
+        <Alert tone="info">
+          Le paiement en ligne nécessite un compte Stripe Connect opérationnel pour votre
+          organisation.{" "}
+          {tournament.entry_fee > 0 && (
+            <>Ce tournoi avait des droits d&apos;inscription payants — ils seront remis à 0 (gratuit) si vous enregistrez une modification. </>
+          )}
+          <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+            Configurez Stripe Connect dans BApps Studio
+          </a>{" "}
+          pour activer le paiement en ligne.
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
         {/* Nombre de poules : verrouillé à 1 en mode rapide */}
         {quickMode ? (
           <div>

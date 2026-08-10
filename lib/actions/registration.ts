@@ -9,7 +9,7 @@ import {
   dbGetOrganization,
 } from "@/lib/db/tournament";
 import { sendEmail } from "@/lib/api/sterplatform";
-import { createPaymentCheckout } from "@/lib/api/sterplatformInternal";
+import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
 
 export async function createRegistration(
@@ -67,6 +67,17 @@ export async function createRegistration(
   const org = await dbGetOrganization(tournament.association_id);
   if (!org?.sterOrganizationSlug) {
     return { error: "Les paiements en ligne ne sont pas encore configurés pour ce tournoi. Contactez l'organisateur." };
+  }
+
+  // DO-PAYMENT-GUARD-001 — défense en profondeur, indépendante de la configuration du
+  // tournoi : même si un tournoi (historique ou incohérent) affiche un paiement en ligne,
+  // aucun checkout n'est créé si Stripe Connect n'est plus opérationnel au moment précis de
+  // l'inscription — une suspension Stripe après coup bloque donc immédiatement les nouveaux
+  // paiements, sans dépendre d'une modification préalable du tournoi. Relit toujours l'état
+  // courant depuis SterPlatform, jamais une valeur mise en cache.
+  const stripeStatus = await getStripeConnectStatus(org.sterOrganizationSlug).catch(() => null);
+  if (!stripeStatus?.canReceivePayments) {
+    return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

@@ -5,7 +5,13 @@ import { createTournament } from "@/lib/actions/tournament";
 import { Alert, Card, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 
-export function TournamentForm() {
+interface Props {
+  /** État Stripe Connect de l'organisation courante — recalculé serveur, jamais un booléen client (DO-PAYMENT-GUARD-001). */
+  canReceivePayments: boolean;
+  stripeConnectUrl: string;
+}
+
+export function TournamentForm({ canReceivePayments, stripeConnectUrl }: Props) {
   const [state, action, isPending] = useActionState(createTournament, undefined);
   const [quickMode, setQuickMode] = useState(state?.fields?.quick_mode === "true");
 
@@ -103,10 +109,33 @@ export function TournamentForm() {
                 <FormField label="Nombre de joueurs max" id="max_players" error={state?.errors?.max_players?.[0]}>
                   <Input id="max_players" name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required />
                 </FormField>
-                <FormField label="Droits d'inscription (€ / joueur)" id="entry_fee" error={state?.errors?.entry_fee?.[0]} hint="Le total facturé = ce montant × nb de joueurs par équipe">
-                  <Input id="entry_fee" name="entry_fee" type="number" min="0" defaultValue={state?.fields?.entry_fee ?? "10"} required />
+                <FormField
+                  label="Droits d'inscription (€ / joueur)"
+                  id="entry_fee"
+                  error={state?.errors?.entry_fee?.[0]}
+                  hint={canReceivePayments ? "Le total facturé = ce montant × nb de joueurs par équipe" : "Paiement en ligne indisponible — voir ci-dessous"}
+                >
+                  {canReceivePayments ? (
+                    <Input id="entry_fee" name="entry_fee" type="number" min="0" defaultValue={state?.fields?.entry_fee ?? "10"} required />
+                  ) : (
+                    <>
+                      <Input id="entry_fee" type="number" min="0" value="0" disabled />
+                      <input type="hidden" name="entry_fee" value="0" />
+                    </>
+                  )}
                 </FormField>
               </div>
+
+              {!canReceivePayments && (
+                <Alert tone="info">
+                  Le paiement en ligne nécessite un compte Stripe Connect opérationnel pour votre
+                  organisation. Vous pouvez créer ce tournoi gratuitement dès maintenant ;{" "}
+                  <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                    configurez Stripe Connect dans BApps Studio
+                  </a>{" "}
+                  pour activer le paiement en ligne.
+                </Alert>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Nombre de poules" id="nb_pools" error={state?.errors?.nb_pools?.[0]}>
