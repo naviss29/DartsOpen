@@ -123,6 +123,17 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
         />
       </div>
 
+      <p className="text-xs text-brand-text-secondary">
+        Votre pseudo et vos résultats seront visibles publiquement sur les pages du tournoi et
+        le classement DartsOpen. Votre email et téléphone servent uniquement aux communications
+        liées à ce tournoi ; ils sont supprimés automatiquement 12 mois après l&apos;événement.
+        Voir notre{" "}
+        <a href="/confidentialite" className="underline hover:text-brand-dark" target="_blank" rel="noreferrer">
+          politique de confidentialité
+        </a>
+        .
+      </p>
+
       <button
         type="submit"
         disabled={isPending}

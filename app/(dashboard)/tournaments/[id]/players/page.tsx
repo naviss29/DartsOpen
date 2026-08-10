@@ -1,6 +1,8 @@
 import { AddPlayerForm } from "@/components/tournament/AddPlayerForm";
 import { RemovePlayerButton } from "@/components/tournament/RemovePlayerButton";
 import { SeedToggleButton } from "@/components/tournament/SeedToggleButton";
+import { EditPlayerButton } from "@/components/tournament/EditPlayerButton";
+import { EraseRegistrationButton } from "@/components/tournament/EraseRegistrationButton";
 import { dbListRegistrations } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Link from "next/link";
@@ -104,12 +106,13 @@ export default async function PlayersPage({ params }: Props) {
                 {!isQuick && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Email</th>}
                 {!isQuick && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Téléphone</th>}
                 {canSeed && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Tête de série</th>}
+                <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Données</th>
                 {canEdit && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {registrations.map((reg, i) => (
-                <tr key={reg.id} className="hover:bg-slate-50">
+                <tr key={reg.id} className="hover:bg-slate-50 align-top">
                   <td className="px-4 py-3 text-brand-text-secondary">{i + 1}</td>
                   <td className="px-4 py-3 font-medium text-brand-dark">{reg.player_name}</td>
                   {isTeam && (
@@ -124,6 +127,20 @@ export default async function PlayersPage({ params }: Props) {
                       <SeedToggleButton registrationId={reg.id} tournamentId={id} seeded={reg.seeded} />
                     </td>
                   )}
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col items-start gap-1.5">
+                      <EditPlayerButton
+                        registrationId={reg.id}
+                        tournamentId={id}
+                        playerName={reg.player_name}
+                        playerEmail={reg.player_email}
+                        playerPhone={reg.player_phone}
+                        playerNames={reg.player_names}
+                        isTeam={isTeam}
+                      />
+                      <EraseRegistrationButton registrationId={reg.id} tournamentId={id} />
+                    </div>
+                  </td>
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
                       <RemovePlayerButton registrationId={reg.id} tournamentId={id} />
