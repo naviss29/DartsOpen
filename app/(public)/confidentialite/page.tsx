@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { LegalLayout, TodoField } from "@/components/legal/LegalLayout";
+import { LegalLayout } from "@/components/legal/LegalLayout";
 
 export const metadata: Metadata = { title: "Politique de confidentialité — DartsOpen" };
 
 export default function ConfidentialitePage() {
   return (
-    <LegalLayout title="Politique de confidentialité" updatedAt="24/07/2026">
+    <LegalLayout title="Politique de confidentialité" updatedAt="10/08/2026">
       <p>
         Cette politique décrit les données personnelles traitées par DartsOpen dans le cadre de
         la gestion de tournois de fléchettes, conformément au Règlement Général sur la
@@ -21,30 +21,44 @@ export default function ConfidentialitePage() {
       <h2>Données collectées</h2>
       <ul>
         <li>Organisateurs : nom, email, mot de passe (haché), historique des tournois créés</li>
-        <li>Joueurs inscrits : nom, email, téléphone (selon le tournoi), nom des coéquipiers</li>
+        <li>Joueurs inscrits : pseudo, email, téléphone (selon le tournoi), pseudos des coéquipiers</li>
         <li>Paiements : traités par Stripe via SterPlatform (BApps Studio) — DartsOpen ne stocke aucune donnée bancaire</li>
         <li>Cookies techniques d&apos;authentification (voir ci-dessous)</li>
       </ul>
+
+      <h2>Données rendues publiques</h2>
+      <p>
+        Le pseudo saisi à l&apos;inscription, ainsi que les résultats et statistiques qui en
+        découlent (poules, bracket, classement inter-tournois, page de profil joueur), sont
+        accessibles publiquement sans connexion sur les pages du tournoi et sur{" "}
+        <a href="/classement">le classement général</a>. L&apos;email et le téléphone ne sont
+        jamais rendus publics : ils ne sont utilisés que pour les communications liées au
+        tournoi. Vous pouvez inscrire un pseudo plutôt que votre identité complète.
+      </p>
 
       <h2>Finalités</h2>
       <ul>
         <li>Création et gestion des comptes organisateurs</li>
         <li>Inscription des joueurs aux tournois et traitement des paiements associés</li>
         <li>Envoi des emails transactionnels (confirmation d&apos;inscription, etc.)</li>
-        <li>Établissement du classement inter-tournois</li>
+        <li>Établissement du classement inter-tournois et des pages de résultats publiques</li>
       </ul>
 
       <h2>Base légale</h2>
       <p>
-        Exécution du contrat (inscription à un tournoi, création de compte organisateur) et
-        intérêt légitime (bon fonctionnement du service, prévention des abus).
+        Exécution du contrat pour l&apos;inscription à un tournoi et la création d&apos;un
+        compte organisateur. Intérêt légitime pour la publication des résultats et du
+        classement, indispensable au fonctionnement normal d&apos;une compétition publique — ce
+        traitement n&apos;est pas soumis à une case de consentement, mais vous pouvez à tout
+        moment demander le retrait de vos données publiques (voir « Vos droits » ci-dessous).
       </p>
 
       <h2>Durée de conservation</h2>
       <p>
-        Les données sont conservées pendant la durée d&apos;utilisation du service, augmentée
-        d&apos;une durée de <TodoField>[délai à définir]</TodoField> après la dernière activité,
-        conformément aux obligations légales applicables.
+        Le pseudo et les résultats sportifs sont conservés indéfiniment : ils constituent le
+        classement inter-tournois, qui n&apos;a pas de date de péremption par nature. L&apos;email
+        et le téléphone, en revanche, n&apos;ont plus d&apos;usage une fois le tournoi terminé :
+        ils sont supprimés automatiquement 12 mois après la date du tournoi.
       </p>
 
       <h2>Destinataires</h2>
@@ -67,12 +81,17 @@ export default function ConfidentialitePage() {
       <p>
         Conformément au RGPD, vous disposez d&apos;un droit d&apos;accès, de rectification,
         d&apos;effacement et de portabilité de vos données, ainsi que d&apos;un droit
-        d&apos;opposition. Pour exercer ces droits, utilisez le{" "}
-        <a href="/contact">formulaire de contact</a>.
+        d&apos;opposition — y compris pour vos données rendues publiques (pseudo, résultats).
+        Ces droits sont exercés par l&apos;organisateur du tournoi concerné, ou par BApps Studio
+        si l&apos;organisateur n&apos;est plus joignable. Pour les exercer, utilisez le{" "}
+        <a href="/contact">formulaire de contact</a> ou écrivez à{" "}
+        <a href="mailto:rgpd@bapps-studio.com">rgpd@bapps-studio.com</a>. Un effacement demandé
+        après le début d&apos;un tournoi conserve vos résultats sous un identifiant anonyme,
+        pour ne jamais corrompre le classement des autres participants.
       </p>
 
       <h2>Délégué à la protection des données</h2>
-      <p>Contact DPO : <TodoField>[à compléter si applicable]</TodoField>.</p>
+      <p>Contact RGPD : <a href="mailto:rgpd@bapps-studio.com">rgpd@bapps-studio.com</a>.</p>
     </LegalLayout>
   );
 }

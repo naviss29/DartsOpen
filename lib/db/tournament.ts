@@ -108,19 +108,6 @@ function mapPool(p: {
     registration: {
       id: string;
       playerName: string;
-      playerEmail: string;
-      playerPhone: string | null;
-      playerNames: unknown;
-      status: RegistrationStatus;
-      qrCodeToken: string;
-      sterPaymentId: string | null;
-      entryFeeCents: number;
-      platformFeeCents: number;
-      feeCollected: boolean;
-      seeded: boolean;
-      lives: number;
-      createdAt: Date;
-      tournamentId: string;
     };
   }[];
   matches?: {
@@ -142,7 +129,6 @@ function mapPool(p: {
       rank: pp.rank,
       id: pp.registration.id,
       player_name: pp.registration.playerName,
-      registration: mapRegistration(pp.registration),
     })),
     matches: (p.matches ?? []).map((m) => ({
       id: m.id,
@@ -183,6 +169,19 @@ function mapMatchSet(s: {
   };
 }
 
+/**
+ * Projection minimale d'un participant pour tout affichage de match (public ou
+ * organisateur) — jamais les champs personnels (email, téléphone) ni techniques
+ * (qrCodeToken, identifiant de paiement) : aucun consommateur réel de `mapMatch`/
+ * `mapPool` n'en a besoin (vérifié sur l'ensemble du code), et ces deux mappers
+ * alimentent notamment les routes publiques `/api/public/tournaments/[id]/matches`
+ * et `/pools`, ainsi que les pages live/tv/score dont les props initiales sont
+ * sérialisées dans le HTML envoyé au navigateur (BAPPS-LEGAL-005 §2/§4).
+ */
+function mapPlayerRef(r: { id: string; playerName: string; lives: number }) {
+  return { id: r.id, player_name: r.playerName, lives: r.lives };
+}
+
 function mapMatch(m: {
   id: string;
   tournamentId: string;
@@ -197,8 +196,8 @@ function mapMatch(m: {
   winnerId: string | null;
   updatedAt: Date;
   sets: Parameters<typeof mapMatchSet>[0][];
-  player1?: Parameters<typeof mapRegistration>[0] | null;
-  player2?: Parameters<typeof mapRegistration>[0] | null;
+  player1?: Parameters<typeof mapPlayerRef>[0] | null;
+  player2?: Parameters<typeof mapPlayerRef>[0] | null;
 }) {
   return {
     id: m.id,
@@ -214,8 +213,8 @@ function mapMatch(m: {
     winner_id: m.winnerId,
     updated_at: m.updatedAt.toISOString(),
     sets: m.sets.map(mapMatchSet),
-    player1: m.player1 ? mapRegistration(m.player1) : undefined,
-    player2: m.player2 ? mapRegistration(m.player2) : undefined,
+    player1: m.player1 ? mapPlayerRef(m.player1) : undefined,
+    player2: m.player2 ? mapPlayerRef(m.player2) : undefined,
   };
 }
 
@@ -454,6 +453,107 @@ export async function dbSetSeeded(registrationId: string, tournamentId: string, 
   await prisma.registration.updateMany({ where: { id: registrationId, tournamentId }, data: { seeded } });
 }
 
+/**
+ * Rectification (BAPPS-LEGAL-005 §7) — corrige les champs personnels déclaratifs
+ * d'une inscription (nom/pseudo, email, téléphone, noms des coéquipiers). Ne
+ * touche jamais un résultat sportif (aucun champ de `Match`/`MatchSet` n'est
+ * accessible via cette fonction) : la distinction donnée déclarative / résultat
+ * produit par le tournoi est structurelle, pas seulement une convention d'appel.
+ */
+export async function dbUpdateRegistration(
+  registrationId: string,
+  tournamentId: string,
+  data: { playerName: string; playerEmail: string; playerPhone: string | null; playerNames: string[] }
+) {
+  await prisma.registration.updateMany({
+    where: { id: registrationId, tournamentId },
+    data: {
+      playerName: data.playerName,
+      playerEmail: data.playerEmail,
+      playerPhone: data.playerPhone,
+      playerNames: data.playerNames,
+    },
+  });
+}
+
+/**
+ * Effacement (BAPPS-LEGAL-005 §8) — un DELETE naïf casserait l'intégrité sportive
+ * dès qu'un `Match`/`PoolPlayer` référence cette inscription (poules générées,
+ * bracket en cours ou terminé) : `Match.player1Id`/`player2Id`/`winnerId` et
+ * `PoolPlayer.registrationId` n'ont pas de suppression en cascade depuis
+ * `Registration` (contrairement à `Tournament → Registration`), précisément pour
+ * qu'une suppression ne puisse jamais silencieusement vider un match déjà joué.
+ *
+ * - Aucune référence (tournoi à venir, inscription jamais affectée à une poule/un
+ *   match) : suppression réelle, aucune trace ne subsiste.
+ * - Au moins une référence (tournoi en cours ou terminé) : anonymisation — le nom
+ *   devient un identifiant neutre **unique** (jamais une valeur fixe partagée par
+ *   plusieurs inscriptions anonymisées, qui fusionnerait à tort leurs statistiques
+ *   dans le classement, calculé par regroupement sur `playerName`), email/téléphone/
+ *   noms de coéquipiers sont vidés. Les champs de paiement (`sterPaymentId`,
+ *   `entryFeeCents`, `platformFeeCents`, `feeCollected`) et l'identifiant technique
+ *   `qrCodeToken` ne sont volontairement pas touchés : relèvent d'une éventuelle
+ *   obligation de conservation comptable distincte, hors périmètre d'une demande
+ *   d'effacement de données personnelles.
+ */
+export async function dbEraseRegistration(
+  registrationId: string,
+  tournamentId: string
+): Promise<{ anonymized: boolean }> {
+  const [hasMatch, hasPoolPlayer] = await Promise.all([
+    prisma.match.findFirst({
+      where: {
+        tournamentId,
+        OR: [{ player1Id: registrationId }, { player2Id: registrationId }, { winnerId: registrationId }],
+      },
+      select: { id: true },
+    }),
+    prisma.poolPlayer.findFirst({ where: { registrationId }, select: { registrationId: true } }),
+  ]);
+
+  if (!hasMatch && !hasPoolPlayer) {
+    await prisma.registration.deleteMany({ where: { id: registrationId, tournamentId } });
+    return { anonymized: false };
+  }
+
+  await prisma.registration.updateMany({
+    where: { id: registrationId, tournamentId },
+    data: {
+      playerName: `Joueur anonymisé #${registrationId}`,
+      playerEmail: "",
+      playerPhone: null,
+      playerNames: [],
+    },
+  });
+  return { anonymized: true };
+}
+
+/** Décision Product Owner (BAPPS-LEGAL-005 §9) : durée de conservation des coordonnées de contact (email/téléphone) après la fin d'un tournoi. Le nom/pseudo et les résultats sportifs, eux, sont conservés indéfiniment — c'est le classement inter-tournois, cœur du produit. */
+export const CONTACT_RETENTION_MONTHS = 12;
+
+/**
+ * Purge automatique et opportuniste des coordonnées de contact (BAPPS-LEGAL-005
+ * §9) — jamais du nom/pseudo (identité sportive, conservée indéfiniment) ni des
+ * résultats. Scopée aux tournois d'un seul organisateur (`userId`) : déclenchée
+ * à chaque visite de son tableau de bord (`app/(dashboard)/tournaments/page.tsx`),
+ * jamais un balayage global déclenché par la visite d'un organisateur différent.
+ * Idempotente (une inscription déjà purgée ne correspond plus à `playerEmail !=
+ * "" OR playerPhone != null`) ; ne touche jamais un tournoi non `FINISHED`.
+ */
+export async function dbAnonymizeExpiredContacts(userId: string, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - CONTACT_RETENTION_MONTHS);
+
+  const result = await prisma.registration.updateMany({
+    where: {
+      tournament: { userId, status: "FINISHED", date: { lt: cutoff } },
+      OR: [{ playerEmail: { not: "" } }, { playerPhone: { not: null } }],
+    },
+    data: { playerEmail: "", playerPhone: null },
+  });
+  return result.count;
+}
+
 export async function dbCountRegistrations(tournamentId: string, status?: string) {
   return prisma.registration.count({
     where: {
@@ -470,7 +570,7 @@ export async function dbListPools(tournamentId: string) {
     where: { tournamentId },
     include: {
       players: {
-        include: { registration: true },
+        include: { registration: { select: { id: true, playerName: true } } },
         orderBy: { rank: { sort: "asc", nulls: "last" } },
       },
       matches: {
@@ -566,8 +666,8 @@ export async function dbListMatches(
     },
     include: {
       sets: { include: { round: { select: { roundOrder: true } } } },
-      player1: true,
-      player2: true,
+      player1: { select: { id: true, playerName: true, lives: true } },
+      player2: { select: { id: true, playerName: true, lives: true } },
     },
     orderBy: [{ bracketRound: "asc" }, { bracketPosition: "asc" }, { boardNumber: "asc" }],
   });

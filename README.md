@@ -117,7 +117,7 @@ DartsOpen/
 | QR Code | `qrcode` npm |
 | Tests | Vitest |
 | Containerisation | Docker + Docker Compose |
-| Déploiement | Coolify (OVH VPS-2) |
+| Déploiement | Coolify (Contabo GmbH, `dartsopen.bapps-studio.com` → 31.220.75.69) |
 | CI/CD | GitHub Actions |
 
 ---

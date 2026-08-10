@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { dbAddRegistration, dbDeleteRegistration, dbGetTournament, dbSetSeeded } from "@/lib/db/tournament";
+import {
+  dbAddRegistration,
+  dbDeleteRegistration,
+  dbEraseRegistration,
+  dbGetTournament,
+  dbSetSeeded,
+  dbUpdateRegistration,
+} from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/platformFee";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { getOwnedTournament } from "@/lib/actions/access";
@@ -117,6 +124,58 @@ export async function removePlayer(registrationId: string, tournamentId: string)
 
   const ok = await dbDeleteRegistration(registrationId, tournamentId).catch(() => null);
   if (ok === null) return { error: "Erreur lors de la suppression du joueur." };
+
+  revalidatePath(`/tournaments/${tournamentId}/players`);
+  return {};
+}
+
+/**
+ * Rectification (BAPPS-LEGAL-005 §7) — corrige une erreur sur une donnée
+ * personnelle déclarative (nom/pseudo, email, téléphone, noms des coéquipiers).
+ * Disponible à tout statut de tournoi (contrairement à `removePlayer`) : corriger
+ * une coquille dans un email ne remet en cause aucun résultat sportif, même après
+ * la fin du tournoi.
+ */
+export async function updateRegistration(
+  registrationId: string,
+  tournamentId: string,
+  data: { playerName: string; playerEmail: string; playerPhone: string; playerNames: string[] }
+): Promise<{ error?: string }> {
+  await getOwnedTournament(tournamentId);
+
+  const playerName = data.playerName.trim();
+  if (playerName.length < 2) {
+    return { error: "Le nom doit contenir au moins 2 caractères." };
+  }
+  if (data.playerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.playerEmail.trim())) {
+    return { error: "Email invalide." };
+  }
+  const phone = data.playerPhone.trim();
+  if (phone && !/^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(phone)) {
+    return { error: "Numéro de téléphone invalide (ex : 0612345678)." };
+  }
+
+  const ok = await dbUpdateRegistration(registrationId, tournamentId, {
+    playerName,
+    playerEmail: data.playerEmail.trim(),
+    playerPhone: phone || null,
+    playerNames: data.playerNames.map((n) => n.trim()).filter(Boolean),
+  }).then(() => true).catch(() => null);
+  if (!ok) return { error: "Erreur lors de la mise à jour." };
+
+  revalidatePath(`/tournaments/${tournamentId}/players`);
+  return {};
+}
+
+/**
+ * Effacement (BAPPS-LEGAL-005 §8) — voir `dbEraseRegistration` pour le choix
+ * suppression réelle vs anonymisation. Disponible à tout statut de tournoi.
+ */
+export async function eraseRegistration(registrationId: string, tournamentId: string): Promise<{ error?: string }> {
+  await getOwnedTournament(tournamentId);
+
+  const result = await dbEraseRegistration(registrationId, tournamentId).catch(() => null);
+  if (!result) return { error: "Erreur lors de l'effacement des données." };
 
   revalidatePath(`/tournaments/${tournamentId}/players`);
   return {};
