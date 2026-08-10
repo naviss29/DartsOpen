@@ -13,6 +13,7 @@ import {
   dbDeleteRound,
 } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
+import { isOnlinePaymentAllowed, wantsOnlinePayment, ONLINE_PAYMENT_BLOCKED_MESSAGE } from "@/lib/payments/onlinePaymentGuard";
 
 const TournamentSchema = z.object({
   name: z.string().trim().min(3, "Le nom doit contenir au moins 3 caractères."),
@@ -76,6 +77,15 @@ export async function createTournament(prevState: TournamentState, formData: For
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: raw, ts: Date.now() };
   }
 
+  // DO-PAYMENT-GUARD-001 : le paiement en ligne n'est proposable que si l'organisation a un
+  // Stripe Connect réellement opérationnel — vérifié ici, avant toute écriture, jamais après.
+  if (wantsOnlinePayment(parsed.data)) {
+    const authorization = await isOnlinePaymentAllowed(user.id);
+    if (!authorization.allowed) {
+      return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
+    }
+  }
+
   const tournament = await dbCreateTournament(user.id, parsed.data).catch((err) => {
     console.error('[createTournament]', err);
     return null;
@@ -88,13 +98,24 @@ export async function createTournament(prevState: TournamentState, formData: For
 
 export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
-  await getOwnedTournament(tournamentId);
+  const tournament = await getOwnedTournament(tournamentId);
 
   const raw = extractTournamentRaw(formData);
   const parsed = TournamentSchema.safeParse(raw);
 
   if (!parsed.success) {
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: raw, ts: Date.now() };
+  }
+
+  // DO-PAYMENT-GUARD-001 : même garde qu'à la création — s'applique aussi bien à une
+  // modification qui active le paiement en ligne pour la première fois qu'à un tournoi qui
+  // l'avait déjà (une organisation dont Stripe a été suspendu ne doit pas pouvoir
+  // re-confirmer/étendre une configuration payante par une simple modification).
+  if (wantsOnlinePayment(parsed.data)) {
+    const authorization = await isOnlinePaymentAllowed(tournament.association_id);
+    if (!authorization.allowed) {
+      return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
+    }
   }
 
   const ok = await dbUpdateTournament(tournamentId, parsed.data).catch(() => null);

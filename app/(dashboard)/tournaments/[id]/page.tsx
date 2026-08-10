@@ -4,11 +4,14 @@ import { TournamentStatusButton } from "@/components/tournament/TournamentStatus
 import { EditTournamentForm } from "@/components/tournament/EditTournamentForm";
 import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
+import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Card, Pill } from "@naviss29/design-system";
 import StatusBadge from "@/components/ui/StatusBadge";
 import NavPills from "@/components/ui/NavPills";
+
+const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -41,12 +44,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function TournamentDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await getOwnedTournament(id) as Tournament;
+  const tournament = await getOwnedTournament(id) as Tournament & { association_id: string };
 
-  const [registrations, pools] = await Promise.all([
+  const [registrations, pools, paymentUiState] = await Promise.all([
     dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
     dbListPools(id).catch(() => []) as Promise<{ id: string }[]>,
+    getOnlinePaymentUiState(tournament.association_id),
   ]);
+  const stripeConnectUrl = paymentUiState.organizationSlug
+    ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/stripe`
+    : `${BSSITE_URL}/dashboard`;
 
   const playerCount = registrations.length;
   const poolCount = pools.length;
@@ -171,7 +178,11 @@ export default async function TournamentDetailPage({ params }: Props) {
       {tournament.status === "DRAFT" && (
         <section>
           <Card>
-            <EditTournamentForm tournament={tournament} />
+            <EditTournamentForm
+              tournament={tournament}
+              canReceivePayments={paymentUiState.canReceivePayments}
+              stripeConnectUrl={stripeConnectUrl}
+            />
           </Card>
         </section>
       )}

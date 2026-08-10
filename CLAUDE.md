@@ -139,6 +139,20 @@ retirés.
   `lib/api/sterplatformInternal.ts::getStripeConnectStatus`
   (`GET /api/internal/organizations/{slug}/connect/account-id`) avec lien vers la page Stripe
   Connect de l'organisation dans BSsite (`NEXT_PUBLIC_BSSITE_URL`).
+- **Garde-fou paiement en ligne** (`lib/payments/onlinePaymentGuard.ts`, DO-PAYMENT-GUARD-001)
+  — **le paiement en ligne est disponible uniquement pour une organisation disposant de
+  Stripe Connect opérationnel** (`canReceivePayments` via `getStripeConnectStatus`, jamais
+  déduit de la seule présence d'un `stripeAccountId`). Vérifié à trois niveaux indépendants
+  (défense en profondeur) : `lib/actions/tournament.ts` (`createTournament`/
+  `updateTournament`, avant toute écriture — aucun tournoi ne peut être créé ou modifié en
+  paiement en ligne sans Stripe opérationnel), `lib/actions/registration.ts`
+  (`createRegistration`, juste avant l'appel à `createPaymentCheckout` — une suspension
+  Stripe après coup bloque immédiatement les nouveaux paiements, même sur un tournoi déjà
+  configuré), et l'interface (`TournamentForm`/`EditTournamentForm`, champ des droits
+  d'inscription désactivé + lien vers la page Stripe Connect de l'organisation dans BSsite
+  quand Stripe n'est pas opérationnel). Ne s'applique qu'à `registration_mode = ONLINE` avec
+  `entry_fee > 0` — un tournoi ONLINE gratuit ou un tournoi ONSITE (quel que soit son
+  `entry_fee`, jamais transmis à Stripe) ne nécessite aucun Stripe.
 - **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) — remplace l'ancien
   webhook Stripe local : reçoit les notifications de paiement signées par SterPlatform
   (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`), marque la

@@ -1,5 +1,198 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
+
+// DO-PAYMENT-GUARD-001 — tests des server actions elles-mêmes (pas seulement du schéma
+// Zod ci-dessous) : createTournament/updateTournament sont le point d'entrée unique de
+// création/modification d'un tournoi, y compris pour un appel direct contournant l'UI
+// (un Server Action Next.js reste un endpoint HTTP appelable directement).
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(() => {
+    throw new Error("NEXT_REDIRECT");
+  }),
+}));
+vi.mock("@/lib/api/auth", () => ({ getUser: vi.fn() }));
+vi.mock("@/lib/actions/access", () => ({ getOwnedTournament: vi.fn() }));
+vi.mock("@/lib/payments/onlinePaymentGuard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/payments/onlinePaymentGuard")>();
+  return { ...actual, isOnlinePaymentAllowed: vi.fn() };
+});
+vi.mock("@/lib/db/tournament", () => ({
+  dbCreateTournament: vi.fn(),
+  dbUpdateTournament: vi.fn(),
+  dbUpdateTournamentStatus: vi.fn(),
+  dbDeleteTournament: vi.fn(),
+  dbAddRound: vi.fn(),
+  dbDeleteRound: vi.fn(),
+}));
+
+const { createTournament, updateTournament } = await import("./tournament");
+const { getUser } = await import("@/lib/api/auth");
+const { getOwnedTournament } = await import("@/lib/actions/access");
+const { isOnlinePaymentAllowed } = await import("@/lib/payments/onlinePaymentGuard");
+const { dbCreateTournament, dbUpdateTournament } = await import("@/lib/db/tournament");
+const { redirect } = await import("next/navigation");
+
+const USER = { id: "user-1", email: "alan@example.com", roles: [], isVerified: true };
+
+function tournamentFormData(overrides: Record<string, string> = {}): FormData {
+  const fd = new FormData();
+  const fields: Record<string, string> = {
+    name: "Open de fléchettes 2026",
+    date: "2026-06-15",
+    location: "Salle des fêtes",
+    max_players: "32",
+    entry_fee: "0",
+    nb_pools: "8",
+    nb_boards: "4",
+    advancement_per_pool: "1",
+    players_per_team: "2",
+    registration_mode: "ONSITE",
+    scoring_mode: "ELECTRONIC",
+    quick_mode: "false",
+    ...overrides,
+  };
+  for (const [key, value] of Object.entries(fields)) fd.set(key, value);
+  return fd;
+}
+
+beforeEach(() => {
+  vi.mocked(getUser).mockReset().mockResolvedValue(USER as never);
+  vi.mocked(getOwnedTournament).mockReset().mockResolvedValue({ id: "tournament-1", association_id: "user-1" } as never);
+  vi.mocked(isOnlinePaymentAllowed).mockReset();
+  vi.mocked(dbCreateTournament).mockReset().mockResolvedValue({ id: "tournament-1" } as never);
+  vi.mocked(dbUpdateTournament).mockReset().mockResolvedValue({} as never);
+  vi.mocked(redirect).mockClear();
+});
+
+describe("createTournament — DO-PAYMENT-GUARD-001", () => {
+  it("1. organisation sans Stripe opérationnel : création d'un tournoi gratuit autorisée", async () => {
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "0" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(isOnlinePaymentAllowed).not.toHaveBeenCalled();
+    expect(dbCreateTournament).toHaveBeenCalledTimes(1);
+    expect(redirect).toHaveBeenCalledWith("/tournaments/tournament-1/activate");
+  });
+
+  it("2. organisation sans Stripe opérationnel : création avec paiement en ligne refusée", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: false, reason: "STRIPE_NOT_OPERATIONAL" });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "10" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(result?.error).toMatch(/stripe connect opérationnel/i);
+  });
+
+  it("4. contournement par appel direct de la Server Action (pas seulement l'UI) refusé", async () => {
+    // Un appel qui ne passe jamais par TournamentForm (donc jamais par le disabled/hidden
+    // input côté client) — seul le contrôle serveur peut bloquer ce cas.
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: false, reason: "NO_ORGANIZATION" });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "25" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(dbCreateTournament).not.toHaveBeenCalled();
+  });
+
+  it("5. organisation Stripe opérationnelle : création avec paiement en ligne autorisée", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "15" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbCreateTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it("6. organisation Stripe opérationnelle : tournoi gratuit toujours autorisé (Stripe n'oblige jamais le paiement)", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "0" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    // entry_fee à 0 ne déclenche jamais le contrôle Stripe, même avec Stripe opérationnel.
+    expect(isOnlinePaymentAllowed).not.toHaveBeenCalled();
+    expect(dbCreateTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it("8. aucune écriture partielle : dbCreateTournament jamais appelé après un refus", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: false, reason: "STRIPE_NOT_OPERATIONAL" });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "10" });
+
+    await createTournament(undefined, fd);
+
+    expect(dbCreateTournament).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("un tournoi ONSITE avec entry_fee positif n'est jamais bloqué (pas un paiement en ligne)", async () => {
+    const fd = tournamentFormData({ registration_mode: "ONSITE", entry_fee: "10" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(isOnlinePaymentAllowed).not.toHaveBeenCalled();
+    expect(dbCreateTournament).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("updateTournament — DO-PAYMENT-GUARD-001", () => {
+  it("3. organisation sans Stripe opérationnel : activation ultérieure du paiement refusée", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: false, reason: "STRIPE_NOT_OPERATIONAL" });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "20" });
+    fd.set("tournament_id", "tournament-1");
+
+    const result = await updateTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(dbUpdateTournament).not.toHaveBeenCalled();
+  });
+
+  it("interroge isOnlinePaymentAllowed avec le propriétaire réel du tournoi (association_id), jamais l'utilisateur courant seul", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "owner-42" } as never);
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "20" });
+    fd.set("tournament_id", "tournament-1");
+
+    await updateTournament(undefined, fd);
+
+    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith("owner-42");
+  });
+
+  it("organisation Stripe opérationnelle : activation du paiement en ligne autorisée", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "20" });
+    fd.set("tournament_id", "tournament-1");
+
+    const result = await updateTournament(undefined, fd);
+
+    expect(result).toBeUndefined();
+    expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it("aucune écriture partielle : dbUpdateTournament jamais appelé après un refus", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: false, reason: "STRIPE_NOT_OPERATIONAL" });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", entry_fee: "20" });
+    fd.set("tournament_id", "tournament-1");
+
+    await updateTournament(undefined, fd);
+
+    expect(dbUpdateTournament).not.toHaveBeenCalled();
+  });
+
+  it("repasser un tournoi en gratuit/ONSITE reste toujours autorisé sans Stripe", async () => {
+    const fd = tournamentFormData({ registration_mode: "ONSITE", entry_fee: "0" });
+    fd.set("tournament_id", "tournament-1");
+
+    const result = await updateTournament(undefined, fd);
+
+    expect(isOnlinePaymentAllowed).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+    expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
+  });
+});
 
 // Schémas extraits pour test — miroir de tournament.ts
 const TournamentSchema = z.object({
