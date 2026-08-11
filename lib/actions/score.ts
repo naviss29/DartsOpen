@@ -12,6 +12,7 @@ import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 import { publishMatchUpdate } from "@/lib/mercure";
 import { getUser } from "@/lib/api/auth";
 import { getOwnedTournament } from "@/lib/actions/access";
+import { loadMatchSetChain, resolveAuthorizedSide, isValidMatchPlayer } from "@/lib/actions/scoreAuthorization";
 
 export async function proposeWinner(
   matchSetId: string,
@@ -21,6 +22,14 @@ export async function proposeWinner(
 ): Promise<{ error?: string }> {
   const user = await getUser();
   if (!user) return { error: "Non authentifié." };
+
+  const chain = await loadMatchSetChain(matchSetId, tournamentId);
+  if (!chain) return { error: "Set introuvable." };
+
+  const authorizedSide = resolveAuthorizedSide(user, chain);
+  if (authorizedSide === null) return { error: "Vous ne participez pas à ce match." };
+  if (authorizedSide !== playerSide) return { error: "Cette action ne correspond pas à votre identité de joueur." };
+  if (!isValidMatchPlayer(chain, winnerId)) return { error: "Joueur invalide pour ce match." };
 
   const result = await dbProposeWinner(matchSetId, winnerId, playerSide).catch(() => ({
     error: "Erreur lors de la saisie du score.",
@@ -40,6 +49,13 @@ export async function confirmWinner(
 ): Promise<{ error?: string; disputed?: boolean }> {
   const user = await getUser();
   if (!user) return { error: "Non authentifié." };
+
+  const chain = await loadMatchSetChain(matchSetId, tournamentId);
+  if (!chain) return { error: "Set introuvable." };
+
+  const authorizedSide = resolveAuthorizedSide(user, chain);
+  if (authorizedSide === null) return { error: "Vous ne participez pas à ce match." };
+  if (authorizedSide !== playerSide) return { error: "Cette action ne correspond pas à votre identité de joueur." };
 
   const result = await dbConfirmWinner(matchSetId, playerSide).catch(
     (): Awaited<ReturnType<typeof dbConfirmWinner>> => ({ error: "Erreur lors de la confirmation." })
@@ -72,6 +88,10 @@ export async function markWinnerDirect(
 ): Promise<{ error?: string }> {
   await getOwnedTournament(tournamentId);
 
+  const chain = await loadMatchSetChain(matchSetId, tournamentId);
+  if (!chain) return { error: "Set introuvable." };
+  if (!isValidMatchPlayer(chain, winnerId)) return { error: "Joueur invalide pour ce match." };
+
   const result = await dbMarkWinnerDirect(matchSetId, winnerId).catch(
     (): Awaited<ReturnType<typeof dbMarkWinnerDirect>> => ({ error: "Erreur lors de la saisie du score." })
   );
@@ -102,6 +122,12 @@ export async function disputeResult(
 ): Promise<{ error?: string }> {
   const user = await getUser();
   if (!user) return { error: "Non authentifié." };
+
+  const chain = await loadMatchSetChain(matchSetId, tournamentId);
+  if (!chain) return { error: "Set introuvable." };
+
+  const authorizedSide = resolveAuthorizedSide(user, chain);
+  if (authorizedSide === null) return { error: "Vous ne participez pas à ce match." };
 
   const result = await dbDisputeResult(matchSetId).catch(() => ({
     error: "Erreur lors de la contestation.",
