@@ -12,6 +12,7 @@ const API_TOKEN = process.env.STER_API_TOKEN!;
 
 async function internalFetch(path: string, options: RequestInit = {}): Promise<Response> {
   return fetch(`${API_URL}${path}`, {
+    cache: 'no-store',
     ...options,
     headers: {
       'Content-Type': 'application/json',

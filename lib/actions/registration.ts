@@ -45,7 +45,11 @@ export async function createRegistration(
 
   if (!registration) return { error: "Erreur lors de l'inscription." };
 
-  if (tournament.entry_fee === 0) {
+  // DARTSOPEN-MONETIZATION-001 : payment_mode est indépendant de registration_mode (mission
+  // §5/§6) — un tournoi payant en payment_mode ONSITE (Stripe Connect absent, ou choix
+  // explicite de l'organisateur) confirme l'inscription immédiatement, exactement comme un
+  // tournoi gratuit : les droits sont réglés sur place, jamais via un checkout Stripe.
+  if (tournament.entry_fee === 0 || tournament.payment_mode !== "ONLINE") {
     const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
     const d = new Date(tournament.date);
     const dateFr = `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -75,7 +79,10 @@ export async function createRegistration(
   // l'inscription — une suspension Stripe après coup bloque donc immédiatement les nouveaux
   // paiements, sans dépendre d'une modification préalable du tournoi. Relit toujours l'état
   // courant depuis SterPlatform, jamais une valeur mise en cache.
-  const stripeStatus = await getStripeConnectStatus(org.sterOrganizationSlug).catch(() => null);
+  const stripeStatus = await getStripeConnectStatus(org.sterOrganizationSlug).catch((err) => {
+    console.error("[registration] Échec lecture statut Stripe Connect SterPlatform:", org.sterOrganizationSlug, err);
+    return null;
+  });
   if (!stripeStatus?.canReceivePayments) {
     return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
   }

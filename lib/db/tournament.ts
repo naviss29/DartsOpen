@@ -18,6 +18,7 @@ function mapTournament(t: {
   advancementPerPool: number;
   playersPerTeam: number;
   registrationMode: string;
+  paymentMode: string;
   scoringMode: string;
   quickMode: boolean;
   createdAt: Date;
@@ -37,6 +38,7 @@ function mapTournament(t: {
     advancement_per_pool: t.advancementPerPool,
     players_per_team: t.playersPerTeam,
     registration_mode: t.registrationMode,
+    payment_mode: t.paymentMode,
     scoring_mode: t.scoringMode,
     quick_mode: t.quickMode,
     created_at: t.createdAt.toISOString(),
@@ -299,11 +301,13 @@ export async function dbCreateTournament(userId: string, data: {
   advancement_per_pool: number;
   players_per_team: number;
   registration_mode: string;
+  payment_mode: string;
   scoring_mode: string;
   quick_mode?: boolean;
-}) {
+}, id?: string) {
   const t = await prisma.tournament.create({
     data: {
+      ...(id !== undefined && { id }),
       userId,
       name: data.name,
       date: new Date(data.date),
@@ -315,6 +319,7 @@ export async function dbCreateTournament(userId: string, data: {
       advancementPerPool: data.advancement_per_pool,
       playersPerTeam: data.players_per_team,
       registrationMode: data.registration_mode as "ONLINE" | "ONSITE",
+      paymentMode: data.payment_mode as "ONLINE" | "ONSITE",
       scoringMode: data.scoring_mode as "ELECTRONIC" | "TRADITIONAL",
       quickMode: data.quick_mode ?? false,
     },
@@ -334,6 +339,7 @@ export async function dbUpdateTournament(id: string, data: {
   advancement_per_pool?: number;
   players_per_team?: number;
   registration_mode?: string;
+  payment_mode?: string;
   scoring_mode?: string;
   quick_mode?: boolean;
 }) {
@@ -350,6 +356,7 @@ export async function dbUpdateTournament(id: string, data: {
       ...(data.advancement_per_pool !== undefined && { advancementPerPool: data.advancement_per_pool }),
       ...(data.players_per_team !== undefined && { playersPerTeam: data.players_per_team }),
       ...(data.registration_mode !== undefined && { registrationMode: data.registration_mode as "ONLINE" | "ONSITE" }),
+      ...(data.payment_mode !== undefined && { paymentMode: data.payment_mode as "ONLINE" | "ONSITE" }),
       ...(data.scoring_mode !== undefined && { scoringMode: data.scoring_mode as "ELECTRONIC" | "TRADITIONAL" }),
       ...(data.quick_mode !== undefined && { quickMode: data.quick_mode }),
     },

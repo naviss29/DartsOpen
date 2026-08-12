@@ -31,6 +31,17 @@ enum RegistrationMode {
   ONSITE
 }
 
+/**
+ * DARTSOPEN-MONETIZATION-001 — indépendant de RegistrationMode : un tournoi peut être ouvert
+ * aux inscriptions en ligne (RegistrationMode.ONLINE) tout en faisant payer sur place
+ * (PaymentMode.ONSITE), notamment quand l'organisation n'a pas de Stripe Connect opérationnel.
+ * N'a de sens que si entryFee > 0 — ignoré pour un tournoi gratuit.
+ */
+enum PaymentMode {
+  ONLINE
+  ONSITE
+}
+
 enum ScoringMode {
   ELECTRONIC
   TRADITIONAL
@@ -69,6 +80,7 @@ model Tournament {
   advancementPerPool Int              @default(1) @map("advancement_per_pool")
   playersPerTeam     Int              @default(1) @map("players_per_team")
   registrationMode   RegistrationMode @default(ONLINE) @map("registration_mode")
+  paymentMode        PaymentMode      @default(ONSITE) @map("payment_mode")
   scoringMode        ScoringMode      @default(ELECTRONIC) @map("scoring_mode")
   quickMode          Boolean          @default(false) @map("quick_mode")
   createdAt          DateTime         @default(now()) @map("created_at")

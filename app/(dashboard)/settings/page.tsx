@@ -2,8 +2,7 @@ import { getUser } from "@/lib/api/auth";
 import { redirect } from "next/navigation";
 import { Alert, Card, Pill } from "@naviss29/design-system";
 import { dbGetOrganization } from "@/lib/db/tournament";
-import { getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
-import { getMyOrganizations } from "@/lib/api/organizations";
+import { getMyOrganizations, getPaymentAuthorization } from "@/lib/api/organizations";
 import { OrganizationLinkForm } from "@/components/settings/OrganizationLinkForm";
 import { unlinkOrganization } from "@/lib/actions/organization";
 import Button from "@/components/ui/Button";
@@ -75,7 +74,12 @@ async function OrganizationSection() {
 }
 
 async function StripeConnectSection({ slug }: { slug: string }) {
-  const status = await getStripeConnectStatus(slug).catch(() => undefined);
+  // DARTSOPEN-MONETIZATION-001 : cette page affichait auparavant le lookup serveur-à-serveur
+  // (getStripeConnectStatus, X-App-Token) — un jeton mal configuré y échouait silencieusement
+  // (.catch(() => undefined) sans log) et affichait "non opérationnel" même pour une
+  // organisation dont Stripe Connect l'était réellement (constaté via la page Stripe de
+  // BSsite, qui appelle ce même endpoint JWT). getPaymentAuthorization() est cet endpoint.
+  const status = await getPaymentAuthorization(slug) ?? undefined;
   const stripeUrl = `${BSSITE_URL}/dashboard/organisations/${slug}/stripe`;
 
   if (status?.canReceivePayments) {

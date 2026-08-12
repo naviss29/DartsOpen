@@ -5,6 +5,7 @@ import { EditTournamentForm } from "@/components/tournament/EditTournamentForm";
 import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
+import { getTournamentSizeUiState } from "@/lib/entitlements/tournamentSizeGuard";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Card, Pill } from "@naviss29/design-system";
@@ -30,6 +31,7 @@ type Tournament = {
   entry_fee: number;
   advancement_per_pool: number;
   registration_mode: string;
+  payment_mode: string;
   scoring_mode: string;
   quick_mode: boolean;
   rounds: { id: string; order: number; game_type: string; entry_type: string; finish_type: string }[];
@@ -46,13 +48,20 @@ export default async function TournamentDetailPage({ params }: Props) {
 
   const tournament = await getOwnedTournament(id) as Tournament & { association_id: string };
 
-  const [registrations, pools, paymentUiState] = await Promise.all([
+  const [registrations, pools, paymentUiState, sizeState] = await Promise.all([
     dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
     dbListPools(id).catch(() => []) as Promise<{ id: string }[]>,
     getOnlinePaymentUiState(tournament.association_id),
+    getTournamentSizeUiState(tournament.association_id),
   ]);
   const stripeConnectUrl = paymentUiState.organizationSlug
     ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/stripe`
+    : `${BSSITE_URL}/dashboard`;
+  const subscriptionUrl = paymentUiState.organizationSlug
+    ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/abonnement/dartsopen`
+    : `${BSSITE_URL}/dashboard`;
+  const creditPurchaseUrl = paymentUiState.organizationSlug
+    ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/credits/dartsopen`
     : `${BSSITE_URL}/dashboard`;
 
   const playerCount = registrations.length;
@@ -182,6 +191,10 @@ export default async function TournamentDetailPage({ params }: Props) {
               tournament={tournament}
               canReceivePayments={paymentUiState.canReceivePayments}
               stripeConnectUrl={stripeConnectUrl}
+              hasActiveSubscription={sizeState.hasActiveSubscription}
+              availableCredits={sizeState.availableCredits}
+              subscriptionUrl={subscriptionUrl}
+              creditPurchaseUrl={creditPurchaseUrl}
             />
           </Card>
         </section>

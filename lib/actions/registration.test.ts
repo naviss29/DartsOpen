@@ -39,6 +39,7 @@ function paidTournament(overrides: Record<string, unknown> = {}) {
     association_id: "user-1",
     status: "OPEN",
     entry_fee: 1000,
+    payment_mode: "ONLINE",
     players_per_team: 2,
     max_players: 32,
     name: "Open de fléchettes",
@@ -129,5 +130,32 @@ describe("createRegistration — garde-fou checkout (DO-PAYMENT-GUARD-001 §5)",
     expect(result.error).toBeDefined();
     expect(getStripeConnectStatus).not.toHaveBeenCalled();
     expect(createPaymentCheckout).not.toHaveBeenCalled();
+  });
+});
+
+describe("createRegistration — payment_mode indépendant de registration_mode (DARTSOPEN-MONETIZATION-001, mission §5/§6/§7)", () => {
+  it("payment_mode ONSITE + entry_fee positif : confirme immédiatement, sans jamais interroger Stripe (droits réglés sur place)", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ payment_mode: "ONSITE" }) as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(getStripeConnectStatus).not.toHaveBeenCalled();
+    expect(createPaymentCheckout).not.toHaveBeenCalled();
+    expect(dbGetOrganization).not.toHaveBeenCalled();
+  });
+
+  it("Stripe absent + droits d'inscription positifs : l'inscription reste valide (jamais forcée à 0€, mission §7)", async () => {
+    // Aucun compte Stripe Connect (dbGetOrganization jamais interrogé pour ce chemin) — le
+    // tournoi est simplement payé sur place, exactement comme un tournoi gratuit du point de
+    // vue du flux d'inscription.
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ payment_mode: "ONSITE", entry_fee: 500 }) as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbAddRegistration).toHaveBeenCalledTimes(1);
   });
 });

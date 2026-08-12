@@ -4,6 +4,7 @@ import { useActionState, useState, useEffect, useRef } from "react";
 import { updateTournament } from "@/lib/actions/tournament";
 import { Alert, Card, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
+import { FREE_TIER_MAX_PLAYERS } from "@/lib/entitlements/constants";
 
 interface Props {
   tournament: {
@@ -18,20 +19,36 @@ interface Props {
     advancement_per_pool: number;
     players_per_team: number;
     registration_mode: string;
+    payment_mode: string;
     scoring_mode: string;
     quick_mode: boolean;
   };
   /** État Stripe Connect de l'organisation courante — recalculé serveur (DO-PAYMENT-GUARD-001). */
   canReceivePayments: boolean;
   stripeConnectUrl: string;
+  /** Droits DartsOpen de l'organisation courante — recalculés serveur (DARTSOPEN-MONETIZATION-001), jamais déduits côté client. */
+  hasActiveSubscription: boolean;
+  availableCredits: number;
+  subscriptionUrl: string;
+  creditPurchaseUrl: string;
 }
 
-export function EditTournamentForm({ tournament, canReceivePayments, stripeConnectUrl }: Props) {
+export function EditTournamentForm({
+  tournament,
+  canReceivePayments,
+  stripeConnectUrl,
+  hasActiveSubscription,
+  availableCredits,
+  subscriptionUrl,
+  creditPurchaseUrl,
+}: Props) {
   const [state, action, isPending] = useActionState(updateTournament, undefined);
   const [isOpen, setIsOpen] = useState(false);
   const [quickMode, setQuickMode] = useState(
     state?.fields?.quick_mode === "true" ? true : state?.fields?.quick_mode === "false" ? false : tournament.quick_mode
   );
+  const [maxPlayers, setMaxPlayers] = useState(state?.fields?.max_players ?? String(tournament.max_players));
+  const [entryFee, setEntryFee] = useState(state?.fields?.entry_fee ?? String(tournament.entry_fee / 100));
   const prevPending = useRef(false);
 
   useEffect(() => {
@@ -40,6 +57,15 @@ export function EditTournamentForm({ tournament, canReceivePayments, stripeConne
     }
     prevPending.current = isPending;
   }, [isPending, state]);
+
+  // Ne signale un besoin d'entitlement que pour une augmentation réelle au-delà de 10 par
+  // rapport à ce que le tournoi a déjà (mission §12/§15 — ne jamais alarmer sur une valeur déjà
+  // acquise, seule authorizeTournamentSize() côté serveur fait foi de toute façon).
+  const needsEntitlement =
+    Number(maxPlayers) > FREE_TIER_MAX_PLAYERS &&
+    Number(maxPlayers) > tournament.max_players &&
+    !hasActiveSubscription &&
+    availableCredits === 0;
 
   return (
     <div className="space-y-4">
@@ -95,40 +121,91 @@ export function EditTournamentForm({ tournament, canReceivePayments, stripeConne
           <Input id="edit_location" name="location" type="text" required defaultValue={state?.fields?.location ?? tournament.location} />
         </FormField>
 
-        <FormField label="Joueurs max" id="edit_max_players" error={state?.errors?.max_players?.[0]}>
-          <Input id="edit_max_players" name="max_players" type="number" min="2" max="512" required defaultValue={state?.fields?.max_players ?? tournament.max_players} />
+        <FormField
+          label="Joueurs max"
+          id="edit_max_players"
+          error={state?.errors?.max_players?.[0]}
+          hint={`Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
+        >
+          <Input
+            id="edit_max_players"
+            name="max_players"
+            type="number"
+            min="2"
+            max="512"
+            required
+            value={maxPlayers}
+            onChange={(e) => setMaxPlayers(e.target.value)}
+          />
         </FormField>
 
         <FormField
           label="Droits d'inscription (€ / joueur)"
           id="edit_entry_fee"
           error={state?.errors?.entry_fee?.[0]}
-          hint={canReceivePayments ? undefined : "Paiement en ligne indisponible — voir ci-dessous"}
         >
-          {canReceivePayments ? (
-            <Input id="edit_entry_fee" name="entry_fee" type="number" min="0" required defaultValue={state?.fields?.entry_fee ?? tournament.entry_fee / 100} />
-          ) : (
-            <>
-              <Input id="edit_entry_fee" type="number" min="0" value="0" disabled />
-              <input type="hidden" name="entry_fee" value="0" />
-            </>
-          )}
+          <Input
+            id="edit_entry_fee"
+            name="entry_fee"
+            type="number"
+            min="0"
+            required
+            value={entryFee}
+            onChange={(e) => setEntryFee(e.target.value)}
+          />
         </FormField>
       </div>
 
-      {!canReceivePayments && (
+      {needsEntitlement && (
         <Alert tone="info">
-          Le paiement en ligne nécessite un compte Stripe Connect opérationnel pour votre
-          organisation.{" "}
-          {tournament.entry_fee > 0 && (
-            <>Ce tournoi avait des droits d&apos;inscription payants — ils seront remis à 0 (gratuit) si vous enregistrez une modification. </>
-          )}
-          <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-            Configurez Stripe Connect dans BApps Studio
-          </a>{" "}
-          pour activer le paiement en ligne.
+          <p className="font-medium">Plus de {FREE_TIER_MAX_PLAYERS} joueurs nécessite un accès payant DartsOpen.</p>
+          <p className="mt-1">
+            Achetez un{" "}
+            <a href={creditPurchaseUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+              crédit tournoi (4,90€, valable pour ce tournoi)
+            </a>{" "}
+            ou souscrivez un{" "}
+            <a href={subscriptionUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+              abonnement DartsOpen (6,90€/mois ou 69€/an)
+            </a>{" "}
+            depuis BApps Studio.
+          </p>
         </Alert>
       )}
+
+      {Number(entryFee) > 0 && (
+        canReceivePayments ? (
+          <Card className="space-y-2">
+            <p className="text-sm font-medium text-brand-dark">Mode de paiement</p>
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="radio" name="payment_mode" value="ONLINE" defaultChecked={(state?.fields?.payment_mode ?? tournament.payment_mode) === "ONLINE"} className="mt-0.5 accent-brand-turquoise" />
+              <div>
+                <p className="text-sm font-medium text-brand-dark">En ligne</p>
+                <p className="text-xs text-brand-text-secondary">Les joueurs paient en ligne au moment de l&apos;inscription.</p>
+              </div>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="radio" name="payment_mode" value="ONSITE" defaultChecked={(state?.fields?.payment_mode ?? tournament.payment_mode) === "ONSITE"} className="mt-0.5 accent-brand-turquoise" />
+              <div>
+                <p className="text-sm font-medium text-brand-dark">Sur place</p>
+                <p className="text-xs text-brand-text-secondary">Les droits d&apos;inscription sont réglés le jour du tournoi.</p>
+              </div>
+            </label>
+          </Card>
+        ) : (
+          <>
+            <input type="hidden" name="payment_mode" value="ONSITE" />
+            <Alert tone="info">
+              Les droits d&apos;inscription seront réglés sur place.{" "}
+              <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                Configurez Stripe Connect dans BApps Studio
+              </a>{" "}
+              pour proposer le paiement en ligne à l&apos;avenir.
+            </Alert>
+          </>
+        )
+      )}
+      {Number(entryFee) <= 0 && <input type="hidden" name="payment_mode" value="ONSITE" />}
 
       <div className="grid grid-cols-2 gap-4">
         {/* Nombre de poules : verrouillé à 1 en mode rapide */}

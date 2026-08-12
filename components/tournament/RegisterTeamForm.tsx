@@ -8,11 +8,17 @@ const inputCn =
 
 interface Props {
   tournamentId: string;
-  isFree: boolean;
+  /**
+   * True quand l'inscription se confirme immédiatement, sans redirection Stripe — un tournoi
+   * gratuit, ou un tournoi payant en payment_mode ONSITE (droits réglés sur place, indépendant
+   * de entry_fee — DARTSOPEN-MONETIZATION-001, mission §5/§6). Seul entry_fee > 0 ET
+   * payment_mode === "ONLINE" déclenche jamais une redirection de paiement.
+   */
+  confirmsImmediately: boolean;
   playersPerTeam: number;
 }
 
-export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props) {
+export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPerTeam }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -141,7 +147,7 @@ export function RegisterTeamForm({ tournamentId, isFree, playersPerTeam }: Props
       >
         {isPending
           ? "Redirection…"
-          : isFree
+          : confirmsImmediately
           ? "Confirmer l'inscription"
           : "Procéder au paiement →"}
       </button>

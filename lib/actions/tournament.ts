@@ -14,6 +14,12 @@ import {
 } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import { isOnlinePaymentAllowed, wantsOnlinePayment, ONLINE_PAYMENT_BLOCKED_MESSAGE } from "@/lib/payments/onlinePaymentGuard";
+import {
+  authorizeTournamentSize,
+  requiresEntitlementCheck,
+  TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION,
+  TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT,
+} from "@/lib/entitlements/tournamentSizeGuard";
 
 const TournamentSchema = z.object({
   name: z.string().trim().min(3, "Le nom doit contenir au moins 3 caractères."),
@@ -26,14 +32,25 @@ const TournamentSchema = z.object({
   advancement_per_pool: z.coerce.number().int().min(1).max(8),
   players_per_team: z.coerce.number().int().min(1).max(10),
   registration_mode: z.enum(["ONLINE", "ONSITE"]).default("ONLINE"),
+  // DARTSOPEN-MONETIZATION-001 : indépendant de registration_mode (mission §5/§6) — un tournoi
+  // peut être ouvert aux inscriptions en ligne tout en faisant payer sur place. La valeur
+  // soumise n'est jamais faite confiance telle quelle : wantsOnlinePayment()/
+  // isOnlinePaymentAllowed() (ci-dessous) revérifient que Stripe Connect est réellement
+  // opérationnel avant d'accepter payment_mode = "ONLINE".
+  payment_mode: z.enum(["ONLINE", "ONSITE"]).default("ONSITE"),
   scoring_mode: z.enum(["ELECTRONIC", "TRADITIONAL"]).default("ELECTRONIC"),
   quick_mode: z.preprocess((val) => val === "true", z.boolean()).default(false),
 }).transform((data) => {
+  let result = data;
   // Mode rapide : poule unique et 1 joueur par équipe obligatoires
-  if (data.quick_mode) {
-    return { ...data, nb_pools: 1, players_per_team: 1 };
+  if (result.quick_mode) {
+    result = { ...result, nb_pools: 1, players_per_team: 1 };
   }
-  return data;
+  // Un tournoi gratuit n'a pas de mode de paiement — jamais "ONLINE" pour un entry_fee à 0.
+  if (result.entry_fee === 0) {
+    result = { ...result, payment_mode: "ONSITE" };
+  }
+  return result;
 });
 
 const RoundSchema = z.object({
@@ -61,6 +78,7 @@ function extractTournamentRaw(formData: FormData): Record<string, string> {
     advancement_per_pool: (formData.get("advancement_per_pool") as string) ?? "",
     players_per_team: (formData.get("players_per_team") as string) ?? "",
     registration_mode: (formData.get("registration_mode") as string) ?? "ONLINE",
+    payment_mode: (formData.get("payment_mode") as string) ?? "ONSITE",
     scoring_mode: (formData.get("scoring_mode") as string) ?? "ELECTRONIC",
     quick_mode: (formData.get("quick_mode") as string) ?? "false",
   };
@@ -86,7 +104,22 @@ export async function createTournament(prevState: TournamentState, formData: For
     }
   }
 
-  const tournament = await dbCreateTournament(user.id, parsed.data).catch((err) => {
+  // DARTSOPEN-MONETIZATION-001 : au-delà de 10 joueurs, un abonnement actif ou un crédit
+  // tournoi est requis — vérifié/consommé ici, avant toute écriture, jamais après. L'id du
+  // tournoi est généré ici (plutôt que laissé à Prisma) pour servir de référence stable et
+  // idempotente à la consommation du crédit, identique à celle réutilisée par updateTournament.
+  const tournamentId = crypto.randomUUID();
+  if (requiresEntitlementCheck(parsed.data.max_players, 0)) {
+    const authorization = await authorizeTournamentSize(user.id, tournamentId);
+    if (!authorization.allowed) {
+      const message = authorization.reason === "NO_ORGANIZATION"
+        ? TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION
+        : TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT;
+      return { error: message, fields: raw, ts: Date.now() };
+    }
+  }
+
+  const tournament = await dbCreateTournament(user.id, parsed.data, tournamentId).catch((err) => {
     console.error('[createTournament]', err);
     return null;
   });
@@ -115,6 +148,20 @@ export async function updateTournament(prevState: TournamentState, formData: For
     const authorization = await isOnlinePaymentAllowed(tournament.association_id);
     if (!authorization.allowed) {
       return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
+    }
+  }
+
+  // DARTSOPEN-MONETIZATION-001 : ne re-vérifie que si max_players augmente réellement au-delà
+  // de 10 par rapport à la valeur déjà en base — jamais pour une valeur inchangée ou réduite,
+  // pour ne jamais casser un tournoi >10 déjà créé avant cette règle (mission §12/§15). Empêche
+  // aussi le contournement "créer à 10 puis modifier à 32" (mission §2/§11).
+  if (requiresEntitlementCheck(parsed.data.max_players, tournament.max_players)) {
+    const authorization = await authorizeTournamentSize(tournament.association_id, tournamentId);
+    if (!authorization.allowed) {
+      const message = authorization.reason === "NO_ORGANIZATION"
+        ? TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION
+        : TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT;
+      return { error: message, fields: raw, ts: Date.now() };
     }
   }
 

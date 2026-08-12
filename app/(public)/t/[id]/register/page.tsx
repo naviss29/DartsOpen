@@ -16,6 +16,7 @@ type Tournament = {
   max_players: number;
   players_per_team: number;
   registration_mode: string;
+  payment_mode: string;
   status: string;
   registered_count: number;
 };
@@ -84,10 +85,19 @@ export default async function RegisterPage({ params, searchParams }: Props) {
                   <span className="font-bold">
                     {((tournament.entry_fee * tournament.players_per_team) / 100).toFixed(2)} € / équipe
                   </span>
+                  {tournament.payment_mode !== "ONLINE" && (
+                    <span className="block text-sm font-normal text-brand-text-secondary mt-0.5">
+                      Réglé sur place le jour du tournoi
+                    </span>
+                  )}
                 </p>
               )}
             </div>
-            <RegisterTeamForm tournamentId={id} isFree={tournament.entry_fee === 0} playersPerTeam={tournament.players_per_team} />
+            <RegisterTeamForm
+              tournamentId={id}
+              confirmsImmediately={tournament.entry_fee === 0 || tournament.payment_mode !== "ONLINE"}
+              playersPerTeam={tournament.players_per_team}
+            />
           </div>
         )}
       </div>

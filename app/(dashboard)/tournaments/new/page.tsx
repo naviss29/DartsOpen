@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { TournamentForm } from "@/components/tournament/TournamentForm";
 import { getUser } from "@/lib/api/auth";
 import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
+import { getTournamentSizeUiState } from "@/lib/entitlements/tournamentSizeGuard";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Nouveau tournoi — DartsOpen" };
@@ -12,8 +13,13 @@ export default async function NewTournamentPage() {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const { canReceivePayments, organizationSlug } = await getOnlinePaymentUiState(user.id);
+  const [{ canReceivePayments, organizationSlug }, sizeState] = await Promise.all([
+    getOnlinePaymentUiState(user.id),
+    getTournamentSizeUiState(user.id),
+  ]);
   const stripeConnectUrl = organizationSlug ? `${BSSITE_URL}/dashboard/organisations/${organizationSlug}/stripe` : `${BSSITE_URL}/dashboard`;
+  const subscriptionUrl = organizationSlug ? `${BSSITE_URL}/dashboard/organisations/${organizationSlug}/abonnement/dartsopen` : `${BSSITE_URL}/dashboard`;
+  const creditPurchaseUrl = organizationSlug ? `${BSSITE_URL}/dashboard/organisations/${organizationSlug}/credits/dartsopen` : `${BSSITE_URL}/dashboard`;
 
   return (
     <div className="space-y-6">
@@ -23,7 +29,14 @@ export default async function NewTournamentPage() {
           Les manches (type de jeu, entrée, sortie) seront configurées après la création.
         </p>
       </div>
-      <TournamentForm canReceivePayments={canReceivePayments} stripeConnectUrl={stripeConnectUrl} />
+      <TournamentForm
+        canReceivePayments={canReceivePayments}
+        stripeConnectUrl={stripeConnectUrl}
+        hasActiveSubscription={sizeState.hasActiveSubscription}
+        availableCredits={sizeState.availableCredits}
+        subscriptionUrl={subscriptionUrl}
+        creditPurchaseUrl={creditPurchaseUrl}
+      />
     </div>
   );
 }

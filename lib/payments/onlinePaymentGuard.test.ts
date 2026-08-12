@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db/tournament", () => ({ dbGetOrganization: vi.fn() }));
-vi.mock("@/lib/api/sterplatformInternal", () => ({ getStripeConnectStatus: vi.fn() }));
+vi.mock("@/lib/api/organizations", () => ({ getPaymentAuthorization: vi.fn() }));
 
 const { dbGetOrganization } = await import("@/lib/db/tournament");
-const { getStripeConnectStatus } = await import("@/lib/api/sterplatformInternal");
+const { getPaymentAuthorization } = await import("@/lib/api/organizations");
 const { isOnlinePaymentAllowed, getOnlinePaymentUiState, wantsOnlinePayment } = await import("./onlinePaymentGuard");
 
-function stripeStatus(overrides: Partial<{ status: string; canReceivePayments: boolean }> = {}) {
+function paymentAuthorization(overrides: Partial<{ status: string; canReceivePayments: boolean }> = {}) {
   return {
-    stripeAccountId: "acct_123",
     status: "OPERATIONAL",
+    statusLabel: "Opérationnel",
     canReceivePayments: true,
     reason: null,
     ...overrides,
@@ -19,20 +19,20 @@ function stripeStatus(overrides: Partial<{ status: string; canReceivePayments: b
 
 beforeEach(() => {
   vi.mocked(dbGetOrganization).mockReset();
-  vi.mocked(getStripeConnectStatus).mockReset();
+  vi.mocked(getPaymentAuthorization).mockReset();
 });
 
 describe("wantsOnlinePayment", () => {
-  it("vrai uniquement pour ONLINE + entry_fee positif", () => {
-    expect(wantsOnlinePayment({ registration_mode: "ONLINE", entry_fee: 1000 })).toBe(true);
+  it("vrai uniquement pour payment_mode ONLINE + entry_fee positif", () => {
+    expect(wantsOnlinePayment({ payment_mode: "ONLINE", entry_fee: 1000 })).toBe(true);
   });
 
-  it("faux pour ONLINE + entry_fee à 0 (inscription en ligne gratuite, aucun Stripe requis)", () => {
-    expect(wantsOnlinePayment({ registration_mode: "ONLINE", entry_fee: 0 })).toBe(false);
+  it("faux pour payment_mode ONLINE + entry_fee à 0 (tournoi gratuit, aucun Stripe requis)", () => {
+    expect(wantsOnlinePayment({ payment_mode: "ONLINE", entry_fee: 0 })).toBe(false);
   });
 
-  it("faux pour ONSITE même avec un entry_fee positif (jamais de checkout Stripe pour ONSITE)", () => {
-    expect(wantsOnlinePayment({ registration_mode: "ONSITE", entry_fee: 1000 })).toBe(false);
+  it("faux pour payment_mode ONSITE même avec un entry_fee positif (droits réglés sur place, jamais de checkout Stripe — indépendant de registration_mode, mission §5/§6)", () => {
+    expect(wantsOnlinePayment({ payment_mode: "ONSITE", entry_fee: 1000 })).toBe(false);
   });
 });
 
@@ -43,13 +43,13 @@ describe("isOnlinePaymentAllowed", () => {
     const result = await isOnlinePaymentAllowed("user-1");
 
     expect(result).toEqual({ allowed: false, reason: "NO_ORGANIZATION" });
-    expect(getStripeConnectStatus).not.toHaveBeenCalled();
+    expect(getPaymentAuthorization).not.toHaveBeenCalled();
   });
 
   it("refuse (STRIPE_NOT_OPERATIONAL) quand le statut SterPlatform n'est pas OPERATIONAL", async () => {
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
-    vi.mocked(getStripeConnectStatus).mockResolvedValue(
-      stripeStatus({ status: "ONBOARDING_INCOMPLETE", canReceivePayments: false }) as never
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(
+      paymentAuthorization({ status: "ONBOARDING_INCOMPLETE", canReceivePayments: false }) as never
     );
 
     const result = await isOnlinePaymentAllowed("user-1");
@@ -59,7 +59,7 @@ describe("isOnlinePaymentAllowed", () => {
 
   it("refuse (STRIPE_NOT_OPERATIONAL) quand aucun compte Stripe n'existe (SterPlatform renvoie null)", async () => {
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
-    vi.mocked(getStripeConnectStatus).mockResolvedValue(null);
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(null);
 
     const result = await isOnlinePaymentAllowed("user-1");
 
@@ -67,8 +67,10 @@ describe("isOnlinePaymentAllowed", () => {
   });
 
   it("refuse (repli prudent) si l'appel SterPlatform échoue plutôt que d'autoriser implicitement", async () => {
+    // getPaymentAuthorization() journalise et renvoie null en interne — jamais une exception
+    // qui remonte jusqu'ici (voir son propre docblock, DARTSOPEN-MONETIZATION-001).
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
-    vi.mocked(getStripeConnectStatus).mockRejectedValue(new Error("network down"));
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(null);
 
     const result = await isOnlinePaymentAllowed("user-1");
 
@@ -77,19 +79,19 @@ describe("isOnlinePaymentAllowed", () => {
 
   it("autorise uniquement quand canReceivePayments est explicitement true (status OPERATIONAL)", async () => {
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
-    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(paymentAuthorization() as never);
 
     const result = await isOnlinePaymentAllowed("user-1");
 
     expect(result).toEqual({ allowed: true });
   });
 
-  it("ne déduit jamais l'autorisation de la seule présence d'un stripeAccountId", async () => {
-    // Un compte existe (stripeAccountId non vide) mais n'est pas opérationnel (ex. RESTRICTED) :
+  it("ne déduit jamais l'autorisation de la seule présence d'un compte Stripe", async () => {
+    // Un compte existe (status non NO_ACCOUNT) mais n'est pas opérationnel (ex. RESTRICTED) :
     // ne doit jamais être traité comme autorisé.
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
-    vi.mocked(getStripeConnectStatus).mockResolvedValue(
-      stripeStatus({ status: "RESTRICTED", canReceivePayments: false }) as never
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(
+      paymentAuthorization({ status: "RESTRICTED", canReceivePayments: false }) as never
     );
 
     const result = await isOnlinePaymentAllowed("user-1");
@@ -101,7 +103,7 @@ describe("isOnlinePaymentAllowed", () => {
 describe("getOnlinePaymentUiState", () => {
   it("reflète canReceivePayments et le slug pour l'affichage", async () => {
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
-    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(paymentAuthorization() as never);
 
     const result = await getOnlinePaymentUiState("user-1");
 
