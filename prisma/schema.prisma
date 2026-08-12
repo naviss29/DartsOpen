@@ -197,3 +197,18 @@ model MatchSet {
   @@index([matchId])
   @@map("match_sets")
 }
+
+/// SEC-005 — compteur de rate limiting partagé entre toutes les instances (remplace la Map en
+/// mémoire de lib/rateLimit.ts, qui ne survivait ni à un redémarrage ni à une réplication
+/// horizontale). `key` est un hash SHA-256 de "route:ip" — jamais l'IP en clair : cette table
+/// est durable (contrairement à la Map précédente), la minimisation des données personnelles
+/// s'applique. Une ligne par (route, IP) tant que la fenêtre est active ; nettoyée
+/// opportunistement (voir lib/rateLimit.ts), jamais par un scheduler dédié.
+model RateLimitBucket {
+  key     String   @id
+  count   Int
+  resetAt DateTime @map("reset_at")
+
+  @@index([resetAt])
+  @@map("rate_limit_buckets")
+}

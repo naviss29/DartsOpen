@@ -14,6 +14,26 @@ jobs:
       contents: read
       packages: read
 
+    # SEC-005 — lib/rateLimit.test.ts exécute de vraies opérations concurrentes (dont une
+    # preuve multi-instance à deux PrismaClient distincts) contre un vrai PostgreSQL — jamais
+    # un mock : une garantie d'atomicité/partage entre instances ne se prouve pas avec un mock
+    # séquentiel. Même image que docker-compose.yml (usage local), même convention que
+    # BilletAsso (DATA-001/DATA-002).
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: dartsopen
+          POSTGRES_USER: dartsopen
+          POSTGRES_PASSWORD: dartsopen
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dartsopen -d dartsopen"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v5
 
@@ -34,7 +54,9 @@ jobs:
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
           NEXT_PUBLIC_API_URL: https://sterplatform.bapps-studio.com
           NEXT_PUBLIC_BSSITE_URL: https://bapps-studio.com
-          # Variables runtime (non injectées au build, déclarées pour éviter les warnings Next.js)
-          DATABASE_URL: placeholder
+          # SEC-005 — réel (pas un placeholder) depuis l'ajout de lib/rateLimit.test.ts : `npm
+          # run verify` applique désormais les migrations Prisma et exécute des tests de
+          # concurrence contre une vraie base — voir le service `postgres` ci-dessus.
+          DATABASE_URL: postgresql://dartsopen:dartsopen@localhost:5432/dartsopen
           STER_API_TOKEN: placeholder
           STER_PAYMENTS_CALLBACK_SECRET: placeholder

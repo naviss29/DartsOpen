@@ -46,7 +46,7 @@ export default async function proxy(request: NextRequest) {
   const rule = RATE_LIMIT_RULES.find((r) => pathname.startsWith(r.prefix));
   if (rule) {
     const key = `${rule.prefix}:${clientIp(request.headers)}`;
-    const result = checkRateLimit(key, rule);
+    const result = await checkRateLimit(key, rule);
     if (!result.allowed) return rateLimitResponse(request, result.retryAfterSeconds);
   }
 
@@ -98,6 +98,11 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // SEC-005 — checkRateLimit() interroge désormais PostgreSQL via le pilote `pg` réel (lib/db/
+  // client.ts). Next.js 16 a remplacé `middleware.ts` par `proxy.ts` précisément pour que ce
+  // fichier tourne toujours en runtime Node.js (jamais Edge) — donc jamais besoin (et jamais
+  // permis, "Route segment config is not allowed in Proxy file") de déclarer `runtime` ici,
+  // contrairement à l'ancien middleware.ts pré-Next 16.
   matcher: [
     '/dashboard/:path*',
     '/tournaments/:path*',
