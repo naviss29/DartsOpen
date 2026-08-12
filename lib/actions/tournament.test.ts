@@ -19,7 +19,7 @@ vi.mock("@/lib/payments/onlinePaymentGuard", async (importOriginal) => {
 });
 vi.mock("@/lib/entitlements/tournamentSizeGuard", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/entitlements/tournamentSizeGuard")>();
-  return { ...actual, authorizeTournamentSize: vi.fn() };
+  return { ...actual, resolveTournamentSizeEntitlement: vi.fn(), consumeTournamentSizeCredit: vi.fn() };
 });
 vi.mock("@/lib/db/tournament", () => ({
   dbCreateTournament: vi.fn(),
@@ -34,16 +34,17 @@ const { createTournament, updateTournament } = await import("./tournament");
 const { getUser } = await import("@/lib/api/auth");
 const { getOwnedTournament } = await import("@/lib/actions/access");
 const { isOnlinePaymentAllowed } = await import("@/lib/payments/onlinePaymentGuard");
-const { authorizeTournamentSize } = await import("@/lib/entitlements/tournamentSizeGuard");
-const { dbCreateTournament, dbUpdateTournament } = await import("@/lib/db/tournament");
+const { resolveTournamentSizeEntitlement, consumeTournamentSizeCredit } = await import("@/lib/entitlements/tournamentSizeGuard");
+const { dbCreateTournament, dbUpdateTournament, dbDeleteTournament } = await import("@/lib/db/tournament");
 const { redirect } = await import("next/navigation");
 
 const USER = { id: "user-1", email: "alan@example.com", roles: [], isVerified: true };
 
 // max_players par défaut à 10 (palier gratuit) : les tests DO-PAYMENT-GUARD-001 ci-dessous ne
 // portent pas sur la règle des 10 joueurs (DARTSOPEN-MONETIZATION-001, testée séparément plus
-// bas) — rester dans le palier gratuit évite de déclencher authorizeTournamentSize() par effet
-// de bord et de fausser leurs assertions sur isOnlinePaymentAllowed/dbCreateTournament.
+// bas) — rester dans le palier gratuit évite de déclencher resolveTournamentSizeEntitlement()
+// par effet de bord et de fausser leurs assertions sur isOnlinePaymentAllowed/dbCreateTournament.
+// idempotency_key est requis par createTournament() depuis DARTSOPEN-MONETIZATION-002.
 function tournamentFormData(overrides: Record<string, string> = {}): FormData {
   const fd = new FormData();
   const fields: Record<string, string> = {
@@ -60,6 +61,7 @@ function tournamentFormData(overrides: Record<string, string> = {}): FormData {
     payment_mode: "ONSITE",
     scoring_mode: "ELECTRONIC",
     quick_mode: "false",
+    idempotency_key: "idem-key-1",
     ...overrides,
   };
   for (const [key, value] of Object.entries(fields)) fd.set(key, value);
@@ -70,10 +72,23 @@ beforeEach(() => {
   vi.mocked(getUser).mockReset().mockResolvedValue(USER as never);
   vi.mocked(getOwnedTournament).mockReset().mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
   vi.mocked(isOnlinePaymentAllowed).mockReset();
-  vi.mocked(authorizeTournamentSize).mockReset();
+  vi.mocked(resolveTournamentSizeEntitlement).mockReset();
+  vi.mocked(consumeTournamentSizeCredit).mockReset();
   vi.mocked(dbCreateTournament).mockReset().mockResolvedValue({ id: "tournament-1" } as never);
   vi.mocked(dbUpdateTournament).mockReset().mockResolvedValue({} as never);
+  vi.mocked(dbDeleteTournament).mockReset().mockResolvedValue(undefined as never);
   vi.mocked(redirect).mockClear();
+});
+
+describe("createTournament — idempotency_key (DARTSOPEN-MONETIZATION-002, audit DO-AUD-001/DO-AUD-002)", () => {
+  it("refuse une soumission sans idempotency_key (jamais un contournement possible via appel direct)", async () => {
+    const fd = tournamentFormData({ idempotency_key: "" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(dbCreateTournament).not.toHaveBeenCalled();
+  });
 });
 
 describe("createTournament — DO-PAYMENT-GUARD-001", () => {
@@ -214,28 +229,18 @@ describe("updateTournament — DO-PAYMENT-GUARD-001", () => {
   });
 });
 
-describe("createTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs)", () => {
+describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 joueurs)", () => {
   it("FREE : 10 joueurs acceptés sans aucune vérification d'entitlement", async () => {
     const fd = tournamentFormData({ max_players: "10" });
 
     await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
 
-    expect(authorizeTournamentSize).not.toHaveBeenCalled();
+    expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
     expect(dbCreateTournament).toHaveBeenCalledTimes(1);
   });
 
-  it("FREE : plus de 10 joueurs refusé sans abonnement ni crédit", async () => {
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: false, reason: "NO_ENTITLEMENT" });
-    const fd = tournamentFormData({ max_players: "16" });
-
-    const result = await createTournament(undefined, fd);
-
-    expect(result?.error).toBeDefined();
-    expect(dbCreateTournament).not.toHaveBeenCalled();
-  });
-
-  it("sans organisation liée : plus de 10 joueurs refusé avec un message orientant vers la liaison + l'achat", async () => {
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: false, reason: "NO_ORGANIZATION" });
+  it("sans organisation liée : plus de 10 joueurs refusé avec un message orientant vers la liaison + l'achat, jamais de création locale", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "NONE", reason: "NO_ORGANIZATION" });
     const fd = tournamentFormData({ max_players: "16" });
 
     const result = await createTournament(undefined, fd);
@@ -244,37 +249,85 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs
     expect(dbCreateTournament).not.toHaveBeenCalled();
   });
 
-  it("contournement par appel direct de la Server Action avec maxPlayers=64 sans entitlement (mission §11) refusé", async () => {
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: false, reason: "NO_ENTITLEMENT" });
-    const fd = tournamentFormData({ max_players: "64" });
-
-    const result = await createTournament(undefined, fd);
-
-    expect(result?.error).toBeDefined();
-    expect(dbCreateTournament).not.toHaveBeenCalled();
-  });
-
-  it("SUBSCRIPTION/CREDIT : plus de 10 joueurs accepté quand authorizeTournamentSize autorise", async () => {
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: true });
+  it("SUBSCRIPTION : plus de 10 joueurs accepté sans jamais consommer de crédit", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
     const fd = tournamentFormData({ max_players: "32" });
 
     await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
 
     expect(dbCreateTournament).toHaveBeenCalledTimes(1);
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
   });
 
-  it("aucune écriture partielle : dbCreateTournament jamais appelé après un refus d'entitlement", async () => {
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: false, reason: "NO_ENTITLEMENT" });
+  it("CREDIT : le tournoi est créé localement AVANT toute tentative de consommation du crédit (audit DO-AUD-001, 'création locale intermédiaire + confirmation')", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(true);
     const fd = tournamentFormData({ max_players: "16" });
 
-    await createTournament(undefined, fd);
+    const callOrder: string[] = [];
+    vi.mocked(dbCreateTournament).mockImplementation(async () => {
+      callOrder.push("create");
+      return { id: "tournament-1" } as never;
+    });
+    vi.mocked(consumeTournamentSizeCredit).mockImplementation(async () => {
+      callOrder.push("consume");
+      return true;
+    });
 
-    expect(dbCreateTournament).not.toHaveBeenCalled();
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(callOrder).toEqual(["create", "consume"]);
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "idem-key-1");
+  });
+
+  it("CREDIT : la clé d'idempotence du formulaire sert de référence de consommation (jamais l'id auto-généré du tournoi)", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(true);
+    const fd = tournamentFormData({ max_players: "16", idempotency_key: "stable-key-xyz" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "stable-key-xyz");
+  });
+
+  it("CREDIT indisponible : le tournoi créé localement est retiré (rollback), aucune perte silencieuse d'un tournoi non entitled", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(false);
+    vi.mocked(dbCreateTournament).mockResolvedValue({ id: "tournament-created" } as never);
+    const fd = tournamentFormData({ max_players: "16" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(dbCreateTournament).toHaveBeenCalledTimes(1);
+    expect(dbDeleteTournament).toHaveBeenCalledWith("tournament-created");
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("erreur de création locale : jamais de tentative de consommation du crédit (audit DO-AUD-001, aucune perte de crédit si la création échoue)", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(dbCreateTournament).mockRejectedValue(new Error("db down"));
+    const fd = tournamentFormData({ max_players: "16" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
+  });
+
+  it("contournement par appel direct de la Server Action avec maxPlayers=64 sans entitlement (mission §11) refusé", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(false);
+    const fd = tournamentFormData({ max_players: "64" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
     expect(redirect).not.toHaveBeenCalled();
   });
 });
 
-describe("updateTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs)", () => {
+describe("updateTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 joueurs)", () => {
   it("ne re-vérifie jamais un tournoi déjà >10 dont la valeur reste inchangée (ne casse jamais un tournoi existant, mission §12/§15)", async () => {
     vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 32 } as never);
     const fd = tournamentFormData({ max_players: "32" });
@@ -282,7 +335,7 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs
 
     const result = await updateTournament(undefined, fd);
 
-    expect(authorizeTournamentSize).not.toHaveBeenCalled();
+    expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
     expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
   });
@@ -294,13 +347,13 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs
 
     const result = await updateTournament(undefined, fd);
 
-    expect(authorizeTournamentSize).not.toHaveBeenCalled();
+    expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
   });
 
   it("contournement 'créer à 10 puis modifier à 64' (mission §2/§11) refusé sans entitlement", async () => {
     vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: false, reason: "NO_ENTITLEMENT" });
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "NONE", reason: "NO_ORGANIZATION" });
     const fd = tournamentFormData({ max_players: "64" });
     fd.set("tournament_id", "tournament-1");
 
@@ -310,16 +363,44 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs
     expect(dbUpdateTournament).not.toHaveBeenCalled();
   });
 
-  it("une augmentation réelle au-delà de 10 est acceptée quand authorizeTournamentSize autorise", async () => {
+  it("une augmentation réelle au-delà de 10 est acceptée via abonnement, sans jamais consommer de crédit", async () => {
     vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
-    vi.mocked(authorizeTournamentSize).mockResolvedValue({ allowed: true });
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
     const fd = tournamentFormData({ max_players: "64" });
     fd.set("tournament_id", "tournament-1");
 
     const result = await updateTournament(undefined, fd);
 
     expect(result).toBeUndefined();
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
     expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it("une augmentation réelle au-delà de 10 est acceptée via crédit, en utilisant l'id stable du tournoi comme référence", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(true);
+    const fd = tournamentFormData({ max_players: "64" });
+    fd.set("tournament_id", "tournament-1");
+
+    const result = await updateTournament(undefined, fd);
+
+    expect(result).toBeUndefined();
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "tournament-1");
+    expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it("crédit refusé à la modification : dbUpdateTournament jamais appelé", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(false);
+    const fd = tournamentFormData({ max_players: "64" });
+    fd.set("tournament_id", "tournament-1");
+
+    const result = await updateTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(dbUpdateTournament).not.toHaveBeenCalled();
   });
 
   it("réduire un tournoi de 64 à 10 ne consomme jamais de crédit (retour dans le palier gratuit)", async () => {
@@ -329,7 +410,7 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001 (règle des 10 joueurs
 
     const result = await updateTournament(undefined, fd);
 
-    expect(authorizeTournamentSize).not.toHaveBeenCalled();
+    expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
   });
 });

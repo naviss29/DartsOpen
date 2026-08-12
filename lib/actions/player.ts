@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  dbAddRegistration,
+  dbReserveRegistrationSlot,
   dbDeleteRegistration,
   dbEraseRegistration,
   dbGetTournament,
@@ -76,16 +76,23 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   // playerEmail vide ("") = inscription mode rapide sans adresse email
   const playerEmail = parsed.data.player_email || "";
 
-  const reg = await dbAddRegistration(parsed.data.tournament_id, {
+  // DARTSOPEN-MONETIZATION-002 : un ajout manuel par l'organisateur occupe une place tout autant
+  // qu'une inscription publique — même garde de capacité atomique (aucun tournoi ne peut
+  // dépasser max_players, quel que soit le canal d'inscription).
+  const reg = await dbReserveRegistrationSlot(parsed.data.tournament_id, tournament.max_players, playersPerTeam, {
     playerName: parsed.data.player_name,
     playerEmail,
     playerPhone: parsed.data.player_phone ?? null,
     playerNames,
     platformFeeCents: PLATFORM_FEE_CENTS * playersPerTeam,
     status: "PAID",
-  }).catch(() => null);
+  }).catch((err) => {
+    console.error('[addPlayer] dbReserveRegistrationSlot:', err);
+    return undefined;
+  });
 
-  if (!reg) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
+  if (reg === undefined) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
+  if (reg === null) return { error: "Ce tournoi est complet.", fields: rawFields, ts: Date.now() };
 
   // Confirmation email uniquement si une adresse a été fournie (pas en mode rapide)
   if (playerEmail) {

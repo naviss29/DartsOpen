@@ -79,10 +79,16 @@ async function StripeConnectSection({ slug }: { slug: string }) {
   // (.catch(() => undefined) sans log) et affichait "non opérationnel" même pour une
   // organisation dont Stripe Connect l'était réellement (constaté via la page Stripe de
   // BSsite, qui appelle ce même endpoint JWT). getPaymentAuthorization() est cet endpoint.
-  const status = await getPaymentAuthorization(slug) ?? undefined;
+  //
+  // DARTSOPEN-MONETIZATION-002 (audit priorité 4) : `?? undefined` puis `status?.canReceivePayments`
+  // assimilait silencieusement un échec de lecture (authorization === null, ex. jeton expiré,
+  // réseau) au même état que "Stripe Connect réellement non opérationnel" — exactement la
+  // confusion à l'origine du message erroné constaté en production. Distingue maintenant
+  // explicitement les trois cas.
+  const authorization = await getPaymentAuthorization(slug);
   const stripeUrl = `${BSSITE_URL}/dashboard/organisations/${slug}/stripe`;
 
-  if (status?.canReceivePayments) {
+  if (authorization?.canReceivePayments) {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -96,6 +102,27 @@ async function StripeConnectSection({ slug }: { slug: string }) {
         <div className="flex items-center gap-4">
           <Button href={stripeUrl} variant="secondary">
             Gérer Stripe Connect
+          </Button>
+          <UnlinkButton />
+        </div>
+      </div>
+    );
+  }
+
+  if (authorization === null) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-brand-dark">Organisation : <strong>{slug}</strong></p>
+          <Pill tone="neutral">Statut momentanément indisponible</Pill>
+        </div>
+        <Alert tone="info">
+          Impossible de vérifier le statut Stripe Connect pour le moment. Rechargez la page dans
+          quelques instants — si votre compte est déjà opérationnel, vous n&apos;avez rien à faire.
+        </Alert>
+        <div className="flex items-center gap-4">
+          <Button href={stripeUrl} variant="secondary">
+            Voir sur BApps Studio
           </Button>
           <UnlinkButton />
         </div>

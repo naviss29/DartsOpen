@@ -1,14 +1,22 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { Fragment, useActionState, useState } from "react";
 import { createTournament } from "@/lib/actions/tournament";
 import { Alert, Card, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 import { FREE_TIER_MAX_PLAYERS } from "@/lib/entitlements/constants";
+import { DEFAULT_MAX_PLAYERS, DEFAULT_NB_POOLS, DEFAULT_NB_BOARDS } from "@/lib/tournament/defaults";
+import type { StripeConnectStatus } from "@/lib/payments/onlinePaymentGuard";
 
 interface Props {
-  /** État Stripe Connect de l'organisation courante — recalculé serveur, jamais un booléen client (DO-PAYMENT-GUARD-001). */
-  canReceivePayments: boolean;
+  /**
+   * État Stripe Connect de l'organisation courante — recalculé serveur, jamais un booléen
+   * client (DO-PAYMENT-GUARD-001). Trois états distincts depuis DARTSOPEN-MONETIZATION-002
+   * (audit priorité 4) : INDETERMINATE (échec/état inconnu côté SterPlatform) n'est jamais
+   * assimilé silencieusement à NOT_OPERATIONAL — le paiement en ligne reste indisponible dans
+   * les deux cas (repli prudent), mais le message affiché diffère.
+   */
+  stripeConnectStatus: StripeConnectStatus;
   stripeConnectUrl: string;
   /** Droits DartsOpen de l'organisation courante — recalculés serveur (DARTSOPEN-MONETIZATION-001), jamais déduits côté client. */
   hasActiveSubscription: boolean;
@@ -18,7 +26,7 @@ interface Props {
 }
 
 export function TournamentForm({
-  canReceivePayments,
+  stripeConnectStatus,
   stripeConnectUrl,
   hasActiveSubscription,
   availableCredits,
@@ -27,14 +35,21 @@ export function TournamentForm({
 }: Props) {
   const [state, action, isPending] = useActionState(createTournament, undefined);
   const [quickMode, setQuickMode] = useState(state?.fields?.quick_mode === "true");
-  const [maxPlayers, setMaxPlayers] = useState(state?.fields?.max_players ?? "16");
+  const [maxPlayers, setMaxPlayers] = useState(state?.fields?.max_players ?? String(DEFAULT_MAX_PLAYERS));
   const [entryFee, setEntryFee] = useState(state?.fields?.entry_fee ?? "10");
+  // DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — générée une seule fois à
+  // l'instanciation du formulaire, jamais régénérée entre deux soumissions (double-clic, relance
+  // réseau après échec) : c'est ce qui rend la consommation d'un crédit tournoi réellement
+  // idempotente côté serveur (lib/actions/tournament.ts).
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const today = new Date().toISOString().split("T")[0];
   const needsEntitlement = Number(maxPlayers) > FREE_TIER_MAX_PLAYERS && !hasActiveSubscription && availableCredits === 0;
+  const canReceivePayments = stripeConnectStatus === "OPERATIONAL";
 
   return (
     <form action={action} className="space-y-6">
+      <input type="hidden" name="idempotency_key" value={idempotencyKey} />
       {state?.error && <Alert tone="error">{state.error}</Alert>}
 
       {/* Mode tournoi rapide */}
@@ -98,15 +113,45 @@ export function TournamentForm({
 
           {quickMode ? (
             /* Mode rapide : seulement nb joueurs et nb cibles */
-            <>
+            <Fragment key="quick-mode-fields">
               <div className="grid grid-cols-2 gap-4">
-                <FormField label="Nombre de joueurs max" id="max_players" error={state?.errors?.max_players?.[0]}>
-                  <Input id="max_players" name="max_players" type="number" min="2" max="512" defaultValue={state?.fields?.max_players ?? "32"} required />
+                <FormField
+                  label="Nombre de joueurs max"
+                  id="max_players"
+                  error={state?.errors?.max_players?.[0]}
+                  hint={`Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
+                >
+                  <Input
+                    id="max_players"
+                    name="max_players"
+                    type="number"
+                    min="2"
+                    max="512"
+                    value={maxPlayers}
+                    onChange={(e) => setMaxPlayers(e.target.value)}
+                    required
+                  />
                 </FormField>
                 <FormField label="Nombre de cibles disponibles" id="nb_boards" error={state?.errors?.nb_boards?.[0]}>
-                  <Input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "4"} required />
+                  <Input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? String(DEFAULT_NB_BOARDS)} required />
                 </FormField>
               </div>
+              {needsEntitlement && (
+                <Alert tone="info">
+                  <p className="font-medium">Plus de {FREE_TIER_MAX_PLAYERS} joueurs nécessite un accès payant DartsOpen.</p>
+                  <p className="mt-1">
+                    Achetez un{" "}
+                    <a href={creditPurchaseUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                      crédit tournoi (4,90€, valable pour ce tournoi)
+                    </a>{" "}
+                    ou souscrivez un{" "}
+                    <a href={subscriptionUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                      abonnement DartsOpen (6,90€/mois ou 69€/an)
+                    </a>{" "}
+                    depuis BApps Studio.
+                  </p>
+                </Alert>
+              )}
               {/* Valeurs forcées en mode rapide — invisibles pour l'organisateur */}
               <input type="hidden" name="entry_fee" value="0" />
               <input type="hidden" name="payment_mode" value="ONSITE" />
@@ -118,10 +163,10 @@ export function TournamentForm({
               <p className="text-xs text-brand-turquoise">
                 Manches automatiques (501 → Cricket → 701 selon la phase) · Inscriptions sur place · Gratuit
               </p>
-            </>
+            </Fragment>
           ) : (
             /* Mode standard : tous les champs */
-            <>
+            <Fragment key="standard-mode-fields">
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   label="Nombre de joueurs max"
@@ -197,13 +242,21 @@ export function TournamentForm({
                 ) : (
                   <>
                     <input type="hidden" name="payment_mode" value="ONSITE" />
-                    <Alert tone="info">
-                      Les droits d&apos;inscription seront réglés sur place.{" "}
-                      <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                        Configurez Stripe Connect dans BApps Studio
-                      </a>{" "}
-                      pour proposer le paiement en ligne à l&apos;avenir.
-                    </Alert>
+                    {stripeConnectStatus === "INDETERMINATE" ? (
+                      <Alert tone="info">
+                        Statut Stripe Connect momentanément indisponible — les droits d&apos;inscription
+                        seront réglés sur place pour l&apos;instant. Rechargez la page dans quelques
+                        instants pour réessayer le paiement en ligne.
+                      </Alert>
+                    ) : (
+                      <Alert tone="info">
+                        Les droits d&apos;inscription seront réglés sur place.{" "}
+                        <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                          Configurez Stripe Connect dans BApps Studio
+                        </a>{" "}
+                        pour proposer le paiement en ligne à l&apos;avenir.
+                      </Alert>
+                    )}
                   </>
                 )
               )}
@@ -211,10 +264,10 @@ export function TournamentForm({
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField label="Nombre de poules" id="nb_pools" error={state?.errors?.nb_pools?.[0]}>
-                  <Input id="nb_pools" name="nb_pools" type="number" min="1" max="64" defaultValue={state?.fields?.nb_pools ?? "1"} required />
+                  <Input id="nb_pools" name="nb_pools" type="number" min="1" max="64" defaultValue={state?.fields?.nb_pools ?? String(DEFAULT_NB_POOLS)} required />
                 </FormField>
                 <FormField label="Nombre de cibles disponibles" id="nb_boards" error={state?.errors?.nb_boards?.[0]}>
-                  <Input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? "2"} required />
+                  <Input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? String(DEFAULT_NB_BOARDS)} required />
                 </FormField>
               </div>
 
@@ -266,7 +319,7 @@ export function TournamentForm({
               <p className="text-xs text-brand-text-secondary">
                 Les manches (type de jeu, entrée, sortie) seront configurées après la création du tournoi.
               </p>
-            </>
+            </Fragment>
           )}
         </Card>
       </section>

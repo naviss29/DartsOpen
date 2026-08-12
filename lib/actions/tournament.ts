@@ -15,7 +15,8 @@ import {
 import { getOwnedTournament } from "@/lib/actions/access";
 import { isOnlinePaymentAllowed, wantsOnlinePayment, ONLINE_PAYMENT_BLOCKED_MESSAGE } from "@/lib/payments/onlinePaymentGuard";
 import {
-  authorizeTournamentSize,
+  resolveTournamentSizeEntitlement,
+  consumeTournamentSizeCredit,
   requiresEntitlementCheck,
   TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION,
   TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT,
@@ -104,26 +105,61 @@ export async function createTournament(prevState: TournamentState, formData: For
     }
   }
 
-  // DARTSOPEN-MONETIZATION-001 : au-delà de 10 joueurs, un abonnement actif ou un crédit
-  // tournoi est requis — vérifié/consommé ici, avant toute écriture, jamais après. L'id du
-  // tournoi est généré ici (plutôt que laissé à Prisma) pour servir de référence stable et
-  // idempotente à la consommation du crédit, identique à celle réutilisée par updateTournament.
-  const tournamentId = crypto.randomUUID();
-  if (requiresEntitlementCheck(parsed.data.max_players, 0)) {
-    const authorization = await authorizeTournamentSize(user.id, tournamentId);
-    if (!authorization.allowed) {
-      const message = authorization.reason === "NO_ORGANIZATION"
-        ? TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION
-        : TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT;
-      return { error: message, fields: raw, ts: Date.now() };
-    }
+  // DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — clé d'idempotence stable générée
+  // une seule fois côté client (TournamentForm.tsx, à l'instanciation du formulaire, jamais
+  // régénérée par requête) : un double-clic ou une relance réseau soumet la même clé, jamais une
+  // nouvelle. Remplace l'ancien crypto.randomUUID() généré ici à chaque invocation, qui rendait
+  // toute tentative de consommation de crédit non idempotente d'une requête à l'autre.
+  const idempotencyKey = (formData.get("idempotency_key") as string | null)?.trim() ?? "";
+  if (!idempotencyKey) {
+    return { error: "Requête invalide — rechargez la page et réessayez.", fields: raw, ts: Date.now() };
   }
 
-  const tournament = await dbCreateTournament(user.id, parsed.data, tournamentId).catch((err) => {
+  // DARTSOPEN-MONETIZATION-001/002 : au-delà de 10 joueurs, un abonnement actif ou un crédit
+  // tournoi est requis. resolveTournamentSizeEntitlement() est une lecture pure (jamais de
+  // consommation) : elle s'exécute avant toute écriture, mais la consommation elle-même
+  // (mutation irréversible côté SterPlatform) n'a lieu qu'après la création locale du tournoi
+  // ci-dessous — "le crédit ne doit devenir définitivement consommé que lorsque le tournoi
+  // existe réellement" (stratégie "création locale intermédiaire + confirmation", audit
+  // DO-AUD-001 : aucune perte de crédit si la création locale échoue, puisqu'aucun crédit n'a
+  // encore été touché à ce stade).
+  let creditToConsume: { organizationSlug: string } | null = null;
+  if (requiresEntitlementCheck(parsed.data.max_players, 0)) {
+    const entitlement = await resolveTournamentSizeEntitlement(user.id);
+    if (entitlement.mode === "NONE") {
+      return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION, fields: raw, ts: Date.now() };
+    }
+    if (entitlement.mode === "CREDIT_ATTEMPT") {
+      creditToConsume = { organizationSlug: entitlement.organizationSlug };
+    }
+    // mode === "SUBSCRIPTION" : l'abonnement suffit déjà, aucun crédit à consommer.
+  }
+
+  // Création locale — idempotente sur idempotencyKey (dbCreateTournament) : un double-clic/une
+  // relance renvoie la tournée déjà créée par la première tentative au lieu d'en créer une
+  // seconde (audit DO-AUD-002).
+  const tournament = await dbCreateTournament(user.id, parsed.data, idempotencyKey).catch((err) => {
     console.error('[createTournament]', err);
     return null;
   });
   if (!tournament) return { error: "Erreur lors de la création du tournoi.", fields: raw };
+
+  if (creditToConsume) {
+    // Consommation — idempotente sur idempotencyKey elle-même (SterPlatform) : rejouer la même
+    // clé (retry après un succès déjà obtenu) renvoie le crédit déjà consommé, n'en consomme
+    // jamais un second (audit DO-AUD-002, "2 crédits disponibles + double soumission → pas de
+    // double création involontaire").
+    const consumed = await consumeTournamentSizeCredit(creditToConsume.organizationSlug, idempotencyKey);
+    if (!consumed) {
+      // Aucun crédit n'a été consommé (SterPlatform l'a refusé) : le tournoi qu'on vient de
+      // créer localement n'a donc jamais été confirmé — on le retire plutôt que de laisser un
+      // tournoi >10 joueurs exister sans entitlement réel.
+      await dbDeleteTournament(tournament.id).catch((err) => {
+        console.error('[createTournament] rollback (crédit indisponible) échoué:', tournament.id, err);
+      });
+      return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT, fields: raw, ts: Date.now() };
+    }
+  }
 
   revalidatePath("/tournaments");
   redirect(`/tournaments/${tournament.id}/activate`);
@@ -151,17 +187,23 @@ export async function updateTournament(prevState: TournamentState, formData: For
     }
   }
 
-  // DARTSOPEN-MONETIZATION-001 : ne re-vérifie que si max_players augmente réellement au-delà
-  // de 10 par rapport à la valeur déjà en base — jamais pour une valeur inchangée ou réduite,
-  // pour ne jamais casser un tournoi >10 déjà créé avant cette règle (mission §12/§15). Empêche
-  // aussi le contournement "créer à 10 puis modifier à 32" (mission §2/§11).
+  // DARTSOPEN-MONETIZATION-001/002 : ne re-vérifie que si max_players augmente réellement
+  // au-delà de 10 par rapport à la valeur déjà en base — jamais pour une valeur inchangée ou
+  // réduite, pour ne jamais casser un tournoi >10 déjà créé avant cette règle (mission §12/§15).
+  // Empêche aussi le contournement "créer à 10 puis modifier à 64" (mission §2/§11). La
+  // tournée existe déjà durablement ici (contrairement à la création) : `tournamentId` (l'id
+  // réel du tournoi, stable d'une relance à l'autre par construction) sert directement de
+  // référence idempotente, sans clé séparée à générer.
   if (requiresEntitlementCheck(parsed.data.max_players, tournament.max_players)) {
-    const authorization = await authorizeTournamentSize(tournament.association_id, tournamentId);
-    if (!authorization.allowed) {
-      const message = authorization.reason === "NO_ORGANIZATION"
-        ? TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION
-        : TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT;
-      return { error: message, fields: raw, ts: Date.now() };
+    const entitlement = await resolveTournamentSizeEntitlement(tournament.association_id);
+    if (entitlement.mode === "NONE") {
+      return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION, fields: raw, ts: Date.now() };
+    }
+    if (entitlement.mode === "CREDIT_ATTEMPT") {
+      const consumed = await consumeTournamentSizeCredit(entitlement.organizationSlug, tournamentId);
+      if (!consumed) {
+        return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT, fields: raw, ts: Date.now() };
+      }
     }
   }
 

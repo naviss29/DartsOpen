@@ -76,13 +76,23 @@ model Tournament {
   maxPlayers         Int              @map("max_players")
   entryFee           Int              @default(0) @map("entry_fee")
   nbPools            Int              @default(1) @map("nb_pools")
-  nbBoards           Int              @default(1) @map("nb_boards")
+  nbBoards           Int              @default(2) @map("nb_boards")
   advancementPerPool Int              @default(1) @map("advancement_per_pool")
   playersPerTeam     Int              @default(1) @map("players_per_team")
   registrationMode   RegistrationMode @default(ONLINE) @map("registration_mode")
   paymentMode        PaymentMode      @default(ONSITE) @map("payment_mode")
   scoringMode        ScoringMode      @default(ELECTRONIC) @map("scoring_mode")
   quickMode          Boolean          @default(false) @map("quick_mode")
+  /**
+   * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — stable idempotency key generated
+   * once client-side per form instance (not regenerated per request/retry), used both to
+   * deduplicate the local row itself (createTournament() upserts on this key: a double-click or
+   * network retry with the same key never creates a second tournament) and as the SterPlatform
+   * `reference` for tournament-credit consumption (lib/entitlements/tournamentSizeGuard.ts) —
+   * decoupled from this row's own `id`, which used to be freshly regenerated on every request,
+   * defeating idempotence entirely.
+   */
+  idempotencyKey     String           @unique @map("idempotency_key")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
@@ -124,6 +134,14 @@ model Registration {
   feeCollected     Boolean            @default(false) @map("fee_collected")
   seeded           Boolean            @default(false)
   lives            Int                @default(2)
+  /**
+   * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-003/DO-AUD-004/DO-AUD-009) — only ever set for a
+   * PENDING registration awaiting online payment: the slot it reserves stops counting toward
+   * tournament capacity once this timestamp passes (lazy expiry, see
+   * lib/db/tournament.ts::dbReserveRegistrationSlot()), and is never set at all for a
+   * PAID registration (free or confirmed onsite — occupies its slot permanently, no expiry).
+   */
+  reservationExpiresAt DateTime?       @map("reservation_expires_at")
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tournament  Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

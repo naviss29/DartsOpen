@@ -1,6 +1,29 @@
 import { prisma } from "./client";
+import { Prisma } from "../generated/prisma/client";
 import type { BracketType, MatchStatus, RegistrationStatus, TournamentStatus } from "../generated/prisma/client";
 import { assertValidTransition } from "../utils/tournamentStatus";
+
+/**
+ * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — vérifie qu'une erreur P2002
+ * porte bien sur `idempotency_key`, quelle que soit la forme de `meta` renvoyée. Avec
+ * `@prisma/adapter-pg` (Prisma 7, driver adapters), `meta.target` n'existe pas : le champ en
+ * conflit est niché sous `meta.driverAdapterError.cause.constraint.fields` — une forme
+ * différente du classique `meta.target` du query engine intégré. Un test PostgreSQL
+ * concurrent réel (lib/db/tournament.concurrency.test.ts) a montré que ne vérifier que
+ * `meta.target` laisse passer un vrai P2002 concurrent tel quel (throw non géré) au lieu de
+ * retourner le tournoi du gagnant de la course.
+ */
+function isIdempotencyKeyConflict(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
+    return false;
+  }
+  const meta = err.meta as
+    | { target?: string[]; driverAdapterError?: { cause?: { constraint?: { fields?: string[] } } } }
+    | undefined;
+  if (meta?.target?.includes("idempotency_key")) return true;
+  if (meta?.driverAdapterError?.cause?.constraint?.fields?.includes("idempotency_key")) return true;
+  return false;
+}
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
@@ -21,6 +44,7 @@ function mapTournament(t: {
   paymentMode: string;
   scoringMode: string;
   quickMode: boolean;
+  idempotencyKey: string;
   createdAt: Date;
   rounds?: ReturnType<typeof mapRound>[];
 }) {
@@ -290,6 +314,16 @@ export async function dbGetTournamentPublic(id: string) {
   return dbGetTournament(id);
 }
 
+/**
+ * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — `idempotencyKey` is required and
+ * must be stable across retries of the same user gesture (generated once client-side, not
+ * regenerated per request — see components/tournament/TournamentForm.tsx). A double-click or
+ * network retry that resubmits the identical key must never create a second tournament: the
+ * unique constraint on `idempotency_key` is the actual guarantee (this function's `create()`
+ * losing the race to a concurrent identical submission is caught explicitly below and returns
+ * the winner's row instead of throwing), the upfront `findUnique` is just the fast, common-case
+ * path that avoids hitting the constraint at all for a sequential retry.
+ */
 export async function dbCreateTournament(userId: string, data: {
   name: string;
   date: string;
@@ -304,28 +338,49 @@ export async function dbCreateTournament(userId: string, data: {
   payment_mode: string;
   scoring_mode: string;
   quick_mode?: boolean;
-}, id?: string) {
-  const t = await prisma.tournament.create({
-    data: {
-      ...(id !== undefined && { id }),
-      userId,
-      name: data.name,
-      date: new Date(data.date),
-      location: data.location,
-      maxPlayers: data.max_players,
-      entryFee: data.entry_fee,
-      nbPools: data.nb_pools,
-      nbBoards: data.nb_boards,
-      advancementPerPool: data.advancement_per_pool,
-      playersPerTeam: data.players_per_team,
-      registrationMode: data.registration_mode as "ONLINE" | "ONSITE",
-      paymentMode: data.payment_mode as "ONLINE" | "ONSITE",
-      scoringMode: data.scoring_mode as "ELECTRONIC" | "TRADITIONAL",
-      quickMode: data.quick_mode ?? false,
-    },
+}, idempotencyKey: string) {
+  const existing = await prisma.tournament.findUnique({
+    where: { idempotencyKey },
     include: { rounds: { select: roundSelect } },
   });
-  return mapTournament({ ...t, rounds: [] });
+  if (existing) {
+    return mapTournament({ ...existing, rounds: [] });
+  }
+
+  try {
+    const t = await prisma.tournament.create({
+      data: {
+        userId,
+        idempotencyKey,
+        name: data.name,
+        date: new Date(data.date),
+        location: data.location,
+        maxPlayers: data.max_players,
+        entryFee: data.entry_fee,
+        nbPools: data.nb_pools,
+        nbBoards: data.nb_boards,
+        advancementPerPool: data.advancement_per_pool,
+        playersPerTeam: data.players_per_team,
+        registrationMode: data.registration_mode as "ONLINE" | "ONSITE",
+        paymentMode: data.payment_mode as "ONLINE" | "ONSITE",
+        scoringMode: data.scoring_mode as "ELECTRONIC" | "TRADITIONAL",
+        quickMode: data.quick_mode ?? false,
+      },
+      include: { rounds: { select: roundSelect } },
+    });
+    return mapTournament({ ...t, rounds: [] });
+  } catch (err) {
+    if (isIdempotencyKeyConflict(err)) {
+      // Lost a race against a concurrent identical submission (double-click) — the winner
+      // already created this exact tournament between our findUnique above and this insert.
+      const winner = await prisma.tournament.findUniqueOrThrow({
+        where: { idempotencyKey },
+        include: { rounds: { select: roundSelect } },
+      });
+      return mapTournament({ ...winner, rounds: [] });
+    }
+    throw err;
+  }
 }
 
 export async function dbUpdateTournament(id: string, data: {
@@ -452,6 +507,74 @@ export async function dbAddRegistration(tournamentId: string, data: {
   return mapRegistration(r);
 }
 
+/**
+ * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-003/DO-AUD-004/DO-AUD-009) — atomically checks
+ * capacity and inserts a registration for a single tournament, replacing the previous
+ * count-then-insert pattern (two separate queries, never atomic — two concurrent requests for
+ * the last slot could both pass the check).
+ *
+ * `SELECT ... FOR UPDATE` locks the tournament row for the transaction's duration, serializing
+ * concurrent reservation attempts *for this tournament* (never a global lock — unrelated
+ * tournaments never contend with each other): a second concurrent transaction attempting the
+ * same lock blocks until the first commits, then re-reads a count that already includes the
+ * first's insert.
+ *
+ * A slot is occupied by a PAID registration (free or confirmed onsite/online — permanent, never
+ * expires) or by a PENDING registration whose `reservationExpiresAt` hasn't passed yet (online
+ * payment in progress — see registration.ts). An expired PENDING reservation stops occupying its
+ * slot the instant its expiry passes, with no separate cleanup job required (DO-AUD-009: never a
+ * permanent orphan, and this lazy-expiry check is what makes it "explicitly expiring").
+ *
+ * Returns the new registration, or `null` if the tournament is full.
+ */
+export async function dbReserveRegistrationSlot(
+  tournamentId: string,
+  maxPlayers: number,
+  playersPerTeam: number,
+  data: {
+    playerName: string;
+    playerEmail: string;
+    playerPhone?: string | null;
+    playerNames: string[];
+    platformFeeCents: number;
+    status: "PAID" | "PENDING";
+    reservationExpiresAt?: Date | null;
+  },
+) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM tournaments WHERE id = ${tournamentId} FOR UPDATE`;
+
+    const now = new Date();
+    const occupied = await tx.registration.count({
+      where: {
+        tournamentId,
+        OR: [
+          { status: "PAID" },
+          { status: "PENDING", reservationExpiresAt: { gt: now } },
+        ],
+      },
+    });
+
+    if (occupied * playersPerTeam >= maxPlayers) {
+      return null;
+    }
+
+    const r = await tx.registration.create({
+      data: {
+        tournamentId,
+        playerName: data.playerName,
+        playerEmail: data.playerEmail,
+        playerPhone: data.playerPhone ?? null,
+        playerNames: data.playerNames,
+        platformFeeCents: data.platformFeeCents,
+        status: data.status,
+        reservationExpiresAt: data.reservationExpiresAt ?? null,
+      },
+    });
+    return mapRegistration(r);
+  });
+}
+
 export async function dbDeleteRegistration(registrationId: string, tournamentId: string) {
   await prisma.registration.deleteMany({ where: { id: registrationId, tournamentId } });
 }
@@ -566,6 +689,26 @@ export async function dbCountRegistrations(tournamentId: string, status?: string
     where: {
       tournamentId,
       ...(status ? { status: status as RegistrationStatus } : {}),
+    },
+  });
+}
+
+/**
+ * DARTSOPEN-MONETIZATION-002 — read-only count of registrations currently occupying a slot
+ * (same definition as dbReserveRegistrationSlot()'s atomic check: PAID, or PENDING with a
+ * still-future reservationExpiresAt), for display purposes (register page). Never itself the
+ * capacity gate — a plain count-then-compare here is never atomic and isn't meant to be; the
+ * authoritative, concurrency-safe check only happens inside dbReserveRegistrationSlot()'s own
+ * transaction.
+ */
+export async function dbCountOccupiedSlots(tournamentId: string): Promise<number> {
+  return prisma.registration.count({
+    where: {
+      tournamentId,
+      OR: [
+        { status: "PAID" },
+        { status: "PENDING", reservationExpiresAt: { gt: new Date() } },
+      ],
     },
   });
 }
@@ -1178,7 +1321,9 @@ export async function dbUpdateRegistrationPaymentId(registrationId: string, ster
 export async function dbMarkRegistrationPaid(registrationId: string) {
   await prisma.registration.updateMany({
     where: { id: registrationId, status: "PENDING" },
-    data: { status: "PAID", feeCollected: true },
+    // reservationExpiresAt is only ever meaningful for a PENDING reservation (DO-AUD-003/004/009)
+    // — cleared here since a PAID registration occupies its slot permanently, never expiring.
+    data: { status: "PAID", feeCollected: true, reservationExpiresAt: null },
   });
 }
 

@@ -76,3 +76,41 @@ export async function getPaymentAuthorization(slug: string): Promise<PaymentAuth
     return null;
   }
 }
+
+/**
+ * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-005/DO-AUD-006) — `GET
+ * /api/organizations/{slug}/subscription/optional-access?product=X`, MANAGE-gated
+ * (OWNER/ADMIN) server-side. Replaces reading raw `subscriptions[]` from getMyOrganizations()
+ * for the >10-player entitlement decision: that only reflected billing status
+ * (ACTIVE/TRIALING) and never accounted for the caller's role or for OrganizationProduct
+ * governance suspension — both now computed once, server-side, by SterPlatform
+ * (`OrganizationProductService::hasEffectiveOptionalSubscriptionAccess()`), never re-derived
+ * here ("ne duplique pas la logique SterPlatform dans DartsOpen").
+ *
+ * A 403 (caller isn't OWNER/ADMIN of the linked organization) is treated identically to a
+ * genuine "no access" determination — never surfaced as an indeterminate error, since the
+ * caller's own role is a fact DartsOpen already knows it can't change by retrying.
+ */
+export async function hasOptionalSubscriptionAccess(slug: string, productKey: string): Promise<boolean> {
+  const token = await getServerToken();
+  if (!token) return false;
+
+  try {
+    const res = await apiFetch(
+      `/api/organizations/${encodeURIComponent(slug)}/subscription/optional-access?product=${encodeURIComponent(productKey)}`,
+      { cache: 'no-store' },
+      token,
+    );
+    if (!res.ok) {
+      if (res.status !== 403) {
+        console.error('[hasOptionalSubscriptionAccess] SterPlatform responded', res.status, slug);
+      }
+      return false;
+    }
+    const data = await res.json() as { accessGranted: boolean };
+    return data.accessGranted === true;
+  } catch (err) {
+    console.error('[hasOptionalSubscriptionAccess] request failed', slug, err);
+    return false;
+  }
+}

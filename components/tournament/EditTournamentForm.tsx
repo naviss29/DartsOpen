@@ -5,6 +5,7 @@ import { updateTournament } from "@/lib/actions/tournament";
 import { Alert, Card, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 import { FREE_TIER_MAX_PLAYERS } from "@/lib/entitlements/constants";
+import type { StripeConnectStatus } from "@/lib/payments/onlinePaymentGuard";
 
 interface Props {
   tournament: {
@@ -23,8 +24,12 @@ interface Props {
     scoring_mode: string;
     quick_mode: boolean;
   };
-  /** État Stripe Connect de l'organisation courante — recalculé serveur (DO-PAYMENT-GUARD-001). */
-  canReceivePayments: boolean;
+  /**
+   * État Stripe Connect de l'organisation courante — recalculé serveur (DO-PAYMENT-GUARD-001).
+   * Trois états distincts depuis DARTSOPEN-MONETIZATION-002 (audit priorité 4) — voir
+   * TournamentForm.tsx pour le détail.
+   */
+  stripeConnectStatus: StripeConnectStatus;
   stripeConnectUrl: string;
   /** Droits DartsOpen de l'organisation courante — recalculés serveur (DARTSOPEN-MONETIZATION-001), jamais déduits côté client. */
   hasActiveSubscription: boolean;
@@ -35,13 +40,14 @@ interface Props {
 
 export function EditTournamentForm({
   tournament,
-  canReceivePayments,
+  stripeConnectStatus,
   stripeConnectUrl,
   hasActiveSubscription,
   availableCredits,
   subscriptionUrl,
   creditPurchaseUrl,
 }: Props) {
+  const canReceivePayments = stripeConnectStatus === "OPERATIONAL";
   const [state, action, isPending] = useActionState(updateTournament, undefined);
   const [isOpen, setIsOpen] = useState(false);
   const [quickMode, setQuickMode] = useState(
@@ -195,13 +201,21 @@ export function EditTournamentForm({
         ) : (
           <>
             <input type="hidden" name="payment_mode" value="ONSITE" />
-            <Alert tone="info">
-              Les droits d&apos;inscription seront réglés sur place.{" "}
-              <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                Configurez Stripe Connect dans BApps Studio
-              </a>{" "}
-              pour proposer le paiement en ligne à l&apos;avenir.
-            </Alert>
+            {stripeConnectStatus === "INDETERMINATE" ? (
+              <Alert tone="info">
+                Statut Stripe Connect momentanément indisponible — les droits d&apos;inscription
+                seront réglés sur place pour l&apos;instant. Rechargez la page dans quelques
+                instants pour réessayer le paiement en ligne.
+              </Alert>
+            ) : (
+              <Alert tone="info">
+                Les droits d&apos;inscription seront réglés sur place.{" "}
+                <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+                  Configurez Stripe Connect dans BApps Studio
+                </a>{" "}
+                pour proposer le paiement en ligne à l&apos;avenir.
+              </Alert>
+            )}
           </>
         )
       )}

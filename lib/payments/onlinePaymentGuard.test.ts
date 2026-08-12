@@ -101,20 +101,41 @@ describe("isOnlinePaymentAllowed", () => {
 });
 
 describe("getOnlinePaymentUiState", () => {
-  it("reflète canReceivePayments et le slug pour l'affichage", async () => {
+  it("reflète canReceivePayments, le statut OPERATIONAL et le slug pour l'affichage", async () => {
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
     vi.mocked(getPaymentAuthorization).mockResolvedValue(paymentAuthorization() as never);
 
     const result = await getOnlinePaymentUiState("user-1");
 
-    expect(result).toEqual({ canReceivePayments: true, organizationSlug: "club-a" });
+    expect(result).toEqual({ status: "OPERATIONAL", canReceivePayments: true, organizationSlug: "club-a" });
   });
 
-  it("organizationSlug null et canReceivePayments false sans organisation liée", async () => {
+  it("statut NOT_OPERATIONAL, organizationSlug null et canReceivePayments false sans organisation liée", async () => {
     vi.mocked(dbGetOrganization).mockResolvedValue(null);
 
     const result = await getOnlinePaymentUiState("user-1");
 
-    expect(result).toEqual({ canReceivePayments: false, organizationSlug: null });
+    expect(result).toEqual({ status: "NOT_OPERATIONAL", canReceivePayments: false, organizationSlug: null });
+  });
+
+  it("statut NOT_OPERATIONAL (déterminé) quand SterPlatform répond mais le compte n'est pas opérationnel", async () => {
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(
+      paymentAuthorization({ status: "ONBOARDING_INCOMPLETE", canReceivePayments: false }) as never
+    );
+
+    const result = await getOnlinePaymentUiState("user-1");
+
+    expect(result).toEqual({ status: "NOT_OPERATIONAL", canReceivePayments: false, organizationSlug: "club-a" });
+  });
+
+  it("DARTSOPEN-MONETIZATION-002 (audit priorité 4) : statut INDETERMINATE (jamais NOT_OPERATIONAL) quand SterPlatform est injoignable", async () => {
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(null);
+
+    const result = await getOnlinePaymentUiState("user-1");
+
+    expect(result).toEqual({ status: "INDETERMINATE", canReceivePayments: false, organizationSlug: "club-a" });
+    expect(result.status).not.toBe("NOT_OPERATIONAL");
   });
 });

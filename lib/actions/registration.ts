@@ -3,14 +3,22 @@
 import { PLATFORM_FEE_CENTS } from "@/lib/platformFee";
 import {
   dbGetTournament,
-  dbCountRegistrations,
-  dbAddRegistration,
+  dbReserveRegistrationSlot,
   dbUpdateRegistrationPaymentId,
   dbGetOrganization,
 } from "@/lib/db/tournament";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
+
+/**
+ * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-009) — how long a PENDING online-payment reservation
+ * holds its slot before dbReserveRegistrationSlot()/dbCountOccupiedSlots() stop counting it.
+ * Deliberately generous relative to a typical Stripe Checkout session (a few minutes) — this is
+ * a safety net against an abandoned/failed checkout permanently blocking a slot, not a tight
+ * race with legitimate completion time.
+ */
+const RESERVATION_TTL_MINUTES = 30;
 
 export async function createRegistration(
   tournamentId: string,
@@ -28,28 +36,34 @@ export async function createRegistration(
     return { error: "Numéro de téléphone invalide (ex : 0612345678)." };
   }
 
-  const paidCount = await dbCountRegistrations(tournamentId, "PAID");
-  if (paidCount * tournament.players_per_team >= tournament.max_players) {
-    return { error: "Ce tournoi est complet." };
-  }
-
   const platformFeeCents = PLATFORM_FEE_CENTS * tournament.players_per_team;
-
-  const registration = await dbAddRegistration(tournamentId, {
-    playerName: teamName,
-    playerEmail: contactEmail,
-    playerPhone: phone,
-    playerNames,
-    platformFeeCents,
-  }).catch(() => null);
-
-  if (!registration) return { error: "Erreur lors de l'inscription." };
 
   // DARTSOPEN-MONETIZATION-001 : payment_mode est indépendant de registration_mode (mission
   // §5/§6) — un tournoi payant en payment_mode ONSITE (Stripe Connect absent, ou choix
   // explicite de l'organisateur) confirme l'inscription immédiatement, exactement comme un
   // tournoi gratuit : les droits sont réglés sur place, jamais via un checkout Stripe.
-  if (tournament.entry_fee === 0 || tournament.payment_mode !== "ONLINE") {
+  const confirmsImmediately = tournament.entry_fee === 0 || tournament.payment_mode !== "ONLINE";
+
+  if (confirmsImmediately) {
+    // DARTSOPEN-MONETIZATION-002 (audit DO-AUD-003/DO-AUD-004) : une inscription gratuite ou
+    // payée sur place occupe réellement une place dès sa création (status PAID, jamais PENDING)
+    // — vérifiée et réservée atomiquement avec la capacité du tournoi (jamais un count-then-insert
+    // séparé).
+    const registration = await dbReserveRegistrationSlot(tournamentId, tournament.max_players, tournament.players_per_team, {
+      playerName: teamName,
+      playerEmail: contactEmail,
+      playerPhone: phone,
+      playerNames,
+      platformFeeCents,
+      status: "PAID",
+    }).catch((err) => {
+      console.error('[createRegistration] dbReserveRegistrationSlot (confirmsImmediately):', err);
+      return undefined;
+    });
+
+    if (registration === undefined) return { error: "Erreur lors de l'inscription." };
+    if (registration === null) return { error: "Ce tournoi est complet." };
+
     const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
     const d = new Date(tournament.date);
     const dateFr = `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
@@ -65,9 +79,13 @@ export async function createRegistration(
     redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`);
   }
 
-  // Paiement en ligne : nécessite que l'organisateur ait lié une organisation BApps Studio
-  // avec un compte Stripe Connect opérationnel (mission DO-003 — DartsOpen ne dialogue plus
-  // jamais directement avec Stripe, uniquement avec SterPlatform).
+  // Paiement en ligne — DARTSOPEN-MONETIZATION-002 (audit priorité 6) : Connect, puis droits,
+  // puis capacité/réservation, dans cet ordre — jamais réserver une place pour un paiement qui
+  // ne pourra de toute façon jamais être initié.
+
+  // 1. Connect : nécessite que l'organisateur ait lié une organisation BApps Studio avec un
+  // compte Stripe Connect opérationnel (mission DO-003 — DartsOpen ne dialogue plus jamais
+  // directement avec Stripe, uniquement avec SterPlatform).
   const org = await dbGetOrganization(tournament.association_id);
   if (!org?.sterOrganizationSlug) {
     return { error: "Les paiements en ligne ne sont pas encore configurés pour ce tournoi. Contactez l'organisateur." };
@@ -87,6 +105,27 @@ export async function createRegistration(
     return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
   }
 
+  // 2. Capacité/réservation — atomique, avec expiration (DO-AUD-009) : si le checkout Stripe
+  // n'est jamais créé ou jamais complété (échec, abandon), cette réservation PENDING cesse
+  // d'occuper sa place dès l'expiration, sans nécessiter de nettoyage explicite ni laisser une
+  // inscription orpheline permanente.
+  const reservationExpiresAt = new Date(Date.now() + RESERVATION_TTL_MINUTES * 60 * 1000);
+  const registration = await dbReserveRegistrationSlot(tournamentId, tournament.max_players, tournament.players_per_team, {
+    playerName: teamName,
+    playerEmail: contactEmail,
+    playerPhone: phone,
+    playerNames,
+    platformFeeCents,
+    status: "PENDING",
+    reservationExpiresAt,
+  }).catch((err) => {
+    console.error('[createRegistration] dbReserveRegistrationSlot (online):', err);
+    return undefined;
+  });
+
+  if (registration === undefined) return { error: "Erreur lors de l'inscription." };
+  if (registration === null) return { error: "Ce tournoi est complet." };
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const amountCents = tournament.entry_fee * tournament.players_per_team;
 
@@ -104,6 +143,8 @@ export async function createRegistration(
 
   if (error || !checkout) {
     console.error("[registration] Échec création paiement SterPlatform:", error);
+    // La réservation reste PENDING et expirera d'elle-même (RESERVATION_TTL_MINUTES) — jamais
+    // une inscription orpheline permanente (DO-AUD-009), jamais besoin de la supprimer ici.
     return { error: "Le paiement n'a pas pu être initié. Réessayez dans quelques instants." };
   }
 

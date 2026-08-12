@@ -38,7 +38,19 @@ export function wantsOnlinePayment(data: { payment_mode: string; entry_fee: numb
   return data.payment_mode === "ONLINE" && data.entry_fee > 0;
 }
 
+/**
+ * DARTSOPEN-MONETIZATION-002 (audit priorité 4) — trois états distincts, jamais deux :
+ * OPERATIONAL et NOT_OPERATIONAL sont deux déterminations réelles faites par SterPlatform ;
+ * INDETERMINATE signifie que SterPlatform n'a pas pu être consulté (réseau, jeton, timeout —
+ * voir getPaymentAuthorization(), qui journalise systématiquement la cause réelle) et ne doit
+ * JAMAIS être assimilé silencieusement à "pas de Stripe Connect" — c'est précisément la
+ * confusion à l'origine du message erroné constaté en production pour une organisation dont
+ * Stripe Connect était en réalité opérationnel.
+ */
+export type StripeConnectStatus = "OPERATIONAL" | "NOT_OPERATIONAL" | "INDETERMINATE";
+
 export type OnlinePaymentUiState = {
+  status: StripeConnectStatus;
   canReceivePayments: boolean;
   organizationSlug: string | null;
 };
@@ -47,9 +59,11 @@ export type OnlinePaymentUiState = {
  * Lecture partagée par le contrôle serveur (`isOnlinePaymentAllowed`) et l'affichage (pages
  * de création/édition de tournoi) — un seul appel à SterPlatform, jamais deux implémentations
  * du même calcul. Relit toujours l'état courant, jamais mis en cache : un échec réseau vers
- * SterPlatform est traité comme "non opérationnel" (repli prudent), jamais comme une
- * autorisation implicite — mais désormais toujours journalisé par getPaymentAuthorization()
- * elle-même, jamais silencieusement avalé (DARTSOPEN-MONETIZATION-001).
+ * SterPlatform est traité comme non autorisant le paiement en ligne (repli prudent, jamais une
+ * autorisation implicite) — mais reporté comme INDETERMINATE, jamais NOT_OPERATIONAL, pour ne
+ * jamais laisser croire que Stripe Connect doit être (re)configuré alors qu'on ignore
+ * simplement son état réel (DARTSOPEN-MONETIZATION-002). Toujours journalisé par
+ * getPaymentAuthorization() elle-même, jamais silencieusement avalé.
  *
  * Utilise le JWT de la requête courante (via getPaymentAuthorization(), pas le jeton
  * serveur-à-serveur) : tous les appelants de cette fonction s'exécutent après vérification que
@@ -60,11 +74,21 @@ export type OnlinePaymentUiState = {
 export async function getOnlinePaymentUiState(userId: string): Promise<OnlinePaymentUiState> {
   const org = await dbGetOrganization(userId);
   if (!org?.sterOrganizationSlug) {
-    return { canReceivePayments: false, organizationSlug: null };
+    // Aucune organisation liée : une absence réelle et actionnable (lier une organisation dans
+    // les Paramètres), jamais un état indéterminé — pas la peine de réessayer.
+    return { status: "NOT_OPERATIONAL", canReceivePayments: false, organizationSlug: null };
   }
 
   const authorization = await getPaymentAuthorization(org.sterOrganizationSlug);
-  return { canReceivePayments: authorization?.canReceivePayments === true, organizationSlug: org.sterOrganizationSlug };
+  if (authorization === null) {
+    return { status: "INDETERMINATE", canReceivePayments: false, organizationSlug: org.sterOrganizationSlug };
+  }
+
+  return {
+    status: authorization.canReceivePayments ? "OPERATIONAL" : "NOT_OPERATIONAL",
+    canReceivePayments: authorization.canReceivePayments === true,
+    organizationSlug: org.sterOrganizationSlug,
+  };
 }
 
 export async function isOnlinePaymentAllowed(userId: string): Promise<OnlinePaymentAuthorization> {
@@ -72,6 +96,9 @@ export async function isOnlinePaymentAllowed(userId: string): Promise<OnlinePaym
   if (!state.organizationSlug) {
     return { allowed: false, reason: "NO_ORGANIZATION" };
   }
+  // NOT_OPERATIONAL et INDETERMINATE refusent tous les deux l'écriture (repli prudent) — seule
+  // la page d'affichage distingue les deux messages, jamais la décision d'autorisation
+  // elle-même.
   if (!state.canReceivePayments) {
     return { allowed: false, reason: "STRIPE_NOT_OPERATIONAL" };
   }

@@ -189,7 +189,7 @@ export default async function TournamentDetailPage({ params }: Props) {
           <Card>
             <EditTournamentForm
               tournament={tournament}
-              canReceivePayments={paymentUiState.canReceivePayments}
+              stripeConnectStatus={paymentUiState.status}
               stripeConnectUrl={stripeConnectUrl}
               hasActiveSubscription={sizeState.hasActiveSubscription}
               availableCredits={sizeState.availableCredits}

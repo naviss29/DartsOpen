@@ -13,7 +13,7 @@ export default async function NewTournamentPage() {
   const user = await getUser();
   if (!user) redirect("/login");
 
-  const [{ canReceivePayments, organizationSlug }, sizeState] = await Promise.all([
+  const [{ status: stripeConnectStatus, organizationSlug }, sizeState] = await Promise.all([
     getOnlinePaymentUiState(user.id),
     getTournamentSizeUiState(user.id),
   ]);
@@ -30,7 +30,7 @@ export default async function NewTournamentPage() {
         </p>
       </div>
       <TournamentForm
-        canReceivePayments={canReceivePayments}
+        stripeConnectStatus={stripeConnectStatus}
         stripeConnectUrl={stripeConnectUrl}
         hasActiveSubscription={sizeState.hasActiveSubscription}
         availableCredits={sizeState.availableCredits}
