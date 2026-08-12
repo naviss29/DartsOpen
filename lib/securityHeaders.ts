@@ -27,7 +27,10 @@ export function buildSecurityHeaders(): Record<string, string> {
   const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_URL);
   const mercureOrigin = originOf(process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL);
 
-  const connectSrc = ["'self'", apiOrigin, mercureOrigin].filter(Boolean).join(" ");
+  // dédoublonné : en production, le hub Mercure est parfois proxié sous le même domaine que
+  // l'API SterPlatform (NEXT_PUBLIC_MERCURE_PUBLIC_URL et NEXT_PUBLIC_API_URL peuvent alors
+  // partager la même origine) — un CSP valide mais inutilement répété sinon.
+  const connectSrc = [...new Set(["'self'", apiOrigin, mercureOrigin].filter(Boolean))].join(" ");
   const formAction = ["'self'", apiOrigin].filter(Boolean).join(" ");
 
   const csp = [
