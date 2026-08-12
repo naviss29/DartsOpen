@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 import { ssoStartPath } from "@/lib/sso/redirect";
+import { buildSecurityHeaders } from "@/lib/securityHeaders";
 
 const TOKEN_COOKIE = 'ster_token';
 const REFRESH_COOKIE = 'ster_refresh_token';
@@ -40,7 +41,19 @@ function rateLimitResponse(request: NextRequest, retryAfterSeconds: number) {
   });
 }
 
-export default async function proxy(request: NextRequest) {
+// SEC-006 — point d'application unique des headers de sécurité : toute réponse produite par
+// handleRequest() (rate limit 429, redirect SSO, ou pass-through) les reçoit avant de partir,
+// sans dupliquer la logique de rate limiting/authentification ci-dessous.
+export default async function proxy(request: NextRequest): Promise<NextResponse> {
+  const response = await handleRequest(request);
+  const headers = buildSecurityHeaders();
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
+async function handleRequest(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   const rule = RATE_LIMIT_RULES.find((r) => pathname.startsWith(r.prefix));
@@ -103,11 +116,9 @@ export const config = {
   // fichier tourne toujours en runtime Node.js (jamais Edge) — donc jamais besoin (et jamais
   // permis, "Route segment config is not allowed in Proxy file") de déclarer `runtime` ici,
   // contrairement à l'ancien middleware.ts pré-Next 16.
-  matcher: [
-    '/dashboard/:path*',
-    '/tournaments/:path*',
-    '/settings/:path*',
-    '/api/public/:path*',
-    '/t/:path*',
-  ],
+  // SEC-006 — élargi à toutes les routes (headers de sécurité partout), plus seulement les
+  // prefixes gardés par le rate limiting/SSO : handleRequest() ne fait rien de plus qu'un
+  // pass-through en dehors de RATE_LIMIT_RULES/PROTECTED_PREFIXES, élargir ce matcher n'ajoute
+  // donc aucune vérification supplémentaire sur les routes déjà publiques.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
