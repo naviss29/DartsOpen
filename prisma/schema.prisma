@@ -185,6 +185,7 @@ model Registration {
   matchesAsP2 Match[]      @relation("MatchPlayer2")
   matchesWon  Match[]      @relation("MatchWinner")
   setsWon     MatchSet[]
+  x01Throws   MatchSetThrow[]
 
   @@index([tournamentId])
   @@index([tournamentId, status])
@@ -276,9 +277,61 @@ model MatchSet {
   match  Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
   round  Round        @relation(fields: [roundId], references: [id])
   winner Registration? @relation(fields: [winnerId], references: [id])
+  throws MatchSetThrow[]
 
   @@index([matchId])
   @@map("match_sets")
+}
+
+/**
+ * DO-SCORING-001 — historique append-oriented des volées X01 saisies en mode traditionnel :
+ * PostgreSQL devient la source de vérité de la manche en cours (score restant, joueur actif,
+ * historique), plus seulement l'état React du navigateur. Une ligne par volée validée
+ * (jamais mise à jour après coup, sauf l'annulation ci-dessous) — le score restant et le joueur
+ * actif se reconstruisent entièrement en rejouant les lignes non annulées dans l'ordre de
+ * `sequence`, sans jamais faire confiance à un état transmis par le client.
+ *
+ * `remainingBefore`/`remainingAfter` sont redondants avec le rejeu complet de l'historique (donc
+ * dérivables), mais stockés explicitement pour que la reconstruction n'ait jamais à ré-exécuter
+ * les règles X01 juste pour afficher l'état — une seule implémentation des règles (au moment de
+ * l'écriture) reste la source de vérité, la lecture ne fait que rejouer des faits déjà tranchés.
+ *
+ * Annulation (Étape 6) : jamais une suppression — `cancelledAt` marque la volée comme non
+ * applicable sans effacer la trace qu'elle a existé (utile en cas de litige). "La dernière
+ * volée" est toujours la ligne non annulée avec le plus grand `sequence` pour ce `matchSetId` ;
+ * comme seule la dernière volée peut jamais être annulée (jamais une volée plus ancienne), les
+ * lignes non annulées restent toujours un préfixe contigu de `sequence` — aucun trou ne peut
+ * apparaître au milieu.
+ *
+ * Idempotence : `clientRequestId` identifie la commande d'ENREGISTREMENT d'une volée (double-clic/
+ * retry réseau sur la même volée ⇒ même ligne, jamais deux). `cancelRequestId` identifie
+ * séparément la commande d'ANNULATION (rejeu de la même commande d'annulation ⇒ même résultat,
+ * même si la "dernière volée" a changé entre-temps — sans ce champ dédié, un rejeu recalculerait
+ * naïvement une nouvelle "dernière volée" différente de celle réellement visée par la commande
+ * d'origine). Deux `@@unique` distinctes, jamais confondues.
+ */
+model MatchSetThrow {
+  id              String    @id @default(uuid())
+  matchSetId      String    @map("match_set_id")
+  playerId        String    @map("player_id")
+  sequence        Int
+  scoreEntered    Int       @map("score_entered")
+  remainingBefore Int       @map("remaining_before")
+  remainingAfter  Int       @map("remaining_after")
+  bust            Boolean   @default(false)
+  clientRequestId String    @map("client_request_id")
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelRequestId String?   @map("cancel_request_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  matchSet MatchSet     @relation(fields: [matchSetId], references: [id], onDelete: Cascade)
+  player   Registration @relation(fields: [playerId], references: [id])
+
+  @@unique([matchSetId, sequence])
+  @@unique([matchSetId, clientRequestId])
+  @@unique([matchSetId, cancelRequestId])
+  @@index([matchSetId])
+  @@map("match_set_throws")
 }
 
 /// SEC-005 — compteur de rate limiting partagé entre toutes les instances (remplace la Map en

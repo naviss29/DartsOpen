@@ -1,26 +1,5 @@
 import { describe, it, expect } from "vitest";
-
-const IMPOSSIBLE_VOLEE = new Set([163, 166, 169, 172, 173, 175, 176, 178, 179]);
-const IMPOSSIBLE_CHECKOUT = new Set([159, 162, 163, 165, 166, 168, 169]);
-
-function validateVolee(
-  voleeScore: number,
-  remaining: number,
-  finishType: "SINGLE" | "DOUBLE" | "TRIPLE" | "MASTER"
-): { bust: boolean; reason: string | null; impossibleCheckout: boolean } {
-  if (IMPOSSIBLE_VOLEE.has(voleeScore)) {
-    return { bust: true, reason: `${voleeScore} est impossible à réaliser en une volée.`, impossibleCheckout: false };
-  }
-  const newRemaining = remaining - voleeScore;
-  if (newRemaining < 0) {
-    return { bust: true, reason: `Bust ! reste à ${remaining}.`, impossibleCheckout: false };
-  }
-  if ((finishType === "DOUBLE" || finishType === "MASTER") && newRemaining === 1) {
-    return { bust: true, reason: `Bust ! Impossible de laisser 1 en double out.`, impossibleCheckout: false };
-  }
-  const impossibleCheckout = newRemaining > 0 && IMPOSSIBLE_CHECKOUT.has(newRemaining);
-  return { bust: false, reason: null, impossibleCheckout };
-}
+import { validateVolee } from "./x01";
 
 describe("Validation volée 501 — scores impossibles à réaliser", () => {
   it("163 est rejeté (impossible en une volée)", () => {

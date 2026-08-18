@@ -2,6 +2,7 @@ import { prisma } from "./client";
 import { Prisma } from "../generated/prisma/client";
 import type { BracketType, MatchStatus, RegistrationStatus, TournamentStatus } from "../generated/prisma/client";
 import { assertValidTransition } from "../utils/tournamentStatus";
+import { validateVolee, x01StartScore, type FinishType } from "../utils/x01";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — vérifie qu'une erreur P2002
@@ -487,8 +488,30 @@ export async function dbUpdateTournament(id: string, data: {
   return mapTournament({ ...t, rounds: t.rounds.map(mapRound) });
 }
 
+/**
+ * DO-SCORING-001 (Étape 11, découvert en vérifiant la compatibilité de la nouvelle table
+ * `match_set_throws`) — un `prisma.tournament.delete()` nu laisse PostgreSQL choisir l'ordre de
+ * ses cascades automatiques, qui ne respecte pas les contraintes RESTRICT du schéma (jamais
+ * CASCADE, volontairement — voir docblock de `Match`) : `matches.player1_id/player2_id/
+ * winner_id`, `match_sets.round_id/winner_id` et désormais `match_set_throws.player_id`
+ * pointent tous vers `registrations`/`rounds` sans suppression en cascade. Un tournoi ayant
+ * déjà des manches jouées (rounds + matchs + matchSets, donc n'importe quel tournoi ayant
+ * dépassé la génération des poules/du bracket) faisait déjà échouer ce DELETE avant cette
+ * mission — confirmé empiriquement (`update or delete on table "rounds" violates RESTRICT...`).
+ * Corrigé une fois pour toutes en supprimant explicitement dans l'ordre des dépendances, dans
+ * une seule transaction (jamais un DELETE partiel si une étape échoue).
+ */
 export async function dbDeleteTournament(id: string) {
-  await prisma.tournament.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.matchSetThrow.deleteMany({ where: { matchSet: { match: { tournamentId: id } } } });
+    await tx.matchSet.deleteMany({ where: { match: { tournamentId: id } } });
+    await tx.match.deleteMany({ where: { tournamentId: id } });
+    await tx.round.deleteMany({ where: { tournamentId: id } });
+    await tx.poolPlayer.deleteMany({ where: { pool: { tournamentId: id } } });
+    await tx.pool.deleteMany({ where: { tournamentId: id } });
+    await tx.registration.deleteMany({ where: { tournamentId: id } });
+    await tx.tournament.delete({ where: { id } });
+  });
 }
 
 /**
@@ -1340,6 +1363,41 @@ export async function dbDisputeResult(matchSetId: string): Promise<{ error?: str
 }
 
 /**
+ * DO-SPORT-001 (Étape 2/4) — cœur tx-scopé de dbMarkWinnerDirect() : désigne directement le
+ * vainqueur d'une manche et déclenche la finalisation du match. Extrait en fonction séparée
+ * (DO-SCORING-001) pour être réutilisable depuis une transaction déjà ouverte — notamment
+ * dbRecordThrow() (checkout X01) qui tourne sous son propre withTournamentLock() et ne doit
+ * jamais ouvrir une seconde transaction imbriquée pour finaliser la manche qu'elle vient de
+ * clôturer.
+ */
+async function markWinnerDirectTx(tx: Prisma.TransactionClient, matchSetId: string, winnerId: string) {
+  const set = await tx.matchSet.findUnique({
+    where: { id: matchSetId },
+    include: {
+      match: {
+        include: {
+          sets: true,
+          tournament: { select: { id: true, quickMode: true } },
+        },
+      },
+    },
+  });
+
+  if (!set) return { error: "Set introuvable." };
+
+  await tx.matchSet.update({
+    where: { id: matchSetId },
+    data: { winnerId, validatedP1: true, validatedP2: true },
+  });
+
+  const updatedSets = set.match.sets.map((s) =>
+    s.id === matchSetId ? { ...s, winnerId, validatedP1: true, validatedP2: true } : s
+  );
+
+  return await tryFinalizeMatch(tx, { ...set.match, sets: updatedSets });
+}
+
+/**
  * DO-SPORT-001 (Étape 2) — même verrou tournoi que dbConfirmWinner(), pour les mêmes raisons
  * (arbitrage direct organisateur, mode traditionnel).
  */
@@ -1353,32 +1411,7 @@ export async function dbMarkWinnerDirect(
   });
   if (!initial) return { error: "Set introuvable." };
 
-  return withTournamentLock(initial.match.tournamentId, async (tx) => {
-    const set = await tx.matchSet.findUnique({
-      where: { id: matchSetId },
-      include: {
-        match: {
-          include: {
-            sets: true,
-            tournament: { select: { id: true, quickMode: true } },
-          },
-        },
-      },
-    });
-
-    if (!set) return { error: "Set introuvable." };
-
-    await tx.matchSet.update({
-      where: { id: matchSetId },
-      data: { winnerId, validatedP1: true, validatedP2: true },
-    });
-
-    const updatedSets = set.match.sets.map((s) =>
-      s.id === matchSetId ? { ...s, winnerId, validatedP1: true, validatedP2: true } : s
-    );
-
-    return await tryFinalizeMatch(tx, { ...set.match, sets: updatedSets });
-  });
+  return withTournamentLock(initial.match.tournamentId, (tx) => markWinnerDirectTx(tx, matchSetId, winnerId));
 }
 
 /**
@@ -1454,6 +1487,280 @@ async function tryFinalizeMatch(tx: Prisma.TransactionClient, match: {
     matchFinished: true,
     match: { id: match.id, tournamentId: match.tournament.id, bracketRound: match.bracketRound, quickMode: match.tournament.quickMode },
   };
+}
+
+// ── Volées X01 — saisie traditionnelle persistée (DO-SCORING-001) ────────────
+
+function mapMatchSetThrow(t: {
+  id: string;
+  matchSetId: string;
+  playerId: string;
+  sequence: number;
+  scoreEntered: number;
+  remainingBefore: number;
+  remainingAfter: number;
+  bust: boolean;
+  cancelledAt: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: t.id,
+    match_set_id: t.matchSetId,
+    player_id: t.playerId,
+    sequence: t.sequence,
+    score_entered: t.scoreEntered,
+    remaining_before: t.remainingBefore,
+    remaining_after: t.remainingAfter,
+    bust: t.bust,
+    cancelled: t.cancelledAt !== null,
+    created_at: t.createdAt.toISOString(),
+  };
+}
+
+/**
+ * Historique complet (y compris volées annulées, exposées via `cancelled: true` pour un
+ * affichage transparent) d'une manche, dans l'ordre de saisie. Base de la reconstruction
+ * d'état côté client — voir lib/utils/x01State.ts pour le calcul du restant/joueur actif à
+ * partir de cette liste.
+ */
+export async function dbListMatchSetThrows(matchSetId: string) {
+  const rows = await prisma.matchSetThrow.findMany({
+    where: { matchSetId },
+    orderBy: { sequence: "asc" },
+  });
+  return rows.map(mapMatchSetThrow);
+}
+
+type RecordThrowOutcome = {
+  bust: boolean;
+  reason: string | null;
+  impossibleCheckout: boolean;
+  matchSetFinished: boolean;
+  matchFinished: boolean;
+  match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean };
+  throwId: string;
+};
+export type RecordThrowResult = { error: string } | RecordThrowOutcome;
+
+async function replayThrowOutcome(
+  tx: Prisma.TransactionClient,
+  matchSetId: string,
+  row: { id: string; playerId: string; bust: boolean; remainingAfter: number },
+): Promise<RecordThrowOutcome> {
+  const wasCheckout = !row.bust && row.remainingAfter === 0;
+  const finalize = wasCheckout ? await markWinnerDirectTx(tx, matchSetId, row.playerId) : {};
+  return {
+    bust: row.bust,
+    reason: null,
+    impossibleCheckout: false,
+    matchSetFinished: wasCheckout,
+    matchFinished: "matchFinished" in finalize ? (finalize.matchFinished ?? false) : false,
+    match: "match" in finalize ? finalize.match : undefined,
+    throwId: row.id,
+  };
+}
+
+/**
+ * DO-SCORING-001 (Étape 3/4) — enregistrement atomique d'une volée X01, sous le verrou tournoi :
+ * 1. idempotence — rejeu exact de `clientRequestId` (double-clic, retry réseau, deux appareils
+ *    sur la même session) → renvoie le résultat déjà appliqué, sans rien écrire de plus ;
+ * 2. relit le set/match/round *sous le verrou*, jamais une valeur lue par l'appelant avant ;
+ * 3. le match doit toujours accepter une saisie (IN_PROGRESS, manche pas déjà validée, pas
+ *    Cricket) ;
+ * 4. le joueur soumis doit être exactement celui attendu — l'alternance stricte se déduit du
+ *    nombre de volées non annulées déjà enregistrées pour cette manche (jamais transmise par le
+ *    client) : joueur 1 commence, puis alternance à chaque volée, bust compris (un bust cède
+ *    quand même le tour, comme aux fléchettes réelles) ;
+ * 5. applique les règles X01 existantes (lib/utils/x01.ts, comportement inchangé) ;
+ * 6. enregistre la volée (jamais un UPDATE — un historique append-oriented, une ligne par
+ *    volée) ;
+ * 7. si la volée ferme la manche (restant à 0, pas de bust), déclenche la finalisation sportive
+ *    déjà existante (markWinnerDirectTx → tryFinalizeMatch, DO-SPORT-001/002 : libération de
+ *    cible, avancement de tour standard/rapide) — jamais réimplémentée ici.
+ *
+ * Ne fait jamais confiance à un "nouvel état" envoyé par le client : seul `scoreEntered` (la
+ * saisie utilisateur) est transmis, tout le reste (restant avant/après, bust, joueur attendu)
+ * est recalculé côté serveur à partir de l'historique réel en base.
+ */
+export async function dbRecordThrow(
+  matchSetId: string,
+  tournamentId: string,
+  player: 1 | 2,
+  scoreEntered: number,
+  clientRequestId: string,
+): Promise<RecordThrowResult> {
+  if (!Number.isInteger(scoreEntered) || scoreEntered < 0 || scoreEntered > 180) {
+    return { error: "Volée invalide (0 à 180)." };
+  }
+
+  return withTournamentLock(tournamentId, async (tx) => {
+    const existing = await tx.matchSetThrow.findUnique({
+      where: { matchSetId_clientRequestId: { matchSetId, clientRequestId } },
+    });
+    if (existing) return replayThrowOutcome(tx, matchSetId, existing);
+
+    const set = await tx.matchSet.findFirst({
+      where: { id: matchSetId },
+      include: {
+        match: { select: { id: true, tournamentId: true, status: true, player1Id: true, player2Id: true } },
+        round: { select: { gameType: true, finishType: true } },
+      },
+    });
+    if (!set) return { error: "Manche introuvable." };
+    if (set.match.tournamentId !== tournamentId) return { error: "Manche introuvable." };
+    if (set.round.gameType === "CRICKET") return { error: "Cette manche ne supporte pas la saisie de volées." };
+    if (set.winnerId !== null) return { error: "Cette manche est déjà terminée." };
+    if (set.match.status !== "IN_PROGRESS") return { error: "Ce match n'accepte plus de saisie." };
+
+    const p1Id = set.match.player1Id;
+    const p2Id = set.match.player2Id;
+    if (!p2Id) return { error: "Match incomplet (joueur manquant)." };
+
+    const allThrows = await tx.matchSetThrow.findMany({
+      where: { matchSetId },
+      orderBy: { sequence: "asc" },
+    });
+    const activeThrows = allThrows.filter((t) => t.cancelledAt === null);
+
+    const expectedPlayerId = activeThrows.length % 2 === 0 ? p1Id : p2Id;
+    const submittedPlayerId = player === 1 ? p1Id : p2Id;
+    if (submittedPlayerId !== expectedPlayerId) {
+      return { error: "Ce n'est pas au tour de ce joueur." };
+    }
+
+    const startScore = x01StartScore(set.round.gameType);
+    const lastOwnThrow = [...activeThrows].reverse().find((t) => t.playerId === submittedPlayerId);
+    const remainingBefore = lastOwnThrow ? lastOwnThrow.remainingAfter : startScore;
+
+    const validation = validateVolee(scoreEntered, remainingBefore, set.round.finishType as FinishType);
+    const nextSequence = allThrows.length > 0 ? allThrows[allThrows.length - 1].sequence + 1 : 1;
+
+    let created;
+    try {
+      created = await tx.matchSetThrow.create({
+        data: {
+          matchSetId,
+          playerId: submittedPlayerId,
+          sequence: nextSequence,
+          scoreEntered,
+          remainingBefore,
+          remainingAfter: validation.remainingAfter,
+          bust: validation.bust,
+          clientRequestId,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        // Filet de sécurité DB : une exécution concurrente a inséré cette même commande entre
+        // notre lecture d'idempotence et cet insert (ne devrait jamais arriver sous le verrou
+        // tournoi déjà tenu, mais jamais le seul mécanisme — même discipline que DO-SPORT-001).
+        const winner = await tx.matchSetThrow.findUnique({
+          where: { matchSetId_clientRequestId: { matchSetId, clientRequestId } },
+        });
+        if (winner) return replayThrowOutcome(tx, matchSetId, winner);
+      }
+      throw err;
+    }
+
+    let matchSetFinished = false;
+    let finalize: Awaited<ReturnType<typeof markWinnerDirectTx>> = {};
+    if (!validation.bust && validation.remainingAfter === 0) {
+      matchSetFinished = true;
+      finalize = await markWinnerDirectTx(tx, matchSetId, submittedPlayerId);
+    }
+
+    return {
+      bust: validation.bust,
+      reason: validation.reason,
+      impossibleCheckout: validation.impossibleCheckout,
+      matchSetFinished,
+      matchFinished: "matchFinished" in finalize ? (finalize.matchFinished ?? false) : false,
+      match: "match" in finalize ? finalize.match : undefined,
+      throwId: created.id,
+    };
+  });
+}
+
+/**
+ * DO-SCORING-001 (Étape 6) — annule UNIQUEMENT la dernière volée non annulée d'une manche, sous
+ * le verrou tournoi. Jamais une suppression (voir docblock de MatchSetThrow, schema.prisma) :
+ * marque `cancelledAt`, ce qui suffit à faire disparaître son effet de toute reconstruction
+ * d'état ultérieure (le restant/joueur actif se recalculent en ignorant les volées annulées).
+ *
+ * Idempotence : `cancelRequestId` identifie la commande d'annulation elle-même (distincte du
+ * `clientRequestId` de la volée annulée) — un rejeu de la même commande renvoie le même résultat
+ * sans tenter de ré-annuler une volée déjà annulée ni, pire, annuler une AUTRE volée devenue
+ * entre-temps la "dernière" (double-clic, retry réseau sur la commande d'annulation elle-même).
+ *
+ * Limite volontaire (Étape 6, "limite importante") — si cette volée a clôturé la manche ET que
+ * le match est déjà FINISHED, sa conséquence sportive est déjà propagée hors de la saisie X01
+ * (cible libérée, tour suivant/tournoi rapide potentiellement déjà avancés par DO-SPORT) :
+ * refus explicite, jamais de tentative de reconstruction rétroactive du tournoi. Même refus si
+ * la manche a été clôturée manuellement par l'organisateur (dbMarkWinnerDirect/forceWinner)
+ * plutôt que par cette volée elle-même — annuler la volée ne restaurerait pas fidèlement un état
+ * dont elle n'est pas la cause.
+ */
+export async function dbCancelLastThrow(
+  matchSetId: string,
+  tournamentId: string,
+  cancelRequestId: string,
+): Promise<{ error?: string; cancelledThrowId?: string }> {
+  return withTournamentLock(tournamentId, async (tx) => {
+    const existingCancel = await tx.matchSetThrow.findUnique({
+      where: { matchSetId_cancelRequestId: { matchSetId, cancelRequestId } },
+    });
+    if (existingCancel) return { cancelledThrowId: existingCancel.id };
+
+    const set = await tx.matchSet.findFirst({
+      where: { id: matchSetId },
+      include: { match: { select: { tournamentId: true, status: true } } },
+    });
+    if (!set) return { error: "Manche introuvable." };
+    if (set.match.tournamentId !== tournamentId) return { error: "Manche introuvable." };
+
+    const last = await tx.matchSetThrow.findFirst({
+      where: { matchSetId, cancelledAt: null },
+      orderBy: { sequence: "desc" },
+    });
+    if (!last) return { error: "Aucune volée à annuler." };
+
+    const wasCheckout = !last.bust && last.remainingAfter === 0;
+
+    if (set.winnerId !== null && !wasCheckout) {
+      return { error: "Cette manche a été clôturée manuellement par l'organisateur : l'annulation de volée ne s'applique pas ici." };
+    }
+    if (wasCheckout && set.match.status === "FINISHED") {
+      return {
+        error:
+          "Cette volée a déjà clôturé le match et sa conséquence sportive a été propagée (cible libérée, tour suivant potentiellement généré) : elle ne peut plus être annulée.",
+      };
+    }
+
+    try {
+      await tx.matchSetThrow.update({
+        where: { id: last.id },
+        data: { cancelledAt: new Date(), cancelRequestId },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const winner = await tx.matchSetThrow.findUnique({
+          where: { matchSetId_cancelRequestId: { matchSetId, cancelRequestId } },
+        });
+        if (winner) return { cancelledThrowId: winner.id };
+      }
+      throw err;
+    }
+
+    if (wasCheckout) {
+      // La manche avait été validée par le checkout qu'on vient d'annuler — la rouvrir.
+      await tx.matchSet.update({
+        where: { id: matchSetId },
+        data: { winnerId: null, validatedP1: false, validatedP2: false },
+      });
+    }
+
+    return { cancelledThrowId: last.id };
+  });
 }
 
 // ── Mode rapide — double élimination ─────────────────────────────────────────

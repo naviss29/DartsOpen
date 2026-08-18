@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { ScoreForm } from "@/components/tournament/ScoreForm";
-import { dbGetTournamentPublic, dbListMatches } from "@/lib/db/tournament";
+import { dbGetTournamentPublic, dbListMatches, dbListMatchSetThrows } from "@/lib/db/tournament";
 import type { Metadata } from "next";
 
 interface Props {
@@ -73,6 +73,15 @@ export default async function ScorePage({ params, searchParams }: Props) {
 
   const rounds = tournament.rounds ?? [];
 
+  // DO-SCORING-001 (Étape 5) — reprise d'état : seule la manche en cours (la première non
+  // validée) peut avoir des volées à reconstruire ; les manches déjà validées n'affichent que
+  // leur vainqueur (inchangé). Le navigateur ne recalcule plus jamais rp1/rp2/l'historique par
+  // lui-même — voir components/tournament/ScoreForm.tsx::SetScoreTracker.
+  const currentSet = match?.match_sets.find((s) => !(s.validated_p1 && s.validated_p2)) ?? null;
+  const currentSetThrows = currentSet
+    ? await dbListMatchSetThrows(currentSet.id).catch(() => [])
+    : [];
+
   return (
     <div data-theme="dark" className="min-h-screen bg-surface text-text-primary flex flex-col">
       <div className="bg-surface-secondary border-b border-border-default px-4 py-4">
@@ -93,6 +102,7 @@ export default async function ScorePage({ params, searchParams }: Props) {
             rounds={rounds}
             scoringMode={tournament.scoring_mode === "TRADITIONAL" ? "TRADITIONAL" : "ELECTRONIC"}
             tournamentId={id}
+            currentSetThrows={currentSetThrows}
           />
         )}
       </div>

@@ -1,12 +1,8 @@
 "use client";
 
-import { useTransition, useState } from "react";
-
-const IMPOSSIBLE_VOLEE = new Set([163, 166, 169, 172, 173, 175, 176, 178, 179]);
-const IMPOSSIBLE_CHECKOUT = new Set([159, 162, 163, 165, 166, 168, 169]);
-
-type ThrowEntry = { player: "p1" | "p2"; score: number; remaining: number; bust: boolean };
-import { proposeWinner, confirmWinner, disputeResult, markWinnerDirect } from "@/lib/actions/score";
+import { useTransition, useState, useRef } from "react";
+import { proposeWinner, confirmWinner, disputeResult, markWinnerDirect, recordThrow, cancelLastThrow } from "@/lib/actions/score";
+import { computeRemaining, computeActivePlayer, x01StartScore, type X01ThrowLike } from "@/lib/utils/x01";
 
 interface Player { id: string; player_name: string }
 interface MatchSet {
@@ -31,6 +27,10 @@ interface Props {
   rounds: Round[];
   scoringMode: "ELECTRONIC" | "TRADITIONAL";
   tournamentId: string;
+  /** DO-SCORING-001 — historique persisté de la manche en cours (vide si aucune, ou si le mode
+   * est ÉLECTRONIQUE). Seule source de vérité pour reconstruire le score restant/joueur actif —
+   * voir SetScoreTracker ci-dessous. */
+  currentSetThrows?: X01ThrowLike[];
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -39,7 +39,7 @@ const GAME_LABELS: Record<string, string> = {
 const ENTRY_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Double", TRIPLE: "Triple" };
 const FINISH_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Double", TRIPLE: "Triple", MASTER: "Master" };
 
-export function ScoreForm({ match, rounds, scoringMode, tournamentId }: Props) {
+export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSetThrows = [] }: Props) {
   const sets = [...match.match_sets].sort((a, b) => a.round_order - b.round_order);
 
   if (rounds.length === 0) {
@@ -53,7 +53,15 @@ export function ScoreForm({ match, rounds, scoringMode, tournamentId }: Props) {
   }
 
   if (scoringMode === "TRADITIONAL") {
-    return <TraditionalScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />;
+    return (
+      <TraditionalScoreForm
+        match={match}
+        sets={sets}
+        rounds={rounds}
+        tournamentId={tournamentId}
+        currentSetThrows={currentSetThrows}
+      />
+    );
   }
 
   return <ElectronicScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />;
@@ -181,7 +189,9 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
 /* ─────────────────────────────────────────────
    Mode TRADITIONNEL
 ───────────────────────────────────────────── */
-function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string }) {
+function TraditionalScoreForm({
+  match, sets, rounds, tournamentId, currentSetThrows,
+}: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string; currentSetThrows: X01ThrowLike[] }) {
   const completedSets = sets.filter((s) => s.validated_p1 && s.validated_p2);
   const currentSet = sets.find((s) => !(s.validated_p1 && s.validated_p2));
 
@@ -227,6 +237,7 @@ function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Ma
           setNumber={currentSet.round_order}
           totalSets={sets.length}
           tournamentId={tournamentId}
+          throws={currentSetThrows}
         />
       ) : (
         <div className="rounded-xl bg-surface-secondary border border-border-default p-8 text-center">
@@ -242,7 +253,7 @@ function TraditionalScoreForm({ match, sets, rounds, tournamentId }: { match: Ma
 }
 
 function SetScoreTracker({
-  set, p1, p2, round, setNumber, totalSets, tournamentId,
+  set, p1, p2, round, setNumber, totalSets, tournamentId, throws,
 }: {
   set: MatchSet;
   p1: Player;
@@ -251,73 +262,89 @@ function SetScoreTracker({
   setNumber: number;
   totalSets: number;
   tournamentId: string;
+  throws: X01ThrowLike[];
 }) {
   const [isPending, startTransition] = useTransition();
   const isCricket = round?.game_type === "CRICKET";
-  const startScore = isCricket ? 0 : parseInt(round?.game_type ?? "501");
-  const isDoubleOrMasterOut = round?.finish_type === "DOUBLE" || round?.finish_type === "MASTER";
+  const startScore = isCricket ? 0 : x01StartScore(round?.game_type ?? "501");
 
-  const [rp1, setRp1] = useState(startScore);
-  const [rp2, setRp2] = useState(startScore);
+  // DO-SCORING-001 (Étape 5) — état entièrement dérivé des props (l'historique persisté), plus
+  // jamais un état local qui pourrait diverger de la base ou se perdre au refresh. Un
+  // rafraîchissement de page, un changement d'appareil ou une reconnexion reçoivent exactement
+  // les mêmes props reconstruites depuis PostgreSQL (voir app/(public)/t/[id]/score/page.tsx) —
+  // jamais une réinitialisation à startScore/[] comme avant cette mission.
+  const rp1 = computeRemaining(throws, p1.id, startScore);
+  const rp2 = computeRemaining(throws, p2.id, startScore);
+  const activePlayerId = computeActivePlayer(throws, p1.id, p2.id);
+  const recentThrows = [...throws].reverse().slice(0, 10);
+  const hasCancellable = throws.some((t) => !t.cancelled);
+
+  // Ephémère uniquement : texte en cours de saisie, messages transitoires, confirmation
+  // d'annulation. Rien ici ne représente l'état du match — perdre ces valeurs au refresh est
+  // sans conséquence, contrairement à rp1/rp2/throws avant cette mission.
   const [inputP1, setInputP1] = useState("");
   const [inputP2, setInputP2] = useState("");
-  const [bustMsg, setBustMsg] = useState<string | null>(null);
-  const [warnMsg, setWarnMsg] = useState<string | null>(null);
-  const [throws, setThrows] = useState<ThrowEntry[]>([]);
+  const [message, setMessage] = useState<{ tone: "error" | "warning"; text: string } | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  // Identité stable de commande par volée (Étape 4) : un même clic répété ou un retry réseau
+  // avant qu'une réponse ne soit reçue réutilise le MÊME identifiant tant que la saisie n'a pas
+  // changé — le serveur (dbRecordThrow) les traite alors comme une seule et même volée, jamais
+  // deux. Un identifiant frais n'est généré qu'une fois la volée précédente confirmée.
+  const requestIdP1 = useRef(crypto.randomUUID());
+  const requestIdP2 = useRef(crypto.randomUUID());
+  const cancelRequestId = useRef(crypto.randomUUID());
 
   function handleVolee(player: "p1" | "p2") {
+    if (isPending) return; // anti double-clic UX — la vraie idempotence reste côté serveur
     const raw = player === "p1" ? inputP1 : inputP2;
-    const voleeScore = parseInt(raw);
+    const voleeScore = parseInt(raw, 10);
     if (isNaN(voleeScore) || voleeScore < 0 || voleeScore > 180) return;
 
-    setWarnMsg(null);
+    const playerNum = player === "p1" ? 1 : 2;
+    const requestIdRef = player === "p1" ? requestIdP1 : requestIdP2;
 
-    if (IMPOSSIBLE_VOLEE.has(voleeScore)) {
-      setBustMsg(`${voleeScore} est impossible à réaliser en une volée.`);
+    setMessage(null);
+    startTransition(async () => {
+      const result = await recordThrow(set.id, tournamentId, playerNum, voleeScore, requestIdRef.current);
+
+      if (result.error) {
+        // Ne jamais régénérer l'identifiant sur erreur : un nouveau clic sur OK avec la même
+        // saisie doit rejouer EXACTEMENT la même commande (retry après réponse ambiguë/perdue).
+        setMessage({ tone: "error", text: result.error });
+        return;
+      }
+
+      // Volée confirmée par le serveur (bust ou non) — la prochaine sera une commande différente.
+      requestIdRef.current = crypto.randomUUID();
       if (player === "p1") setInputP1(""); else setInputP2("");
-      setTimeout(() => setBustMsg(null), 3000);
-      return;
-    }
 
-    const remaining = player === "p1" ? rp1 : rp2;
-    const newRemaining = remaining - voleeScore;
-
-    if (newRemaining < 0) {
-      setBustMsg(`Bust ! ${player === "p1" ? p1.player_name : p2.player_name} reste à ${remaining}.`);
-      if (player === "p1") setInputP1(""); else setInputP2("");
-      setThrows(prev => [...prev, { player, score: voleeScore, remaining, bust: true }]);
-      setTimeout(() => setBustMsg(null), 2500);
-      return;
-    }
-
-    if (isDoubleOrMasterOut && newRemaining === 1) {
-      setBustMsg(`Bust ! Impossible de laisser 1 en ${round?.finish_type === "MASTER" ? "master" : "double"} out.`);
-      if (player === "p1") setInputP1(""); else setInputP2("");
-      setThrows(prev => [...prev, { player, score: voleeScore, remaining, bust: true }]);
-      setTimeout(() => setBustMsg(null), 2500);
-      return;
-    }
-
-    if (player === "p1") { setRp1(newRemaining); setInputP1(""); }
-    else { setRp2(newRemaining); setInputP2(""); }
-
-    setThrows(prev => [...prev, { player, score: voleeScore, remaining: newRemaining, bust: false }]);
-
-    if (newRemaining > 0 && IMPOSSIBLE_CHECKOUT.has(newRemaining)) {
-      setWarnMsg(`${newRemaining} : fermeture impossible en une volée.`);
-    }
-
-    if (newRemaining === 0) {
-      const winnerId = player === "p1" ? p1.id : p2.id;
-      startTransition(() => void markWinnerDirect(set.id, winnerId, tournamentId));
-    }
+      if (result.bust) {
+        setMessage({ tone: "error", text: result.reason ?? "Bust !" });
+      } else if (result.impossibleCheckout) {
+        setMessage({ tone: "warning", text: "Fermeture impossible en une volée avec ce restant." });
+      }
+    });
   }
 
   function forceWinner(winnerId: string) {
+    if (isPending) return;
     startTransition(() => void markWinnerDirect(set.id, winnerId, tournamentId));
   }
 
-  const recentThrows = throws.slice(-10).reverse();
+  function handleCancelLastThrow() {
+    if (isPending) return;
+    startTransition(async () => {
+      const result = await cancelLastThrow(set.id, tournamentId, cancelRequestId.current);
+      setShowCancelConfirm(false);
+      if (result.error) {
+        setMessage({ tone: "error", text: result.error });
+        return;
+      }
+      cancelRequestId.current = crypto.randomUUID();
+      setMessage(null);
+    });
+  }
 
   return (
     <div className="rounded-xl bg-surface-secondary border border-border-default p-5 space-y-5">
@@ -332,16 +359,26 @@ function SetScoreTracker({
         )}
       </div>
 
-      {bustMsg && (
-        <div className="rounded-lg bg-danger-solid/10 border border-danger-solid/40 px-4 py-2 text-sm text-danger-solid text-center">
-          {bustMsg}
+      {isPending && (
+        <p className="text-center text-xs text-text-secondary animate-pulse">Enregistrement…</p>
+      )}
+
+      {message && (
+        <div
+          className={`rounded-lg px-4 py-2 text-sm text-center border ${
+            message.tone === "error"
+              ? "bg-danger-solid/10 border-danger-solid/40 text-danger-solid"
+              : "bg-warning-solid/10 border-warning-solid/40 text-warning-solid"
+          }`}
+        >
+          {message.tone === "warning" && "⚠ "}{message.text}
         </div>
       )}
 
-      {warnMsg && !bustMsg && (
-        <div className="rounded-lg bg-warning-solid/10 border border-warning-solid/40 px-4 py-2 text-sm text-warning-solid text-center">
-          ⚠ {warnMsg}
-        </div>
+      {!isCricket && (
+        <p className="text-center text-xs text-text-secondary">
+          Au tour de <span className="font-semibold text-text-primary">{activePlayerId === p1.id ? p1.player_name : p2.player_name}</span>
+        </p>
       )}
 
       {isCricket ? (
@@ -383,7 +420,7 @@ function SetScoreTracker({
                   className="w-full rounded-lg bg-surface border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-success-solid focus:outline-none text-center"
                 />
                 <button
-                  disabled={isPending || !inputP1}
+                  disabled={isPending || !inputP1 || activePlayerId !== p1.id}
                   onClick={() => handleVolee("p1")}
                   className="rounded-lg bg-success-solid px-3 py-2 text-sm font-bold text-white hover:bg-success-solid/90 disabled:opacity-40 transition-colors"
                 >
@@ -410,7 +447,7 @@ function SetScoreTracker({
                   className="w-full rounded-lg bg-surface border border-border-default px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-success-solid focus:outline-none text-center"
                 />
                 <button
-                  disabled={isPending || !inputP2}
+                  disabled={isPending || !inputP2 || activePlayerId !== p2.id}
                   onClick={() => handleVolee("p2")}
                   className="rounded-lg bg-success-solid px-3 py-2 text-sm font-bold text-white hover:bg-success-solid/90 disabled:opacity-40 transition-colors"
                 >
@@ -420,26 +457,66 @@ function SetScoreTracker({
             </div>
           </div>
 
-          {/* Historique des volées */}
+          {/* Historique des volées — DO-SCORING-001 : lu depuis PostgreSQL (props), plus jamais
+              un état local perdu au refresh. Les volées annulées restent visibles, barrées, pour
+              une traçabilité complète (jamais supprimées en base, voir MatchSetThrow). */}
           {recentThrows.length > 0 && (
             <div className="border-t border-border-default pt-3">
-              <p className="text-xs text-text-secondary mb-2">Volées</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-text-secondary">Volées</p>
+                {hasCancellable && !showCancelConfirm && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => { cancelRequestId.current = crypto.randomUUID(); setShowCancelConfirm(true); }}
+                    className="text-xs text-danger-solid hover:underline disabled:opacity-50"
+                  >
+                    Annuler la dernière volée
+                  </button>
+                )}
+              </div>
+
+              {showCancelConfirm && (
+                <div className="mb-2 rounded-lg border border-danger-solid/40 bg-danger-solid/10 px-3 py-2 flex items-center justify-between gap-2">
+                  <p className="text-xs text-danger-solid">Confirmer l&apos;annulation de la dernière volée ?</p>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      disabled={isPending}
+                      onClick={handleCancelLastThrow}
+                      className="rounded-lg bg-danger-solid px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      Confirmer
+                    </button>
+                    <button
+                      disabled={isPending}
+                      onClick={() => setShowCancelConfirm(false)}
+                      className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-secondary disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1 max-h-40 overflow-y-auto">
-                {recentThrows.map((t, i) => (
+                {recentThrows.map((t) => (
                   <div
-                    key={i}
+                    key={t.id}
                     className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg ${
-                      t.bust ? "bg-danger-solid/10 text-danger-solid" : "bg-surface/60 text-text-primary"
+                      t.cancelled
+                        ? "bg-surface/30 text-text-secondary line-through opacity-60"
+                        : t.bust
+                          ? "bg-danger-solid/10 text-danger-solid"
+                          : "bg-surface/60 text-text-primary"
                     }`}
                   >
                     <span className="font-medium truncate max-w-[100px]">
-                      {t.player === "p1" ? p1.player_name : p2.player_name}
+                      {t.player_id === p1.id ? p1.player_name : p2.player_name}
                     </span>
-                    <span className={`font-mono font-bold ${t.bust ? "" : "text-white"}`}>
-                      {t.bust ? `${t.score} — Bust` : `+${t.score}`}
+                    <span className={`font-mono font-bold ${t.bust || t.cancelled ? "" : "text-white"}`}>
+                      {t.bust ? `${t.score_entered} — Bust` : `+${t.score_entered}`}
                     </span>
                     <span className="font-mono text-text-secondary w-10 text-right">
-                      {t.bust ? "" : t.remaining}
+                      {t.bust ? "" : t.remaining_after}
                     </span>
                   </div>
                 ))}
