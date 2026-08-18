@@ -1,6 +1,6 @@
 import { dbGetOrganization } from "@/lib/db/tournament";
 import { hasOptionalSubscriptionAccess } from "@/lib/api/organizations";
-import { consumeTournamentCredit, getTournamentCreditsAvailable } from "@/lib/api/tournamentCredits";
+import { consumeTournamentCredit, reconcileTournamentCredit, getTournamentCreditsAvailable } from "@/lib/api/tournamentCredits";
 import { FREE_TIER_MAX_PLAYERS } from "./constants";
 
 export { FREE_TIER_MAX_PLAYERS };
@@ -53,16 +53,38 @@ export async function resolveTournamentSizeEntitlement(userId: string): Promise<
 }
 
 /**
- * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — the only mutating step: permanently
- * consumes one tournament credit, idempotent on `reference`. `reference` must be a value that
- * stays IDENTICAL across retries of the same user gesture (the tournament's own
- * `idempotencyKey` — never a value regenerated per request, which is exactly what made
- * DARTSOPEN-MONETIZATION-001's version of this consumable more than once per gesture on a
- * double-click/retry).
+ * DARTSOPEN-MONETIZATION-003 (P2, contre-audit) — three outcomes, never a boolean: CONFIRMED
+ * (credit genuinely consumed — safe to make the tournament usable), REJECTED (certain business
+ * refusal — safe to compensate, e.g. delete the tournament), INDETERMINATE (still unknown after
+ * reconciliation — never safe to confirm NOR to compensate; the caller must keep the tournament
+ * in its PENDING_ENTITLEMENT holding state, see lib/actions/tournament.ts).
  */
-export async function consumeTournamentSizeCredit(organizationSlug: string, reference: string): Promise<boolean> {
+export type CreditConsumptionOutcome = "CONFIRMED" | "REJECTED" | "INDETERMINATE";
+
+/**
+ * DARTSOPEN-MONETIZATION-002/003 (audit DO-AUD-001/DO-AUD-002, contre-audit P2) — the only
+ * mutating step: permanently consumes one tournament credit, idempotent on `reference`.
+ * `reference` must be a value that stays IDENTICAL across retries of the same user gesture (the
+ * tournament's own `idempotencyKey` — never a value regenerated per request, which is exactly
+ * what made DARTSOPEN-MONETIZATION-001's version of this consumable more than once per gesture
+ * on a double-click/retry).
+ *
+ * DARTSOPEN-MONETIZATION-003 (P2) — if consumeTournamentCredit() itself comes back
+ * INDETERMINATE (its HTTP response was lost to a network error/timeout — SterPlatform may or
+ * may not have actually committed the consumption), a network error/timeout is never treated as
+ * a business refusal: this reconciles by asking SterPlatform directly, by reference, whether a
+ * credit was already consumed — never a second guess made locally, never silently dropped.
+ */
+export async function consumeTournamentSizeCredit(organizationSlug: string, reference: string): Promise<CreditConsumptionOutcome> {
   const result = await consumeTournamentCredit(organizationSlug, reference);
-  return result.ok;
+  if (result.outcome !== "INDETERMINATE") {
+    return result.outcome;
+  }
+
+  const reconciliation = await reconcileTournamentCredit(organizationSlug, reference);
+  if (reconciliation === "CONSUMED") return "CONFIRMED";
+  if (reconciliation === "NOT_CONSUMED") return "REJECTED";
+  return "INDETERMINATE";
 }
 
 export type TournamentSizeUiState = {

@@ -9,6 +9,7 @@ import {
   dbUpdateTournament,
   dbUpdateTournamentStatus,
   dbDeleteTournament,
+  dbConfirmTournamentEntitlement,
   dbAddRound,
   dbDeleteRound,
 } from "@/lib/db/tournament";
@@ -21,6 +22,14 @@ import {
   TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION,
   TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT,
 } from "@/lib/entitlements/tournamentSizeGuard";
+import { DEFAULT_MAX_PLAYERS, DEFAULT_NB_POOLS, DEFAULT_NB_BOARDS } from "@/lib/tournament/defaults";
+
+// DARTSOPEN-MONETIZATION-003 (P5, contre-audit) — message renvoyé quand la réconciliation
+// (voir retryTournamentEntitlementConfirmation() et createTournament() ci-dessous) ne peut
+// toujours pas confirmer ou infirmer la consommation du crédit — jamais assimilé à un refus,
+// jamais non plus à une confirmation.
+const CREDIT_INDETERMINATE_MESSAGE =
+  "Impossible de confirmer votre crédit tournoi pour le moment (SterPlatform indisponible) — réessayez dans quelques instants. Aucun crédit n'a été perdu.";
 
 const TournamentSchema = z.object({
   name: z.string().trim().min(3, "Le nom doit contenir au moins 3 caractères."),
@@ -67,15 +76,26 @@ export type TournamentState = {
   ts?: number;
 } | undefined;
 
+/**
+ * DARTSOPEN-MONETIZATION-003 (P5, contre-audit) — `max_players`/`nb_pools`/`nb_boards`
+ * retombent sur 16/1/2 côté serveur quand le champ est réellement absent du formulaire soumis
+ * (`formData.get(...) === null`), jamais uniquement une valeur par défaut d'`<input>` côté UI
+ * (TournamentForm.tsx) que n'importe quel appelant direct de cette Server Action pourrait
+ * simplement omettre. Une valeur présente mais vide (l'utilisateur a effacé le champ) n'est PAS
+ * défaultée ici — elle échoue normalement la validation Zod, avec le message d'erreur habituel.
+ */
 function extractTournamentRaw(formData: FormData): Record<string, string> {
+  const maxPlayers = formData.get("max_players");
+  const nbPools = formData.get("nb_pools");
+  const nbBoards = formData.get("nb_boards");
   return {
     name: (formData.get("name") as string) ?? "",
     date: (formData.get("date") as string) ?? "",
     location: (formData.get("location") as string) ?? "",
-    max_players: (formData.get("max_players") as string) ?? "",
+    max_players: maxPlayers !== null ? (maxPlayers as string) : String(DEFAULT_MAX_PLAYERS),
     entry_fee: (formData.get("entry_fee") as string) ?? "",
-    nb_pools: (formData.get("nb_pools") as string) ?? "",
-    nb_boards: (formData.get("nb_boards") as string) ?? "",
+    nb_pools: nbPools !== null ? (nbPools as string) : String(DEFAULT_NB_POOLS),
+    nb_boards: nbBoards !== null ? (nbBoards as string) : String(DEFAULT_NB_BOARDS),
     advancement_per_pool: (formData.get("advancement_per_pool") as string) ?? "",
     players_per_team: (formData.get("players_per_team") as string) ?? "",
     registration_mode: (formData.get("registration_mode") as string) ?? "ONLINE",
@@ -135,10 +155,19 @@ export async function createTournament(prevState: TournamentState, formData: For
     // mode === "SUBSCRIPTION" : l'abonnement suffit déjà, aucun crédit à consommer.
   }
 
-  // Création locale — idempotente sur idempotencyKey (dbCreateTournament) : un double-clic/une
-  // relance renvoie la tournée déjà créée par la première tentative au lieu d'en créer une
+  // DARTSOPEN-MONETIZATION-003 (P3, contre-audit) — un tournoi qui devra consommer un crédit
+  // démarre en PENDING_ENTITLEMENT, jamais directement en DRAFT : ni publiable, ni ouvert aux
+  // inscriptions, ni compté comme autorisé >10 tant que la consommation n'est pas confirmée
+  // (voir lib/utils/tournamentStatus.ts, aucune transition définie hors de
+  // dbConfirmTournamentEntitlement()). Idempotent sur (userId, idempotencyKey) — un double-clic/
+  // une relance renvoie la tournée déjà créée par la première tentative au lieu d'en créer une
   // seconde (audit DO-AUD-002).
-  const tournament = await dbCreateTournament(user.id, parsed.data, idempotencyKey).catch((err) => {
+  const tournament = await dbCreateTournament(
+    user.id,
+    parsed.data,
+    idempotencyKey,
+    creditToConsume ? "PENDING_ENTITLEMENT" : "DRAFT",
+  ).catch((err) => {
     console.error('[createTournament]', err);
     return null;
   });
@@ -149,20 +178,77 @@ export async function createTournament(prevState: TournamentState, formData: For
     // clé (retry après un succès déjà obtenu) renvoie le crédit déjà consommé, n'en consomme
     // jamais un second (audit DO-AUD-002, "2 crédits disponibles + double soumission → pas de
     // double création involontaire").
-    const consumed = await consumeTournamentSizeCredit(creditToConsume.organizationSlug, idempotencyKey);
-    if (!consumed) {
-      // Aucun crédit n'a été consommé (SterPlatform l'a refusé) : le tournoi qu'on vient de
-      // créer localement n'a donc jamais été confirmé — on le retire plutôt que de laisser un
-      // tournoi >10 joueurs exister sans entitlement réel.
+    const outcome = await consumeTournamentSizeCredit(creditToConsume.organizationSlug, idempotencyKey);
+
+    if (outcome === "CONFIRMED") {
+      await dbConfirmTournamentEntitlement(tournament.id);
+      revalidatePath("/tournaments");
+      redirect(`/tournaments/${tournament.id}/activate`);
+    }
+
+    if (outcome === "REJECTED") {
+      // Refus métier certain (SterPlatform) : le tournoi PENDING_ENTITLEMENT qu'on vient de
+      // créer n'a jamais été confirmé — on le retire plutôt que de laisser une ligne inutile.
+      // Si cette suppression échoue elle-même, le tournoi reste PENDING_ENTITLEMENT (jamais
+      // publiable/exploitable par construction, voir son docblock) — la cohérence commerciale
+      // ne dépend donc jamais du succès de cette seule suppression compensatoire (P3).
       await dbDeleteTournament(tournament.id).catch((err) => {
-        console.error('[createTournament] rollback (crédit indisponible) échoué:', tournament.id, err);
+        console.error('[createTournament] rollback (crédit refusé) échoué:', tournament.id, err);
       });
       return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT, fields: raw, ts: Date.now() };
     }
+
+    // outcome === "INDETERMINATE" (P2) — ni confirmer, ni supprimer : le tournoi reste
+    // PENDING_ENTITLEMENT, un état sûr et réconciliable (retryTournamentEntitlementConfirmation()
+    // ci-dessous, ou une nouvelle soumission du même formulaire — même idempotencyKey).
+    return { error: CREDIT_INDETERMINATE_MESSAGE, fields: raw, ts: Date.now() };
   }
 
   revalidatePath("/tournaments");
   redirect(`/tournaments/${tournament.id}/activate`);
+}
+
+/**
+ * DARTSOPEN-MONETIZATION-003 (P2/P3, contre-audit) — seul moyen de faire sortir un tournoi de
+ * PENDING_ENTITLEMENT une fois l'organisateur reparti de la page de création (createTournament()
+ * lui-même gère déjà la ré-soumission du même formulaire, même idempotencyKey). Réutilise
+ * `tournament.idempotency_key`, stable et déjà stocké sur la ligne — jamais un nouvel identifiant
+ * qui romprait l'idempotence côté SterPlatform.
+ */
+export async function retryTournamentEntitlementConfirmation(tournamentId: string): Promise<{ error?: string } | void> {
+  const tournament = await getOwnedTournament(tournamentId) as { status: string; association_id: string; idempotency_key: string };
+
+  if (tournament.status !== "PENDING_ENTITLEMENT") {
+    revalidatePath(`/tournaments/${tournamentId}`);
+    return;
+  }
+
+  const entitlement = await resolveTournamentSizeEntitlement(tournament.association_id);
+  if (entitlement.mode === "NONE") {
+    return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION };
+  }
+  if (entitlement.mode === "SUBSCRIPTION") {
+    await dbConfirmTournamentEntitlement(tournamentId);
+    revalidatePath(`/tournaments/${tournamentId}`);
+    return;
+  }
+
+  const outcome = await consumeTournamentSizeCredit(entitlement.organizationSlug, tournament.idempotency_key);
+
+  if (outcome === "CONFIRMED") {
+    await dbConfirmTournamentEntitlement(tournamentId);
+    revalidatePath(`/tournaments/${tournamentId}`);
+    return;
+  }
+
+  if (outcome === "REJECTED") {
+    await dbDeleteTournament(tournamentId).catch((err) => {
+      console.error('[retryTournamentEntitlementConfirmation] rollback (crédit refusé) échoué:', tournamentId, err);
+    });
+    redirect("/tournaments");
+  }
+
+  return { error: CREDIT_INDETERMINATE_MESSAGE };
 }
 
 export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
@@ -200,10 +286,19 @@ export async function updateTournament(prevState: TournamentState, formData: For
       return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION, fields: raw, ts: Date.now() };
     }
     if (entitlement.mode === "CREDIT_ATTEMPT") {
-      const consumed = await consumeTournamentSizeCredit(entitlement.organizationSlug, tournamentId);
-      if (!consumed) {
+      const outcome = await consumeTournamentSizeCredit(entitlement.organizationSlug, tournamentId);
+      if (outcome === "REJECTED") {
         return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT, fields: raw, ts: Date.now() };
       }
+      if (outcome === "INDETERMINATE") {
+        // DARTSOPEN-MONETIZATION-003 (P2) — dbUpdateTournament() n'a pas encore été appelé :
+        // le tournoi reste inchangé en base, jamais un max_players > 10 confirmé sur un
+        // résultat indéterminé. Un nouvel essai (même tournamentId = même référence idempotente)
+        // suffira à confirmer dès que SterPlatform redevient joignable — aucun crédit perdu si
+        // la consommation avait en réalité déjà eu lieu.
+        return { error: CREDIT_INDETERMINATE_MESSAGE, fields: raw, ts: Date.now() };
+      }
+      // outcome === "CONFIRMED" : la mise à jour ci-dessous peut s'appliquer.
     }
   }
 

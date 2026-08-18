@@ -98,3 +98,26 @@ export async function createPaymentCheckout(params: CreatePaymentCheckoutParams)
 
   return { checkout: await res.json() as PaymentCheckout };
 }
+
+/**
+ * DARTSOPEN-MONETIZATION-003 (P1, contre-audit) — `POST /api/internal/payments/{id}/refund`,
+ * remboursement total (SterPlatform, Module Payments — voir son CLAUDE.md). Seul cas d'usage
+ * aujourd'hui : un paiement en ligne confirmé après coup (webhook `payment.succeeded` tardif)
+ * alors que la réservation avait expiré et que la place a déjà été reprise par quelqu'un
+ * d'autre — jamais silencieusement gardé, jamais transformé en inscription au-delà de
+ * `maxPlayers` (voir dbConfirmPendingPayment(), lib/db/tournament.ts).
+ */
+export async function refundPayment(paymentId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await internalFetch(`/api/internal/payments/${encodeURIComponent(paymentId)}/refund`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null) as { error?: string } | null;
+      return { ok: false, error: body?.error ?? `Erreur SterPlatform (${res.status})` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

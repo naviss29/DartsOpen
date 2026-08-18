@@ -8,6 +8,15 @@ datasource db {
 }
 
 enum TournamentStatus {
+  /**
+   * DARTSOPEN-MONETIZATION-003 (P3) — état transitoire d'un tournoi >10 joueurs créé
+   * localement mais dont l'entitlement (crédit tournoi/abonnement) n'est pas encore confirmé
+   * par SterPlatform. Ni publiable (jamais de transition directe vers OPEN), ni ouvert aux
+   * inscriptions, ni considéré comme autorisé >10 — voir lib/utils/tournamentStatus.ts. Ce
+   * n'est qu'une fois l'entitlement confirmé (ou le paiement carrément inexistant, tournoi
+   * ≤10) que le tournoi passe en DRAFT.
+   */
+  PENDING_ENTITLEMENT
   DRAFT
   OPEN
   IN_PROGRESS
@@ -24,6 +33,15 @@ enum RegistrationStatus {
   PENDING
   PAID
   CANCELLED
+  /**
+   * DARTSOPEN-MONETIZATION-003 (P1) — paiement en ligne reçu après coup (webhook tardif) alors
+   * que la réservation avait expiré et que la place a été reprise par un autre joueur : jamais
+   * transformé en PAID (dépasserait maxPlayers), jamais silencieusement ignoré non plus — un
+   * remboursement automatique est déclenché via SterPlatform (voir
+   * app/api/webhooks/sterplatform-payments/route.ts). Traitement financier explicite, jamais
+   * une perte silencieuse du paiement.
+   */
+  REFUNDED
 }
 
 enum RegistrationMode {
@@ -91,8 +109,15 @@ model Tournament {
    * `reference` for tournament-credit consumption (lib/entitlements/tournamentSizeGuard.ts) —
    * decoupled from this row's own `id`, which used to be freshly regenerated on every request,
    * defeating idempotence entirely.
+   *
+   * DARTSOPEN-MONETIZATION-003 (P4) — scoped to `(userId, idempotencyKey)`, never globally
+   * unique: a globally-unique key let a key submitted by user B collide with user A's own key,
+   * silently handing B a reference to A's tournament (dbCreateTournament()'s
+   * findUnique-by-key/P2002 fallback would return A's row to B). Two different owners using the
+   * same key value now simply live in two disjoint namespaces — never a collision, never a
+   * rejection needed.
    */
-  idempotencyKey     String           @unique @map("idempotency_key")
+  idempotencyKey     String           @map("idempotency_key")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
@@ -100,6 +125,7 @@ model Tournament {
   pools         Pool[]
   matches       Match[]
 
+  @@unique([userId, idempotencyKey])
   @@index([userId])
   @@map("tournaments")
 }

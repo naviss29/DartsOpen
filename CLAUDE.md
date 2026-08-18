@@ -156,12 +156,70 @@ retirés.
   `entry_fee`, jamais transmis à Stripe) ne nécessite aucun Stripe.
 - **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) — remplace l'ancien
   webhook Stripe local : reçoit les notifications de paiement signées par SterPlatform
-  (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`), marque la
-  `Registration` payée sur `payment.succeeded`.
+  (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`). Sur
+  `payment.succeeded`, appelle `dbConfirmPendingPayment()` (jamais un `UPDATE` aveugle — voir
+  "Capacité et paiement tardif" ci-dessous) : `CONFIRMED` → email de confirmation ;
+  `ALREADY_CONFIRMED`/`NOT_FOUND` → no-op silencieux (redélivraison ou état déjà terminal) ;
+  `CAPACITY_LOST` → remboursement automatique via `refundPayment()`
+  (`lib/api/sterplatformInternal.ts`, `POST /api/internal/payments/{id}/refund`), jamais un
+  paiement silencieusement gardé.
 - `PLATFORM_FEE_CENTS` (`lib/platformFee.ts`) — reste une décision métier propre à DartsOpen
   (transmise en paramètre `platformFeeCents` à l'appel de checkout, jamais calculée côté
   SterPlatform, qui reste générique entre modules).
 - `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) inchangés en base.
+
+### Capacité et paiement tardif (DARTSOPEN-MONETIZATION-003, contre-audit P1)
+
+`dbReserveRegistrationSlot()` (verrou + comptage + insertion atomiques, voir mission
+DARTSOPEN-MONETIZATION-002) réserve la place à la création de l'inscription. Mais un paiement
+en ligne peut arriver **après** l'expiration de sa réservation, une fois la place reprise par
+quelqu'un d'autre — `dbConfirmPendingPayment()` (`lib/db/tournament.ts`) est le seul point qui
+peut faire passer une inscription PENDING → PAID sur réception du webhook : verrouille le
+tournoi, relit la réservation sous ce verrou, et ne confirme que si la réservation est encore
+valide **ou** si la capacité a été revérifiée et reste disponible. Si la place a été reprise
+(`CAPACITY_LOST`), l'inscription passe `REFUNDED` (jamais PAID au-delà de `maxPlayers`) et le
+webhook déclenche un remboursement automatique — jamais un dépassement de capacité, jamais un
+paiement perdu silencieusement.
+
+### Entitlement >10 joueurs : idempotence, réconciliation, état intermédiaire (DARTSOPEN-MONETIZATION-003, contre-audit P2/P3/P4)
+
+- **Idempotence scopée par propriétaire** — `Tournament.idempotencyKey` est unique sur
+  `(userId, idempotencyKey)`, jamais globalement unique : une clé soumise par un organisateur B
+  ne peut jamais résoudre au tournoi d'un organisateur A (voir le docblock du champ,
+  `prisma/schema.prisma`).
+- **Trois issues de consommation de crédit** (`lib/entitlements/tournamentSizeGuard.ts`,
+  `CreditConsumptionOutcome`) — `CONFIRMED`/`REJECTED`/`INDETERMINATE`, jamais un booléen : une
+  erreur réseau/timeout sur `POST .../tournament-credits/consume` n'est jamais assimilée à un
+  refus métier (`REJECTED`, réservé au 409 explicite de SterPlatform). Un résultat
+  `INDETERMINATE` déclenche une réconciliation en lecture seule
+  (`GET .../tournament-credits/status?product=X&reference=Y`, `reconcileTournamentCredit()`)
+  qui interroge SterPlatform — seule source de vérité — « cette référence a-t-elle déjà
+  consommé un crédit ? », sans jamais retenter la mutation elle-même.
+- **État `PENDING_ENTITLEMENT`** (`Tournament.status`) — un tournoi >10 joueurs nécessitant un
+  crédit démarre dans cet état, jamais directement `DRAFT` : aucune transition définie hors de
+  `dbConfirmTournamentEntitlement()` (voir `lib/utils/tournamentStatus.ts`, absent de
+  `TRANSITIONS`) — ni publiable, ni ouvrable aux inscriptions, ni compté comme autorisé >10 tant
+  que l'entitlement n'est pas confirmé. Sur `REJECTED`, le tournoi est supprimé
+  (compensation) — mais si cette suppression échoue elle-même, le tournoi reste
+  `PENDING_ENTITLEMENT` (jamais exploitable par construction, la cohérence commerciale ne
+  dépend donc jamais du succès de cette seule suppression). Sur `INDETERMINATE`, le tournoi
+  reste `PENDING_ENTITLEMENT` — réconciliable via une nouvelle soumission du même formulaire
+  (même `idempotencyKey`) ou via `retryTournamentEntitlementConfirmation()`
+  (`RetryEntitlementButton`, page `/tournaments/[id]`), qui réutilise
+  `tournament.idempotency_key` comme référence stable.
+
+### Dette métier assumée : `RegistrationStatus.PAID` ne prouve pas un encaissement (DARTSOPEN-MONETIZATION-003, contre-audit P6)
+
+`PAID` recouvre trois réalités distinctes : inscription gratuite confirmée, paiement en ligne
+réellement encaissé par Stripe, paiement sur place pas encore encaissé. `feeCollected`
+(`Registration`) est le champ qui distingue correctement ces cas — `true` uniquement pour un
+paiement en ligne confirmé par `dbConfirmPendingPayment()`, `false` pour gratuit/sur place (voir
+`lib/db/tournament.concurrency.test.ts`, describe "Sémantique PAID/feeCollected"). Aucune
+logique de DartsOpen ne considère `PAID` seul comme preuve d'encaissement aujourd'hui (DartsOpen
+ne calcule ni revenu ni reversement — SterPlatform gère l'argent réel). Une séparation propre
+`registrationStatus`/`paymentStatus` (deux axes indépendants plutôt qu'un seul statut qui les
+mélange) reste à faire si une logique financière venait un jour à dépendre de cette distinction
+— non traitée ici pour rester proportionné (aucun besoin actuel ne le justifie).
 
 ## Algorithme de classement (lib/db/ranking.ts)
 - Participation : +1 pt

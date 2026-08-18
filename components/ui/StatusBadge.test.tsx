@@ -4,6 +4,7 @@ import StatusBadge from "./StatusBadge";
 
 describe("StatusBadge", () => {
   it.each([
+    ["PENDING_ENTITLEMENT", "En attente de confirmation"],
     ["DRAFT", "Brouillon"],
     ["OPEN", "Inscriptions ouvertes"],
     ["IN_PROGRESS", "En cours"],

@@ -65,6 +65,11 @@ function mapTournament(t: {
     payment_mode: t.paymentMode,
     scoring_mode: t.scoringMode,
     quick_mode: t.quickMode,
+    // DARTSOPEN-MONETIZATION-003 (P3) — exposé pour permettre une reconciliation manuelle
+    // (retryTournamentEntitlementConfirmation()) d'un tournoi resté PENDING_ENTITLEMENT : la
+    // même référence que celle utilisée lors de la tentative de consommation initiale, stable,
+    // jamais un secret (déjà transmis tel quel à SterPlatform).
+    idempotency_key: t.idempotencyKey,
     created_at: t.createdAt.toISOString(),
     rounds: t.rounds ?? [],
   };
@@ -338,9 +343,13 @@ export async function dbCreateTournament(userId: string, data: {
   payment_mode: string;
   scoring_mode: string;
   quick_mode?: boolean;
-}, idempotencyKey: string) {
+}, idempotencyKey: string, initialStatus: "DRAFT" | "PENDING_ENTITLEMENT" = "DRAFT") {
+  // DARTSOPEN-MONETIZATION-003 (P4) — scoped to (userId, idempotencyKey), never a bare
+  // idempotencyKey lookup: a key submitted by a different user must never resolve to this
+  // user's tournament (see Tournament.idempotencyKey's docblock in schema.prisma).
+  const key = { userId_idempotencyKey: { userId, idempotencyKey } };
   const existing = await prisma.tournament.findUnique({
-    where: { idempotencyKey },
+    where: key,
     include: { rounds: { select: roundSelect } },
   });
   if (existing) {
@@ -352,6 +361,7 @@ export async function dbCreateTournament(userId: string, data: {
       data: {
         userId,
         idempotencyKey,
+        status: initialStatus,
         name: data.name,
         date: new Date(data.date),
         location: data.location,
@@ -374,13 +384,26 @@ export async function dbCreateTournament(userId: string, data: {
       // Lost a race against a concurrent identical submission (double-click) — the winner
       // already created this exact tournament between our findUnique above and this insert.
       const winner = await prisma.tournament.findUniqueOrThrow({
-        where: { idempotencyKey },
+        where: key,
         include: { rounds: { select: roundSelect } },
       });
       return mapTournament({ ...winner, rounds: [] });
     }
     throw err;
   }
+}
+
+/**
+ * DARTSOPEN-MONETIZATION-003 (P3) — the only way a tournament ever leaves PENDING_ENTITLEMENT:
+ * called once the credit consumption (or reconciliation) has genuinely confirmed the
+ * entitlement. A no-op (never throws) if the tournament isn't in PENDING_ENTITLEMENT — retrying
+ * the confirmation after it already succeeded is safe.
+ */
+export async function dbConfirmTournamentEntitlement(tournamentId: string): Promise<void> {
+  await prisma.tournament.updateMany({
+    where: { id: tournamentId, status: "PENDING_ENTITLEMENT" },
+    data: { status: "DRAFT" },
+  });
 }
 
 export async function dbUpdateTournament(id: string, data: {
@@ -572,6 +595,83 @@ export async function dbReserveRegistrationSlot(
       },
     });
     return mapRegistration(r);
+  });
+}
+
+export type ConfirmPendingPaymentResult = "CONFIRMED" | "ALREADY_CONFIRMED" | "CAPACITY_LOST" | "NOT_FOUND";
+
+/**
+ * DARTSOPEN-MONETIZATION-003 (P1, contre-audit) — the only way a webhook `payment.succeeded`
+ * may ever turn a registration PAID. Replaces the previous blind `UPDATE ... WHERE status =
+ * 'PENDING'` (dbMarkRegistrationPaid), which ignored `reservationExpiresAt` entirely: a late
+ * webhook for A's payment could flip A to PAID even after A's reservation had already expired
+ * and B had legitimately taken the last slot — pushing the tournament to maxPlayers + 1.
+ *
+ * Same lock discipline as dbReserveRegistrationSlot(): `SELECT ... FOR UPDATE` on the tournament
+ * row serializes this confirmation against every concurrent reservation/confirmation attempt for
+ * the same tournament, and the registration itself is re-read *after* acquiring that lock (never
+ * trusting a value read before it) so a concurrent expiry/reclaim can never be missed.
+ *
+ * - Reservation still valid (`reservationExpiresAt` in the future) → confirms normally, the slot
+ *   was never at risk.
+ * - Reservation expired but the freed slot was never reclaimed by anyone else → still safe to
+ *   confirm (capacity re-checked, not just assumed).
+ * - Reservation expired *and* capacity has been reclaimed (by another registration, exactly the
+ *   contre-audit's A/B scenario) → CAPACITY_LOST, never silently turned into PAID. The caller
+ *   (the webhook route) is responsible for the explicit financial treatment (refund) — this
+ *   function only ever decides the registration's own state, never talks to SterPlatform itself
+ *   (no network I/O inside a DB transaction holding a row lock).
+ */
+export async function dbConfirmPendingPayment(registrationId: string): Promise<ConfirmPendingPaymentResult> {
+  const initial = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    select: { tournamentId: true },
+  });
+  if (!initial) return "NOT_FOUND";
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM tournaments WHERE id = ${initial.tournamentId} FOR UPDATE`;
+
+    const [reg, tournament] = await Promise.all([
+      tx.registration.findUnique({ where: { id: registrationId } }),
+      tx.tournament.findUnique({ where: { id: initial.tournamentId } }),
+    ]);
+    if (!reg || !tournament) return "NOT_FOUND";
+    if (reg.status === "PAID") return "ALREADY_CONFIRMED";
+    if (reg.status !== "PENDING") return "NOT_FOUND"; // CANCELLED/REFUNDED — a late webhook must never resurrect it
+
+    const now = new Date();
+    const reservationStillValid = reg.reservationExpiresAt !== null && reg.reservationExpiresAt > now;
+
+    if (!reservationStillValid) {
+      const occupied = await tx.registration.count({
+        where: {
+          tournamentId: reg.tournamentId,
+          id: { not: registrationId },
+          OR: [
+            { status: "PAID" },
+            { status: "PENDING", reservationExpiresAt: { gt: now } },
+          ],
+        },
+      });
+      if (occupied * tournament.playersPerTeam >= tournament.maxPlayers) {
+        // The slot this registration used to reserve has genuinely been reclaimed by someone
+        // else — confirming would push the tournament past maxPlayers. Transition straight to
+        // REFUNDED here, inside the same lock: leaving it PENDING-but-expired between
+        // transactions would let a concurrent redelivery re-evaluate it inconsistently.
+        await tx.registration.update({
+          where: { id: registrationId },
+          data: { status: "REFUNDED", reservationExpiresAt: null },
+        });
+        return "CAPACITY_LOST";
+      }
+    }
+
+    await tx.registration.update({
+      where: { id: registrationId },
+      data: { status: "PAID", feeCollected: true, reservationExpiresAt: null },
+    });
+    return "CONFIRMED";
   });
 }
 
@@ -1318,14 +1418,6 @@ export async function dbUpdateRegistrationPaymentId(registrationId: string, ster
   });
 }
 
-export async function dbMarkRegistrationPaid(registrationId: string) {
-  await prisma.registration.updateMany({
-    where: { id: registrationId, status: "PENDING" },
-    // reservationExpiresAt is only ever meaningful for a PENDING reservation (DO-AUD-003/004/009)
-    // — cleared here since a PAID registration occupies its slot permanently, never expiring.
-    data: { status: "PAID", feeCollected: true, reservationExpiresAt: null },
-  });
-}
 
 export async function dbGetRegistrationWithTournament(registrationId: string) {
   const r = await prisma.registration.findUnique({
@@ -1342,6 +1434,7 @@ export async function dbGetRegistrationWithTournament(registrationId: string) {
     player_name: r.playerName,
     player_email: r.playerEmail,
     player_names: r.playerNames as string[],
+    ster_payment_id: r.sterPaymentId,
     tournament_name: r.tournament.name,
     tournament_date: dateFr,
     tournament_location: r.tournament.location,

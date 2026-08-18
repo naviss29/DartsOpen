@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { dbMarkRegistrationPaid, dbGetRegistrationWithTournament } from "@/lib/db/tournament";
+import { dbConfirmPendingPayment, dbGetRegistrationWithTournament, type ConfirmPendingPaymentResult } from "@/lib/db/tournament";
 import { sendEmail } from "@/lib/api/sterplatform";
+import { refundPayment } from "@/lib/api/sterplatformInternal";
 import { NextResponse } from "next/server";
 
 const SECRET = process.env.STER_PAYMENTS_CALLBACK_SECRET ?? "";
@@ -65,15 +66,60 @@ export async function POST(req: Request) {
   if (notification.event === "payment.succeeded") {
     const registrationId = notification.externalReference;
 
-    // Laisser remonter l'erreur DB : SterPlatform ne retente pas (v1, delivery unique) mais
-    // GET /api/internal/payments/{id} reste la source de vérité si cette écriture échoue.
+    // DARTSOPEN-MONETIZATION-003 (P1, contre-audit) — dbConfirmPendingPayment() est la seule
+    // façon dont ce webhook peut faire passer une inscription PENDING → PAID : il relit la
+    // réservation sous verrou et revérifie la capacité si elle a expiré, jamais un simple
+    // `UPDATE ... WHERE status = 'PENDING'` aveugle (voir son docblock, lib/db/tournament.ts).
+    // Laisser remonter une erreur DB inattendue : SterPlatform ne retente pas (v1, delivery
+    // unique) mais GET /api/internal/payments/{id} reste la source de vérité si cette écriture
+    // échoue.
+    let result: ConfirmPendingPaymentResult;
     try {
-      await dbMarkRegistrationPaid(registrationId);
+      result = await dbConfirmPendingPayment(registrationId);
     } catch (err) {
-      console.error("[webhook] Erreur mise à jour registration:", registrationId, err);
+      console.error("[webhook] Erreur confirmation paiement:", registrationId, err);
       return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
     }
 
+    if (result === "NOT_FOUND") {
+      console.warn("[webhook] payment.succeeded pour une inscription introuvable ou déjà non-PENDING (CANCELLED/REFUNDED) :", registrationId);
+      return NextResponse.json({ received: true });
+    }
+
+    if (result === "ALREADY_CONFIRMED") {
+      // Redélivraison du webhook (ou confirmation déjà traitée par une tentative précédente) —
+      // aucune nouvelle transition, jamais un second email de confirmation.
+      return NextResponse.json({ received: true });
+    }
+
+    if (result === "CAPACITY_LOST") {
+      // La réservation avait expiré et la place a été reprise par quelqu'un d'autre avant que
+      // ce paiement tardif n'arrive : dbConfirmPendingPayment() a déjà marqué l'inscription
+      // REFUNDED (jamais PAID au-delà de maxPlayers). Traitement financier explicite —
+      // remboursement automatique via SterPlatform, jamais un paiement silencieusement gardé.
+      console.error(
+        "[webhook] Paiement reçu après expiration de la réservation et perte de la place — remboursement déclenché:",
+        registrationId,
+      );
+      const reg = await dbGetRegistrationWithTournament(registrationId).catch((err) => {
+        console.error("[webhook] Impossible de récupérer la registration pour le remboursement:", registrationId, err);
+        return null;
+      });
+      if (reg?.ster_payment_id) {
+        const refund = await refundPayment(reg.ster_payment_id);
+        if (!refund.ok) {
+          console.error(
+            "[webhook] Échec du remboursement automatique — intervention manuelle requise:",
+            registrationId, reg.ster_payment_id, refund.error,
+          );
+        }
+      } else {
+        console.error("[webhook] Aucun ster_payment_id enregistré — remboursement manuel requis:", registrationId);
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // result === "CONFIRMED"
     const reg = await dbGetRegistrationWithTournament(registrationId).catch((err) => {
       console.warn("[webhook] Impossible de récupérer la registration pour l'email:", registrationId, err);
       return null;

@@ -8,6 +8,9 @@ import { Pill, type PillTone } from "@naviss29/design-system";
  * `lib/utils/tournamentStatus.ts`, jamais redéfinis ici.
  */
 const tones: Record<string, PillTone> = {
+  // DARTSOPEN-MONETIZATION-003 (P3) — état transitoire, jamais publiable (voir
+  // lib/utils/tournamentStatus.ts) : "warning" le distingue visuellement d'un vrai brouillon.
+  PENDING_ENTITLEMENT: "warning",
   DRAFT: "neutral",
   OPEN: "brand",
   IN_PROGRESS: "success",
@@ -15,6 +18,7 @@ const tones: Record<string, PillTone> = {
 };
 
 const labels: Record<string, string> = {
+  PENDING_ENTITLEMENT: "En attente de confirmation",
   DRAFT: "Brouillon",
   OPEN: "Inscriptions ouvertes",
   IN_PROGRESS: "En cours",

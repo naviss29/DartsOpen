@@ -1,6 +1,7 @@
 import { RoundForm } from "@/components/tournament/RoundForm";
 import { DeleteRoundButton } from "@/components/tournament/DeleteRoundButton";
 import { TournamentStatusButton } from "@/components/tournament/TournamentStatusButton";
+import { RetryEntitlementButton } from "@/components/tournament/RetryEntitlementButton";
 import { EditTournamentForm } from "@/components/tournament/EditTournamentForm";
 import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
@@ -8,7 +9,7 @@ import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
 import { getTournamentSizeUiState } from "@/lib/entitlements/tournamentSizeGuard";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Card, Pill } from "@naviss29/design-system";
+import { Alert, Card, Pill } from "@naviss29/design-system";
 import StatusBadge from "@/components/ui/StatusBadge";
 import NavPills from "@/components/ui/NavPills";
 
@@ -110,6 +111,20 @@ export default async function TournamentDetailPage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {tournament.status === "PENDING_ENTITLEMENT" && (
+        <Alert tone="warning">
+          <p className="font-medium">
+            Ce tournoi attend encore la confirmation de son crédit tournoi ou de votre abonnement DartsOpen.
+          </p>
+          <p className="mt-1">
+            Il n&apos;est pas encore ouvrable ni modifiable tant que cette confirmation n&apos;a pas eu lieu. Aucun crédit n&apos;a été perdu.
+          </p>
+          <div className="mt-3">
+            <RetryEntitlementButton tournamentId={id} />
+          </div>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         {[

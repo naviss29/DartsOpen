@@ -26,16 +26,17 @@ vi.mock("@/lib/db/tournament", () => ({
   dbUpdateTournament: vi.fn(),
   dbUpdateTournamentStatus: vi.fn(),
   dbDeleteTournament: vi.fn(),
+  dbConfirmTournamentEntitlement: vi.fn(),
   dbAddRound: vi.fn(),
   dbDeleteRound: vi.fn(),
 }));
 
-const { createTournament, updateTournament } = await import("./tournament");
+const { createTournament, updateTournament, retryTournamentEntitlementConfirmation } = await import("./tournament");
 const { getUser } = await import("@/lib/api/auth");
 const { getOwnedTournament } = await import("@/lib/actions/access");
 const { isOnlinePaymentAllowed } = await import("@/lib/payments/onlinePaymentGuard");
 const { resolveTournamentSizeEntitlement, consumeTournamentSizeCredit } = await import("@/lib/entitlements/tournamentSizeGuard");
-const { dbCreateTournament, dbUpdateTournament, dbDeleteTournament } = await import("@/lib/db/tournament");
+const { dbCreateTournament, dbUpdateTournament, dbDeleteTournament, dbConfirmTournamentEntitlement } = await import("@/lib/db/tournament");
 const { redirect } = await import("next/navigation");
 
 const USER = { id: "user-1", email: "alan@example.com", roles: [], isVerified: true };
@@ -70,13 +71,14 @@ function tournamentFormData(overrides: Record<string, string> = {}): FormData {
 
 beforeEach(() => {
   vi.mocked(getUser).mockReset().mockResolvedValue(USER as never);
-  vi.mocked(getOwnedTournament).mockReset().mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
+  vi.mocked(getOwnedTournament).mockReset().mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10, status: "DRAFT", idempotency_key: "idem-key-1" } as never);
   vi.mocked(isOnlinePaymentAllowed).mockReset();
   vi.mocked(resolveTournamentSizeEntitlement).mockReset();
   vi.mocked(consumeTournamentSizeCredit).mockReset();
   vi.mocked(dbCreateTournament).mockReset().mockResolvedValue({ id: "tournament-1" } as never);
   vi.mocked(dbUpdateTournament).mockReset().mockResolvedValue({} as never);
   vi.mocked(dbDeleteTournament).mockReset().mockResolvedValue(undefined as never);
+  vi.mocked(dbConfirmTournamentEntitlement).mockReset().mockResolvedValue(undefined as never);
   vi.mocked(redirect).mockClear();
 });
 
@@ -87,6 +89,62 @@ describe("createTournament — idempotency_key (DARTSOPEN-MONETIZATION-002, audi
     const result = await createTournament(undefined, fd);
 
     expect(result?.error).toBeDefined();
+    expect(dbCreateTournament).not.toHaveBeenCalled();
+  });
+});
+
+describe("createTournament — défauts serveur 16/1/2 (DARTSOPEN-MONETIZATION-003, contre-audit P5)", () => {
+  it("max_players absent du formulaire soumis → 16 côté serveur", async () => {
+    // 16 dépasse le palier gratuit (10) : le défaut serveur déclenche donc la vérification
+    // d'entitlement comme n'importe quelle valeur >10 explicite — un abonnement actif suffit ici.
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
+    const fd = tournamentFormData();
+    fd.delete("max_players");
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbCreateTournament).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ max_players: 16 }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("nb_pools absent du formulaire soumis → 1 côté serveur", async () => {
+    const fd = tournamentFormData();
+    fd.delete("nb_pools");
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbCreateTournament).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ nb_pools: 1 }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("nb_boards absent du formulaire soumis → 2 côté serveur", async () => {
+    const fd = tournamentFormData();
+    fd.delete("nb_boards");
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbCreateTournament).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ nb_boards: 2 }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("un champ présent mais vide n'est jamais défaulté silencieusement — échoue la validation normalement", async () => {
+    const fd = tournamentFormData({ max_players: "" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.errors?.max_players).toBeDefined();
     expect(dbCreateTournament).not.toHaveBeenCalled();
   });
 });
@@ -259,9 +317,9 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
   });
 
-  it("CREDIT : le tournoi est créé localement AVANT toute tentative de consommation du crédit (audit DO-AUD-001, 'création locale intermédiaire + confirmation')", async () => {
+  it("CREDIT : le tournoi est créé localement (PENDING_ENTITLEMENT) AVANT toute tentative de consommation du crédit (audit DO-AUD-001, 'création locale intermédiaire + confirmation')", async () => {
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
-    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(true);
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
     const fd = tournamentFormData({ max_players: "16" });
 
     const callOrder: string[] = [];
@@ -271,18 +329,21 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     });
     vi.mocked(consumeTournamentSizeCredit).mockImplementation(async () => {
       callOrder.push("consume");
-      return true;
+      return "CONFIRMED";
     });
 
     await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
 
     expect(callOrder).toEqual(["create", "consume"]);
     expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "idem-key-1");
+    // DARTSOPEN-MONETIZATION-003 (P3) : créé PENDING_ENTITLEMENT, jamais directement DRAFT.
+    expect(dbCreateTournament).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), "PENDING_ENTITLEMENT");
+    expect(dbConfirmTournamentEntitlement).toHaveBeenCalledWith("tournament-1");
   });
 
   it("CREDIT : la clé d'idempotence du formulaire sert de référence de consommation (jamais l'id auto-généré du tournoi)", async () => {
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
-    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(true);
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
     const fd = tournamentFormData({ max_players: "16", idempotency_key: "stable-key-xyz" });
 
     await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
@@ -290,9 +351,19 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "stable-key-xyz");
   });
 
-  it("CREDIT indisponible : le tournoi créé localement est retiré (rollback), aucune perte silencieuse d'un tournoi non entitled", async () => {
+  it("SUBSCRIPTION : le tournoi est créé directement en DRAFT, jamais PENDING_ENTITLEMENT (aucun crédit à confirmer)", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
+    const fd = tournamentFormData({ max_players: "32" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbCreateTournament).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), "DRAFT");
+    expect(dbConfirmTournamentEntitlement).not.toHaveBeenCalled();
+  });
+
+  it("CREDIT refusé (REJECTED) : le tournoi créé localement est retiré (rollback), aucune perte silencieuse d'un tournoi non entitled", async () => {
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
-    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(false);
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("REJECTED");
     vi.mocked(dbCreateTournament).mockResolvedValue({ id: "tournament-created" } as never);
     const fd = tournamentFormData({ max_players: "16" });
 
@@ -301,6 +372,39 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     expect(result?.error).toBeDefined();
     expect(dbCreateTournament).toHaveBeenCalledTimes(1);
     expect(dbDeleteTournament).toHaveBeenCalledWith("tournament-created");
+    expect(dbConfirmTournamentEntitlement).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("DARTSOPEN-MONETIZATION-003 (P3, contre-audit) — même si la suppression compensatoire échoue elle-même, jamais de confirmation : le tournoi n'est jamais rendu exploitable", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("REJECTED");
+    vi.mocked(dbCreateTournament).mockResolvedValue({ id: "tournament-created" } as never);
+    // La suppression compensatoire elle-même échoue (ex. DB momentanément indisponible) — la
+    // cohérence commerciale ne doit jamais en dépendre : le tournoi créé en PENDING_ENTITLEMENT
+    // n'a par construction aucune transition possible vers DRAFT/OPEN hors de
+    // dbConfirmTournamentEntitlement(), jamais appelé ici.
+    vi.mocked(dbDeleteTournament).mockRejectedValue(new Error("db momentanément indisponible"));
+    const fd = tournamentFormData({ max_players: "16" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBeDefined();
+    expect(dbConfirmTournamentEntitlement).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("DARTSOPEN-MONETIZATION-003 (P2, contre-audit) — CREDIT indéterminé (timeout) : ni confirmé, ni supprimé, le tournoi reste PENDING_ENTITLEMENT", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("INDETERMINATE");
+    vi.mocked(dbCreateTournament).mockResolvedValue({ id: "tournament-created" } as never);
+    const fd = tournamentFormData({ max_players: "16" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toMatch(/impossible de confirmer/i);
+    expect(dbDeleteTournament).not.toHaveBeenCalled();
+    expect(dbConfirmTournamentEntitlement).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -317,7 +421,7 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
 
   it("contournement par appel direct de la Server Action avec maxPlayers=64 sans entitlement (mission §11) refusé", async () => {
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
-    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(false);
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("REJECTED");
     const fd = tournamentFormData({ max_players: "64" });
 
     const result = await createTournament(undefined, fd);
@@ -379,7 +483,7 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
   it("une augmentation réelle au-delà de 10 est acceptée via crédit, en utilisant l'id stable du tournoi comme référence", async () => {
     vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
-    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(true);
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
     const fd = tournamentFormData({ max_players: "64" });
     fd.set("tournament_id", "tournament-1");
 
@@ -390,16 +494,29 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
   });
 
-  it("crédit refusé à la modification : dbUpdateTournament jamais appelé", async () => {
+  it("crédit refusé (REJECTED) à la modification : dbUpdateTournament jamais appelé", async () => {
     vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
-    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue(false);
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("REJECTED");
     const fd = tournamentFormData({ max_players: "64" });
     fd.set("tournament_id", "tournament-1");
 
     const result = await updateTournament(undefined, fd);
 
     expect(result?.error).toBeDefined();
+    expect(dbUpdateTournament).not.toHaveBeenCalled();
+  });
+
+  it("DARTSOPEN-MONETIZATION-003 (P2, contre-audit) — crédit indéterminé à la modification : dbUpdateTournament jamais appelé, jamais un refus définitif", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", max_players: 10 } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("INDETERMINATE");
+    const fd = tournamentFormData({ max_players: "64" });
+    fd.set("tournament_id", "tournament-1");
+
+    const result = await updateTournament(undefined, fd);
+
+    expect(result?.error).toMatch(/impossible de confirmer/i);
     expect(dbUpdateTournament).not.toHaveBeenCalled();
   });
 
@@ -412,6 +529,62 @@ describe("updateTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
 
     expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
+  });
+});
+
+describe("retryTournamentEntitlementConfirmation — DARTSOPEN-MONETIZATION-003 (P2/P3, contre-audit)", () => {
+  it("no-op si le tournoi n'est pas (ou plus) PENDING_ENTITLEMENT", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", status: "DRAFT", idempotency_key: "idem-key-1" } as never);
+
+    const result = await retryTournamentEntitlementConfirmation("tournament-1");
+
+    expect(result).toBeUndefined();
+    expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
+  });
+
+  it("réutilise idempotency_key (jamais un nouvel identifiant) comme référence de consommation", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", status: "PENDING_ENTITLEMENT", idempotency_key: "idem-key-1" } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
+
+    await retryTournamentEntitlementConfirmation("tournament-1");
+
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "idem-key-1");
+    expect(dbConfirmTournamentEntitlement).toHaveBeenCalledWith("tournament-1");
+  });
+
+  it("SUBSCRIPTION désormais active : confirme directement sans jamais consommer de crédit", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", status: "PENDING_ENTITLEMENT", idempotency_key: "idem-key-1" } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
+
+    const result = await retryTournamentEntitlementConfirmation("tournament-1");
+
+    expect(result).toBeUndefined();
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
+    expect(dbConfirmTournamentEntitlement).toHaveBeenCalledWith("tournament-1");
+  });
+
+  it("REJECTED (refus métier certain) : supprime le tournoi resté PENDING_ENTITLEMENT", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", status: "PENDING_ENTITLEMENT", idempotency_key: "idem-key-1" } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("REJECTED");
+
+    await expect(retryTournamentEntitlementConfirmation("tournament-1")).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbDeleteTournament).toHaveBeenCalledWith("tournament-1");
+  });
+
+  it("INDETERMINATE : ne supprime jamais, ne confirme jamais, renvoie un message temporaire", async () => {
+    vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", status: "PENDING_ENTITLEMENT", idempotency_key: "idem-key-1" } as never);
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("INDETERMINATE");
+
+    const result = await retryTournamentEntitlementConfirmation("tournament-1");
+
+    expect(result?.error).toMatch(/impossible de confirmer/i);
+    expect(dbDeleteTournament).not.toHaveBeenCalled();
+    expect(dbConfirmTournamentEntitlement).not.toHaveBeenCalled();
   });
 });
 

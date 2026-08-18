@@ -9,21 +9,34 @@ import { apiFetch } from "./client";
  * courante est donc toujours disponible et correspond à l'organisateur concerné.
  */
 
+/**
+ * DARTSOPEN-MONETIZATION-003 (P2, contre-audit) — trois issues distinctes, jamais un simple
+ * booléen : CONFIRMED (crédit réellement consommé), REJECTED (refus métier certain — 409,
+ * "aucun crédit disponible", ou aucun jeton disponible donc aucun appel n'a même pu partir) et
+ * INDETERMINATE (erreur réseau/timeout/5xx — l'issue réelle côté SterPlatform est inconnue,
+ * jamais assimilée à un refus). Voir lib/entitlements/tournamentSizeGuard.ts pour la
+ * réconciliation qui suit une issue INDETERMINATE.
+ */
 export type ConsumeTournamentCreditResult =
-  | { ok: true; creditId: string }
-  | { ok: false; status: number };
+  | { outcome: "CONFIRMED"; creditId: string }
+  | { outcome: "REJECTED" }
+  | { outcome: "INDETERMINATE" };
 
 /**
  * `POST /api/organizations/{slug}/tournament-credits/consume` — consomme définitivement un
  * crédit tournoi disponible pour (organisation, DARTSOPEN), idempotent sur `reference`
  * (l'id du tournoi DartsOpen concerné — voir lib/entitlements/tournamentSizeGuard.ts). Un 409
- * signifie simplement "aucun crédit disponible", jamais journalisé comme une erreur (c'est le
- * cas d'usage normal d'une organisation sans crédit) ; tout autre échec (réseau, 5xx) est
- * journalisé — jamais un `.catch(() => null)` muet (CLAUDE.md §Gestion des erreurs).
+ * signifie un refus métier certain ("aucun crédit disponible"), jamais journalisé comme une
+ * erreur (c'est le cas d'usage normal d'une organisation sans crédit) ; tout autre échec
+ * (réseau, 5xx, statut HTTP inattendu) est INDETERMINATE et journalisé — jamais un
+ * `.catch(() => null)` muet (CLAUDE.md §Gestion des erreurs), et surtout jamais confondu avec
+ * REJECTED : une erreur réseau/timeout n'est jamais un refus métier.
  */
 export async function consumeTournamentCredit(slug: string, reference: string): Promise<ConsumeTournamentCreditResult> {
   const token = await getServerToken();
-  if (!token) return { ok: false, status: 401 };
+  // Aucun jeton : aucun appel n'a jamais quitté DartsOpen, donc rien n'a pu être consommé côté
+  // SterPlatform — un refus certain, pas une ambiguïté réseau.
+  if (!token) return { outcome: "REJECTED" };
 
   try {
     const res = await apiFetch(
@@ -36,18 +49,52 @@ export async function consumeTournamentCredit(slug: string, reference: string): 
       token,
     );
 
-    if (!res.ok) {
-      if (res.status !== 409) {
-        console.error("[consumeTournamentCredit] SterPlatform responded", res.status, slug, reference);
-      }
-      return { ok: false, status: res.status };
+    if (res.ok) {
+      const data = await res.json() as { creditId: string };
+      return { outcome: "CONFIRMED", creditId: data.creditId };
     }
 
-    const data = await res.json() as { creditId: string };
-    return { ok: true, creditId: data.creditId };
+    if (res.status === 409) {
+      return { outcome: "REJECTED" };
+    }
+
+    console.error("[consumeTournamentCredit] SterPlatform responded", res.status, slug, reference);
+    return { outcome: "INDETERMINATE" };
   } catch (err) {
     console.error("[consumeTournamentCredit] request failed", slug, reference, err);
-    return { ok: false, status: 0 };
+    return { outcome: "INDETERMINATE" };
+  }
+}
+
+export type CreditReconciliationResult = "CONSUMED" | "NOT_CONSUMED" | "INDETERMINATE";
+
+/**
+ * `GET /api/organizations/{slug}/tournament-credits/status?product=X&reference=Y` —
+ * DARTSOPEN-MONETIZATION-003 (P2, contre-audit) : interroge SterPlatform, en lecture seule,
+ * « cette référence a-t-elle déjà consommé un crédit ? ». Appelé uniquement après un
+ * consumeTournamentCredit() INDETERMINATE (réponse perdue/timeout) — jamais une seconde
+ * tentative de consommation, jamais une hypothèse locale. SterPlatform reste la seule source de
+ * vérité (mission §2).
+ */
+export async function reconcileTournamentCredit(slug: string, reference: string): Promise<CreditReconciliationResult> {
+  const token = await getServerToken();
+  if (!token) return "INDETERMINATE";
+
+  try {
+    const res = await apiFetch(
+      `/api/organizations/${encodeURIComponent(slug)}/tournament-credits/status?product=DARTSOPEN&reference=${encodeURIComponent(reference)}`,
+      { cache: "no-store" },
+      token,
+    );
+    if (!res.ok) {
+      console.error("[reconcileTournamentCredit] SterPlatform responded", res.status, slug, reference);
+      return "INDETERMINATE";
+    }
+    const data = await res.json() as { consumed: boolean };
+    return data.consumed ? "CONSUMED" : "NOT_CONSUMED";
+  } catch (err) {
+    console.error("[reconcileTournamentCredit] request failed", slug, reference, err);
+    return "INDETERMINATE";
   }
 }
 
