@@ -25,6 +25,45 @@ function isIdempotencyKeyConflict(err: unknown): boolean {
   return false;
 }
 
+/**
+ * DO-SPORT-001 — vérifie qu'une erreur P2002 provient bien de l'une des deux contraintes
+ * partielles ajoutées sur `matches` (voir la migration dédiée) : au plus un match IN_PROGRESS
+ * par cible réelle, ou au plus un match par slot de bracket (tournoi, type, round, position).
+ * Même discipline que `isIdempotencyKeyConflict` — l'index Postgres réellement en conflit peut
+ * être signalé sous des formes différentes selon le moteur de requête.
+ */
+export function isSportEngineUniqueConflict(err: unknown): boolean {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
+    return false;
+  }
+  const meta = err.meta as { target?: string; driverAdapterError?: { cause?: { constraint?: { name?: string } } } } | undefined;
+  const constraintName = meta?.target ?? meta?.driverAdapterError?.cause?.constraint?.name ?? "";
+  return constraintName.includes("matches_one_active_per_board") || constraintName.includes("matches_unique_bracket_slot");
+}
+
+/**
+ * DO-SPORT-001 (Étape 2) — frontière transactionnelle commune à toute opération qui modifie
+ * l'état sportif d'un tournoi (finalisation de match, affectation de cible, progression de
+ * tour, avancement du tournoi rapide, transition de statut). `SELECT ... FOR UPDATE` sur la
+ * ligne du tournoi sérialise, au niveau PostgreSQL, toute paire d'opérations concurrentes
+ * portant sur LE MÊME tournoi (jamais un verrou distribué applicatif — Postgres suffit, voir
+ * la mission) : deux matchs terminés simultanément sur deux cibles, deux libérations de cible
+ * concurrentes, une tentative de création du même tour, etc. se retrouvent naturellement
+ * exécutées l'une après l'autre, chacune relisant l'état réel laissé par la précédente avant de
+ * décider quoi que ce soit — jamais une décision basée sur une lecture faite avant l'obtention
+ * du verrou. Des tournois différents ne se bloquent jamais entre eux (verrou scopé à une seule
+ * ligne).
+ */
+export async function withTournamentLock<T>(
+  tournamentId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT id FROM tournaments WHERE id = ${tournamentId} FOR UPDATE`;
+    return fn(tx);
+  });
+}
+
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
 function mapTournament(t: {
@@ -306,8 +345,13 @@ export async function dbListAllTournaments(currentUserId: string) {
   }));
 }
 
-export async function dbGetTournament(id: string) {
-  const t = await prisma.tournament.findUnique({
+/**
+ * DO-SPORT-001 — `client` optionnel (défaut : `prisma` global) : les appelants qui tournent
+ * sous withTournamentLock() peuvent passer leur `tx` pour lire un état garanti à jour sous le
+ * verrou déjà tenu, sans ouvrir une connexion/transaction séparée non couverte par ce verrou.
+ */
+export async function dbGetTournament(id: string, client: Prisma.TransactionClient = prisma) {
+  const t = await client.tournament.findUnique({
     where: { id },
     include: { rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } } },
   });
@@ -447,27 +491,53 @@ export async function dbDeleteTournament(id: string) {
   await prisma.tournament.delete({ where: { id } });
 }
 
+/**
+ * DO-SPORT-001 (Étape 6) — verrouillée sur le tournoi (`withTournamentLock`) : lecture du
+ * statut courant, validation et écriture forment une seule opération atomique. Deux appels
+ * concurrents (clôture manuelle organisateur vs clôture automatique du dernier match, ou tout
+ * autre doublon) se sérialisent — le second relit un statut qui inclut déjà l'effet du
+ * premier. La chaîne d'états étant strictement linéaire (DRAFT→OPEN→IN_PROGRESS→FINISHED,
+ * jamais de branchement), un second appel visant la même transition que celle déjà appliquée
+ * constate `current.status === status` et échoue avec un message explicite ("le statut a déjà
+ * changé"), plutôt que l'erreur générique de transition invalide que produirait
+ * `assertValidTransition` sur ce même cas (FINISHED → FINISHED) — jamais une incohérence entre
+ * deux cibles différentes, seulement une écriture redondante à distinguer clairement d'une
+ * vraie transition invalide (ex. DRAFT → FINISHED, demandée par erreur par l'appelant).
+ */
 export async function dbUpdateTournamentStatus(id: string, status: string) {
-  const current = await prisma.tournament.findUniqueOrThrow({
-    where: { id },
-    select: { status: true, quickMode: true, _count: { select: { rounds: true } } },
-  });
-  assertValidTransition(current.status, status);
+  return withTournamentLock(id, async (tx) => {
+    const current = await tx.tournament.findUniqueOrThrow({
+      where: { id },
+      select: { status: true, quickMode: true, _count: { select: { rounds: true } } },
+    });
 
-  // Un tournoi standard sans manche configurée ne peut jamais terminer un match
-  // (aucun MatchSet n'est créé) : bloquer l'ouverture des inscriptions à la source.
-  // Le mode rapide est exempté : ses manches (501/Cricket/701) sont générées
-  // automatiquement par generateQuickBracket, après l'ouverture.
-  if (status === "OPEN" && !current.quickMode && current._count.rounds === 0) {
-    throw new Error("Impossible d'ouvrir les inscriptions : aucune manche n'est configurée.");
-  }
+    if (current.status === status) {
+      throw new Error("Le statut du tournoi a changé entre-temps — réessayez.");
+    }
+    assertValidTransition(current.status, status);
 
-  const t = await prisma.tournament.update({
-    where: { id },
-    data: { status: status as TournamentStatus },
-    include: { rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } } },
+    // Un tournoi standard sans manche configurée ne peut jamais terminer un match
+    // (aucun MatchSet n'est créé) : bloquer l'ouverture des inscriptions à la source.
+    // Le mode rapide est exempté : ses manches (501/Cricket/701) sont générées
+    // automatiquement par generateQuickBracket, après l'ouverture.
+    if (status === "OPEN" && !current.quickMode && current._count.rounds === 0) {
+      throw new Error("Impossible d'ouvrir les inscriptions : aucune manche n'est configurée.");
+    }
+
+    const result = await tx.tournament.updateMany({
+      where: { id, status: current.status },
+      data: { status: status as TournamentStatus },
+    });
+    if (result.count === 0) {
+      throw new Error("Le statut du tournoi a changé entre-temps — réessayez.");
+    }
+
+    const t = await tx.tournament.findUniqueOrThrow({
+      where: { id },
+      include: { rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } } },
+    });
+    return mapTournament({ ...t, rounds: t.rounds.map(mapRound) });
   });
-  return mapTournament({ ...t, rounds: t.rounds.map(mapRound) });
 }
 
 // ── Rounds ────────────────────────────────────────────────────────────────────
@@ -890,6 +960,13 @@ export async function dbListPools(tournamentId: string) {
   return rows.map(mapPool);
 }
 
+/**
+ * DO-SPORT-001 (Étape 5) — verrouillée sur le tournoi : deux régénérations concurrentes
+ * (double-clic organisateur) se sérialisent au lieu de s'entrelacer sur le delete+recreate.
+ * Revérifie sous ce même verrou qu'aucun match de poule n'est déjà FINISHED — filet de
+ * sécurité derrière la vérification déjà faite côté action (pool.ts), qui reste la source du
+ * message d'erreur affiché en premier lieu dans le cas non concurrent.
+ */
 export async function dbGeneratePools(
   tournamentId: string,
   pools: { name: string; playerIds: string[] }[],
@@ -901,13 +978,15 @@ export async function dbGeneratePools(
     status: string;
   }[]
 ) {
-  const rounds = await prisma.round.findMany({
-    where: { tournamentId },
-    select: roundSelect,
-    orderBy: { roundOrder: "asc" },
-  });
+  await withTournamentLock(tournamentId, async (tx) => {
+    const [rounds, hasFinishedPoolMatch] = await Promise.all([
+      tx.round.findMany({ where: { tournamentId }, select: roundSelect, orderBy: { roundOrder: "asc" } }),
+      tx.match.count({ where: { tournamentId, poolId: { not: null }, status: "FINISHED" } }).then((c) => c > 0),
+    ]);
+    if (hasFinishedPoolMatch) {
+      throw new Error("Impossible de régénérer les poules : au moins un match de poule est déjà terminé.");
+    }
 
-  await prisma.$transaction(async (tx) => {
     // Delete all pool matches (bracketRound = null identifies pool matches vs bracket matches).
     // Using poolId filter alone is unreliable: a previous failed regen may have left orphaned
     // matches with poolId = null (set by ON DELETE SET NULL) that would be missed.
@@ -957,11 +1036,18 @@ export async function dbGeneratePools(
 
 // ── Matches ───────────────────────────────────────────────────────────────────
 
+/**
+ * DO-SPORT-001 — `client` optionnel (défaut : `prisma` global), même discipline que
+ * dbGetTournament() ci-dessus : permet une lecture sous le verrou tournoi déjà tenu
+ * (withTournamentLock) quand la fraîcheur/cohérence de cette lecture est décisionnelle (ex.
+ * doAdvanceToNextRound() vérifiant que tous les matchs du tour courant sont bien FINISHED).
+ */
 export async function dbListMatches(
   tournamentId: string,
-  params?: { pool_id?: string; bracket_round?: string }
+  params?: { pool_id?: string; bracket_round?: string },
+  client: Prisma.TransactionClient = prisma,
 ) {
-  const rows = await prisma.match.findMany({
+  const rows = await client.match.findMany({
     where: {
       tournamentId,
       ...(params?.pool_id ? { poolId: params.pool_id } : {}),
@@ -977,48 +1063,55 @@ export async function dbListMatches(
   return rows.map(mapMatch);
 }
 
-export async function dbBulkCreateMatches(
-  tournamentId: string,
-  matches: {
-    player1Id: string;
-    player2Id: string | null;
-    bracketRound: number;
-    bracketPosition: number;
-    boardNumber: number;
-    status: string;
-    winnerId?: string | null;
-    roundIds: string[];
-    bracketType?: BracketType;
-  }[]
-) {
-  await prisma.$transaction(async (tx) => {
-    for (const m of matches) {
-      const match = await tx.match.create({
-        data: {
-          tournamentId,
-          bracketRound: m.bracketRound,
-          bracketPosition: m.bracketPosition,
-          boardNumber: m.boardNumber,
-          bracketType: m.bracketType ?? "SINGLE",
-          status: m.status as MatchStatus,
-          player1Id: m.player1Id,
-          player2Id: m.player2Id ?? null,
-          winnerId: m.winnerId ?? null,
-        },
-        select: { id: true },
-      });
+type BulkMatchInput = {
+  player1Id: string;
+  player2Id: string | null;
+  bracketRound: number;
+  bracketPosition: number;
+  boardNumber: number;
+  status: string;
+  winnerId?: string | null;
+  roundIds: string[];
+  bracketType?: BracketType;
+};
 
-      if (m.roundIds.length > 0) {
-        await tx.matchSet.createMany({
-          data: m.roundIds.map((roundId) => ({ matchId: match.id, roundId })),
-        });
-      }
+/**
+ * DO-SPORT-001 — cœur de dbBulkCreateMatches(), paramétré par un client transactionnel déjà
+ * ouvert. Utilisé directement par le code qui tourne sous withTournamentLock() (progression de
+ * tour standard, avancement du tournoi rapide) : appeler dbBulkCreateMatches() lui-même depuis
+ * là ouvrirait une SECONDE transaction indépendante, non couverte par le verrou déjà tenu.
+ */
+export async function bulkCreateMatchesTx(tx: Prisma.TransactionClient, tournamentId: string, matches: BulkMatchInput[]) {
+  for (const m of matches) {
+    const match = await tx.match.create({
+      data: {
+        tournamentId,
+        bracketRound: m.bracketRound,
+        bracketPosition: m.bracketPosition,
+        boardNumber: m.boardNumber,
+        bracketType: m.bracketType ?? "SINGLE",
+        status: m.status as MatchStatus,
+        player1Id: m.player1Id,
+        player2Id: m.player2Id ?? null,
+        winnerId: m.winnerId ?? null,
+      },
+      select: { id: true },
+    });
+
+    if (m.roundIds.length > 0) {
+      await tx.matchSet.createMany({
+        data: m.roundIds.map((roundId) => ({ matchId: match.id, roundId })),
+      });
     }
-  });
+  }
 }
 
-export async function dbDeleteBracketMatches(tournamentId: string) {
-  await prisma.match.deleteMany({ where: { tournamentId, poolId: null } });
+export async function dbBulkCreateMatches(tournamentId: string, matches: BulkMatchInput[]) {
+  await prisma.$transaction((tx) => bulkCreateMatchesTx(tx, tournamentId, matches));
+}
+
+export async function dbDeleteBracketMatches(tournamentId: string, client: Prisma.TransactionClient = prisma) {
+  await client.match.deleteMany({ where: { tournamentId, poolId: null } });
 }
 
 /**
@@ -1030,140 +1123,178 @@ export async function dbDeleteBracketMatches(tournamentId: string) {
  * Mode rapide : ne supprime rien — le bracket est dynamique (WB et LB ont leurs
  * propres compteurs de round indépendants). L'avancement est délégué à
  * doAdvanceQuickTournament depuis la couche action.
+ *
+ * DO-SPORT-001 (Étape 2/3) — tout le calcul + l'écriture se fait désormais sous le verrou
+ * tournoi (withTournamentLock) : une arbitrage ne peut jamais s'entrelacer avec une
+ * confirmation/finalisation concurrente du même tournoi. `matchFinished` n'est vrai que si
+ * cet appel fait réellement passer le match dans un état FINISHED nouveau (transition depuis
+ * un autre état, OU un changement de vainqueur) — jamais sur un simple rejeu identique d'une
+ * correction déjà appliquée (double-clic/retry), qui redéclencherait sinon une seconde perte de
+ * vie/création de matchs en mode rapide pour un résultat pourtant inchangé.
  */
 export async function dbArbitrateMatch(
   matchId: string,
   tournamentId: string,
   setWinners: { setId: string; winnerId: string | null }[]
 ): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
-  const match = await prisma.match.findFirst({
-    where: { id: matchId, tournamentId },
-    include: {
-      sets: true,
-      tournament: { select: { id: true, quickMode: true } },
-    },
-  });
-  if (!match) return { error: "Match introuvable." };
-  if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
-
-  const isQuickMode = match.tournament.quickMode;
-
-  // Recalcul du vainqueur avant la transaction pour pouvoir retourner matchFinished
-  const p1Wins = setWinners.filter((s) => s.winnerId === match.player1Id).length;
-  const p2Wins = setWinners.filter((s) => s.winnerId === match.player2Id).length;
-  const total = match.sets.length;
-  const allPlayed = setWinners.every((s) => s.winnerId !== null);
-
-  let newWinnerId: string | null = null;
-  if (p1Wins > p2Wins && (allPlayed || p1Wins > Math.floor(total / 2))) newWinnerId = match.player1Id;
-  else if (p2Wins > p1Wins && (allPlayed || p2Wins > Math.floor(total / 2))) newWinnerId = match.player2Id;
-
-  const newStatus: MatchStatus = allPlayed && newWinnerId ? "FINISHED" : "IN_PROGRESS";
-  const matchFinished = newStatus === "FINISHED";
-
-  await prisma.$transaction(async (tx) => {
-    for (const { setId, winnerId } of setWinners) {
-      await tx.matchSet.update({
-        where: { id: setId },
-        data: {
-          winnerId,
-          validatedP1: winnerId !== null,
-          validatedP2: winnerId !== null,
+  try {
+    return await withTournamentLock(tournamentId, async (tx) => {
+      const match = await tx.match.findFirst({
+        where: { id: matchId, tournamentId },
+        include: {
+          sets: true,
+          tournament: { select: { id: true, quickMode: true } },
         },
       });
-    }
+      if (!match) return { error: "Match introuvable." };
+      if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
 
-    await tx.match.update({
-      where: { id: matchId },
-      data: { winnerId: newWinnerId, status: newStatus },
-    });
+      const isQuickMode = match.tournament.quickMode;
 
-    // En mode standard uniquement : supprimer les rounds suivants si le vainqueur change,
-    // pour éviter un bracket incohérent. En mode rapide, WB round N et LB round N sont
-    // indépendants — supprimer par bracketRound > N détruirait des matchs LB valides.
-    if (!isQuickMode && match.bracketRound !== null && newWinnerId !== match.winnerId) {
-      await tx.match.deleteMany({
-        where: { tournamentId: match.tournamentId, poolId: null, bracketRound: { gt: match.bracketRound } },
+      const p1Wins = setWinners.filter((s) => s.winnerId === match.player1Id).length;
+      const p2Wins = setWinners.filter((s) => s.winnerId === match.player2Id).length;
+      const total = match.sets.length;
+      const allPlayed = setWinners.every((s) => s.winnerId !== null);
+
+      let newWinnerId: string | null = null;
+      if (p1Wins > p2Wins && (allPlayed || p1Wins > Math.floor(total / 2))) newWinnerId = match.player1Id;
+      else if (p2Wins > p1Wins && (allPlayed || p2Wins > Math.floor(total / 2))) newWinnerId = match.player2Id;
+
+      const newStatus: MatchStatus = allPlayed && newWinnerId ? "FINISHED" : "IN_PROGRESS";
+      // Idempotence (contre-audit DO-SPORT-001, tests §3/§7) : un rejeu identique d'une
+      // correction déjà appliquée (même vainqueur, match déjà FINISHED) ne doit jamais
+      // redéclencher l'avancement — seule une transition réelle (vers FINISHED, ou un
+      // changement de vainqueur sur un match déjà FINISHED) le déclenche.
+      const matchFinished = newStatus === "FINISHED" && (match.status !== "FINISHED" || match.winnerId !== newWinnerId);
+
+      for (const { setId, winnerId } of setWinners) {
+        await tx.matchSet.update({
+          where: { id: setId },
+          data: {
+            winnerId,
+            validatedP1: winnerId !== null,
+            validatedP2: winnerId !== null,
+          },
+        });
+      }
+
+      await tx.match.update({
+        where: { id: matchId },
+        data: { winnerId: newWinnerId, status: newStatus },
       });
-    }
-  });
 
-  return {
-    matchFinished,
-    match: {
-      id: matchId,
-      tournamentId: match.tournamentId,
-      bracketRound: match.bracketRound,
-      quickMode: isQuickMode,
-    },
-  };
+      // En mode standard uniquement : supprimer les rounds suivants si le vainqueur change,
+      // pour éviter un bracket incohérent. En mode rapide, WB round N et LB round N sont
+      // indépendants — supprimer par bracketRound > N détruirait des matchs LB valides.
+      if (!isQuickMode && match.bracketRound !== null && newWinnerId !== match.winnerId) {
+        await tx.match.deleteMany({
+          where: { tournamentId: match.tournamentId, poolId: null, bracketRound: { gt: match.bracketRound } },
+        });
+      }
+
+      return {
+        matchFinished,
+        match: {
+          id: matchId,
+          tournamentId: match.tournamentId,
+          bracketRound: match.bracketRound,
+          quickMode: isQuickMode,
+        },
+      };
+    });
+  } catch (err) {
+    if (isSportEngineUniqueConflict(err)) {
+      // Rouvrir un match déjà remplacé sur sa cible par le match suivant (cible reprise entre
+      // temps) — jamais silencieux, mais jamais un 500 brut non plus.
+      return { error: "Impossible de corriger ce match : sa cible a déjà été réaffectée à un autre match." };
+    }
+    throw err;
+  }
 }
 
 // ── Match sets — scoring business logic ───────────────────────────────────────
 
+/**
+ * DO-SPORT-001 (Étape 3) — écriture conditionnelle atomique (`UPDATE ... WHERE winner_id IS
+ * NULL`) : une double proposition concurrente pour le même set (double-clic, deux requêtes
+ * simultanées) ne peut jamais faire gagner les deux — la seconde constate `count === 0` et
+ * renvoie l'erreur métier existante, jamais une course entre lecture et écriture séparées.
+ */
 export async function dbProposeWinner(
   matchSetId: string,
   winnerId: string,
   playerSide: 1 | 2
 ): Promise<{ error?: string; set: ReturnType<typeof mapMatchSet> }> {
-  const existing = await prisma.matchSet.findUnique({ where: { id: matchSetId } });
-  if (!existing) return { error: "Set introuvable.", set: null as never };
-  if (existing.winnerId !== null) return { error: "Ce set a déjà un vainqueur.", set: null as never };
-
-  const updated = await prisma.matchSet.update({
-    where: { id: matchSetId },
+  const result = await prisma.matchSet.updateMany({
+    where: { id: matchSetId, winnerId: null },
     data: {
       winnerId,
       ...(playerSide === 1 ? { validatedP1: true } : { validatedP2: true }),
     },
   });
 
+  if (result.count === 0) {
+    const existing = await prisma.matchSet.findUnique({ where: { id: matchSetId } });
+    if (!existing) return { error: "Set introuvable.", set: null as never };
+    return { error: "Ce set a déjà un vainqueur.", set: null as never };
+  }
+
+  const updated = await prisma.matchSet.findUniqueOrThrow({ where: { id: matchSetId } });
   return { set: mapMatchSet(updated) };
 }
 
+/**
+ * DO-SPORT-001 (Étape 2) — toute la séquence (relecture du set/match, validation, décision de
+ * finalisation, libération de cible) tourne désormais sous le verrou tournoi
+ * (withTournamentLock) : deux confirmations concurrentes pour LE MÊME set, ou deux matchs du
+ * même tournoi finalisés simultanément sur deux cibles, se sérialisent naturellement — chaque
+ * exécution relit l'état réel laissé par la précédente avant de décider quoi que ce soit.
+ */
 export async function dbConfirmWinner(
   matchSetId: string,
   playerSide: 1 | 2
 ): Promise<{ error?: string; disputed?: boolean; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
-  const set = await prisma.matchSet.findUnique({
+  const initial = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
-    include: {
-      match: {
-        include: {
-          sets: true,
-          tournament: { select: { id: true, quickMode: true } },
+    select: { match: { select: { tournamentId: true } } },
+  });
+  if (!initial) return { error: "Set introuvable." };
+
+  return withTournamentLock(initial.match.tournamentId, async (tx) => {
+    const set = await tx.matchSet.findUnique({
+      where: { id: matchSetId },
+      include: {
+        match: {
+          include: {
+            sets: true,
+            tournament: { select: { id: true, quickMode: true } },
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!set) return { error: "Set introuvable." };
-  if (!set.winnerId) return { error: "Aucun vainqueur proposé." };
+    if (!set) return { error: "Set introuvable." };
+    if (!set.winnerId) return { error: "Aucun vainqueur proposé." };
 
-  const alreadyValidated = playerSide === 1 ? set.validatedP1 : set.validatedP2;
-  const otherValidated = playerSide === 1 ? set.validatedP2 : set.validatedP1;
+    const alreadyValidated = playerSide === 1 ? set.validatedP1 : set.validatedP2;
+    const otherValidated = playerSide === 1 ? set.validatedP2 : set.validatedP1;
 
-  if (alreadyValidated) return { error: "Vous avez déjà proposé ce résultat." };
+    if (alreadyValidated) return { error: "Vous avez déjà proposé ce résultat." };
 
-  if (!otherValidated) {
-    await prisma.matchSet.update({
+    await tx.matchSet.update({
       where: { id: matchSetId },
       data: playerSide === 1 ? { validatedP1: true } : { validatedP2: true },
     });
-    return {};
-  }
 
-  // Both sides validated — confirm the set winner
-  await prisma.matchSet.update({
-    where: { id: matchSetId },
-    data: playerSide === 1 ? { validatedP1: true } : { validatedP2: true },
+    if (!otherValidated) return {};
+
+    // Les deux camps ont validé — reflète la validation qu'on vient d'appliquer avant de
+    // vérifier la finalisation.
+    const updatedSets = set.match.sets.map((s) =>
+      s.id === matchSetId ? { ...s, ...(playerSide === 1 ? { validatedP1: true } : { validatedP2: true }) } : s
+    );
+    return await tryFinalizeMatch(tx, { ...set.match, sets: updatedSets });
   });
-
-  // Reflect the just-applied validation in-memory before checking finalization
-  const updatedSets = set.match.sets.map((s) =>
-    s.id === matchSetId ? { ...s, ...(playerSide === 1 ? { validatedP1: true } : { validatedP2: true }) } : s
-  );
-  return await tryFinalizeMatch({ ...set.match, sets: updatedSets });
 }
 
 export async function dbDisputeResult(matchSetId: string): Promise<{ error?: string }> {
@@ -1179,37 +1310,67 @@ export async function dbDisputeResult(matchSetId: string): Promise<{ error?: str
   return {};
 }
 
+/**
+ * DO-SPORT-001 (Étape 2) — même verrou tournoi que dbConfirmWinner(), pour les mêmes raisons
+ * (arbitrage direct organisateur, mode traditionnel).
+ */
 export async function dbMarkWinnerDirect(
   matchSetId: string,
   winnerId: string
 ): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
-  const set = await prisma.matchSet.findUnique({
+  const initial = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
-    include: {
-      match: {
-        include: {
-          sets: true,
-          tournament: { select: { id: true, quickMode: true } },
+    select: { match: { select: { tournamentId: true } } },
+  });
+  if (!initial) return { error: "Set introuvable." };
+
+  return withTournamentLock(initial.match.tournamentId, async (tx) => {
+    const set = await tx.matchSet.findUnique({
+      where: { id: matchSetId },
+      include: {
+        match: {
+          include: {
+            sets: true,
+            tournament: { select: { id: true, quickMode: true } },
+          },
         },
       },
-    },
+    });
+
+    if (!set) return { error: "Set introuvable." };
+
+    await tx.matchSet.update({
+      where: { id: matchSetId },
+      data: { winnerId, validatedP1: true, validatedP2: true },
+    });
+
+    const updatedSets = set.match.sets.map((s) =>
+      s.id === matchSetId ? { ...s, winnerId, validatedP1: true, validatedP2: true } : s
+    );
+
+    return await tryFinalizeMatch(tx, { ...set.match, sets: updatedSets });
   });
-
-  if (!set) return { error: "Set introuvable." };
-
-  await prisma.matchSet.update({
-    where: { id: matchSetId },
-    data: { winnerId, validatedP1: true, validatedP2: true },
-  });
-
-  const updatedSets = set.match.sets.map((s) =>
-    s.id === matchSetId ? { ...s, winnerId, validatedP1: true, validatedP2: true } : s
-  );
-
-  return await tryFinalizeMatch({ ...set.match, sets: updatedSets });
 }
 
-async function tryFinalizeMatch(match: {
+/**
+ * DO-SPORT-001 (Étape 2/4) — décide si un match est réellement terminé et, si oui, libère sa
+ * cible au profit du prochain match PENDING en file d'attente. Appelé exclusivement depuis
+ * l'intérieur d'une transaction déjà verrouillée sur le tournoi (withTournamentLock) — jamais
+ * de nouvel appel réseau ni de nouvelle transaction ici.
+ *
+ * Idempotence (Étape 3) : un match déjà FINISHED ne peut plus jamais être "re-finalisé" — un
+ * rejeu (retry réseau après un succès déjà appliqué, double soumission) constate l'état déjà
+ * terminal et renvoie un no-op explicite, jamais une seconde libération/affectation de cible.
+ *
+ * Concurrence (Étape 4) : la recherche du "prochain match PENDING" et son affectation à la
+ * cible libérée se font dans la MÊME transaction verrouillée — deux matchs de ce tournoi
+ * terminés "simultanément" sur deux cibles s'exécutent en réalité l'un après l'autre ; le
+ * second voit déjà le match choisi par le premier passé en IN_PROGRESS, donc jamais le même
+ * prochain match affecté deux fois. La contrainte partielle `matches_one_active_per_board`
+ * (migration DO-SPORT-001) reste un filet de sécurité au niveau PostgreSQL si ce raisonnement
+ * applicatif avait un trou — jamais le seul mécanisme.
+ */
+async function tryFinalizeMatch(tx: Prisma.TransactionClient, match: {
   id: string;
   player1Id: string;
   player2Id: string | null;
@@ -1219,6 +1380,8 @@ async function tryFinalizeMatch(match: {
   sets: { winnerId: string | null; validatedP1: boolean; validatedP2: boolean }[];
   tournament: { id: string; quickMode: boolean };
 }): Promise<{ matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
+  if (match.status === "FINISHED") return {};
+
   const confirmedSets = match.sets.filter((s) => s.validatedP1 && s.validatedP2 && s.winnerId !== null);
   const totalSets = match.sets.length;
 
@@ -1230,7 +1393,7 @@ async function tryFinalizeMatch(match: {
   const winnerId = p1Wins >= p2Wins ? match.player1Id : match.player2Id;
   if (!winnerId) return {};
 
-  await prisma.match.update({
+  await tx.match.update({
     where: { id: match.id },
     data: { status: "FINISHED", winnerId },
   });
@@ -1238,23 +1401,23 @@ async function tryFinalizeMatch(match: {
   // Prendre le prochain match en attente et lui assigner la cible libérée
   if (match.boardNumber > 0) {
     // Nouveau format : board=0 = file d'attente globale
-    const next = await prisma.match.findFirst({
+    const next = await tx.match.findFirst({
       where: { tournamentId: match.tournament.id, boardNumber: 0, status: "PENDING" },
       orderBy: { id: "asc" },
     });
     if (next) {
-      await prisma.match.update({
+      await tx.match.update({
         where: { id: next.id },
         data: { status: "IN_PROGRESS", boardNumber: match.boardNumber },
       });
     } else {
       // Ancien format : matchs PENDING avec boardNumber déjà assigné (rétro-compatibilité)
-      const nextLegacy = await prisma.match.findFirst({
+      const nextLegacy = await tx.match.findFirst({
         where: { tournamentId: match.tournament.id, status: "PENDING" },
         orderBy: { id: "asc" },
       });
       if (nextLegacy) {
-        await prisma.match.update({
+        await tx.match.update({
           where: { id: nextLegacy.id },
           data: { status: "IN_PROGRESS" },
         });
@@ -1273,9 +1436,12 @@ async function tryFinalizeMatch(match: {
 /**
  * Retourne toutes les inscriptions PAID d'un tournoi avec leurs vies restantes.
  * Utilisé pour déterminer l'état du bracket en mode rapide.
+ *
+ * DO-SPORT-001 — paramétré par `tx` : appelé exclusivement depuis doAdvanceQuickTournament()
+ * sous withTournamentLock(), jamais indépendamment (voir ce fichier, section avancement).
  */
-export async function dbGetQuickTournamentState(tournamentId: string) {
-  const rows = await prisma.registration.findMany({
+export async function dbGetQuickTournamentState(tx: Prisma.TransactionClient, tournamentId: string) {
+  const rows = await tx.registration.findMany({
     where: { tournamentId, status: "PAID" },
     select: {
       id: true,
@@ -1289,17 +1455,21 @@ export async function dbGetQuickTournamentState(tournamentId: string) {
 
 /**
  * Décrémente les vies d'un joueur de 1 et retourne le nouveau compte.
- * Protégé par un floor à 0 pour éviter les valeurs négatives.
+ * Protégé par un floor à 0 pour éviter les valeurs négatives. Atomique par construction
+ * (`{ decrement: 1 }` compile en `SET lives = lives - 1`, jamais une lecture puis écriture
+ * séparées) — l'idempotence "exactement une fois par match terminé" est garantie par
+ * l'appelant (Match.quickAdvanceProcessedAt, voir doAdvanceQuickTournament), pas ici : cette
+ * fonction décrémente à chaque appel, par design.
  */
-export async function dbDecrementLives(registrationId: string): Promise<number> {
-  const updated = await prisma.registration.update({
+export async function dbDecrementLives(tx: Prisma.TransactionClient, registrationId: string): Promise<number> {
+  const updated = await tx.registration.update({
     where: { id: registrationId },
     data: { lives: { decrement: 1 } },
     select: { lives: true },
   });
   // Sécurité : ne pas laisser passer en négatif (ne devrait pas arriver en prod)
   if (updated.lives < 0) {
-    await prisma.registration.update({ where: { id: registrationId }, data: { lives: 0 } });
+    await tx.registration.update({ where: { id: registrationId }, data: { lives: 0 } });
     return 0;
   }
   return updated.lives;
@@ -1309,8 +1479,8 @@ export async function dbDecrementLives(registrationId: string): Promise<number> 
  * Remet les vies de tous les joueurs PAID d'un tournoi à 2.
  * Appelé lors de la (re)génération du bracket rapide.
  */
-export async function dbResetAllLives(tournamentId: string): Promise<void> {
-  await prisma.registration.updateMany({
+export async function dbResetAllLives(tx: Prisma.TransactionClient, tournamentId: string): Promise<void> {
+  await tx.registration.updateMany({
     where: { tournamentId, status: "PAID" },
     data: { lives: 2 },
   });
@@ -1320,8 +1490,8 @@ export async function dbResetAllLives(tournamentId: string): Promise<void> {
  * Retourne les matchs de bracket encore actifs (non FINISHED) en mode rapide.
  * Exclut les matchs de poule (poolId non null).
  */
-export async function dbGetActiveQuickBracketMatches(tournamentId: string) {
-  const rows = await prisma.match.findMany({
+export async function dbGetActiveQuickBracketMatches(tx: Prisma.TransactionClient, tournamentId: string) {
+  const rows = await tx.match.findMany({
     where: {
       tournamentId,
       poolId: null,
@@ -1349,17 +1519,15 @@ export async function dbGetActiveQuickBracketMatches(tournamentId: string) {
  * Supprime tous les matchs de bracket quickMode (WINNERS, LOSERS, GRAND_FINAL)
  * et les rounds associés. Appelé lors de la régénération du bracket rapide.
  */
-export async function dbDeleteQuickBracketMatchesAndRounds(tournamentId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.match.deleteMany({
-      where: {
-        tournamentId,
-        poolId: null,
-        bracketType: { in: ["WINNERS", "LOSERS", "GRAND_FINAL"] },
-      },
-    }),
-    prisma.round.deleteMany({ where: { tournamentId } }),
-  ]);
+export async function dbDeleteQuickBracketMatchesAndRounds(tx: Prisma.TransactionClient, tournamentId: string): Promise<void> {
+  await tx.match.deleteMany({
+    where: {
+      tournamentId,
+      poolId: null,
+      bracketType: { in: ["WINNERS", "LOSERS", "GRAND_FINAL"] },
+    },
+  });
+  await tx.round.deleteMany({ where: { tournamentId } });
 }
 
 /**
@@ -1368,22 +1536,21 @@ export async function dbDeleteQuickBracketMatchesAndRounds(tournamentId: string)
  * Retourne les IDs pour être passés lors de la création des matchs.
  */
 export async function dbCreateQuickTournamentRounds(
+  tx: Prisma.TransactionClient,
   tournamentId: string
 ): Promise<{ id501: string; idCricket: string; id701: string }> {
-  const [r501, rCricket, r701] = await prisma.$transaction([
-    prisma.round.create({
-      data: { tournamentId, roundOrder: 1, gameType: "501",     entryType: "SINGLE", finishType: "DOUBLE" },
-      select: { id: true },
-    }),
-    prisma.round.create({
-      data: { tournamentId, roundOrder: 2, gameType: "CRICKET", entryType: "SINGLE", finishType: "SINGLE" },
-      select: { id: true },
-    }),
-    prisma.round.create({
-      data: { tournamentId, roundOrder: 3, gameType: "701",     entryType: "SINGLE", finishType: "DOUBLE" },
-      select: { id: true },
-    }),
-  ]);
+  const r501 = await tx.round.create({
+    data: { tournamentId, roundOrder: 1, gameType: "501", entryType: "SINGLE", finishType: "DOUBLE" },
+    select: { id: true },
+  });
+  const rCricket = await tx.round.create({
+    data: { tournamentId, roundOrder: 2, gameType: "CRICKET", entryType: "SINGLE", finishType: "SINGLE" },
+    select: { id: true },
+  });
+  const r701 = await tx.round.create({
+    data: { tournamentId, roundOrder: 3, gameType: "701", entryType: "SINGLE", finishType: "DOUBLE" },
+    select: { id: true },
+  });
   return { id501: r501.id, idCricket: rCricket.id, id701: r701.id };
 }
 
@@ -1392,9 +1559,10 @@ export async function dbCreateQuickTournamentRounds(
  * Retourne null si les rounds n'ont pas encore été créés.
  */
 export async function dbGetQuickTournamentRoundIds(
+  tx: Prisma.TransactionClient,
   tournamentId: string
 ): Promise<{ id501: string; idCricket: string; id701: string } | null> {
-  const rounds = await prisma.round.findMany({
+  const rounds = await tx.round.findMany({
     where: { tournamentId },
     select: { id: true, gameType: true },
     orderBy: { roundOrder: "asc" },
@@ -1409,12 +1577,18 @@ export async function dbGetQuickTournamentRoundIds(
 /**
  * Promeut les matchs PENDING (board=0) vers les cibles libres après création dynamique.
  * Appelé après chaque génération de matchs en mode rapide pour éviter les cibles vides.
+ *
+ * DO-SPORT-001 (Étape 4) — paramétré par `tx`, toujours appelé depuis l'intérieur d'une
+ * transaction déjà verrouillée sur le tournoi (withTournamentLock) : la lecture des cibles
+ * libres puis l'affectation des matchs en attente ne peuvent plus s'entrelacer avec un appel
+ * concurrent pour le même tournoi — jamais deux matchs promus sur la même cible libérée.
  */
 export async function dbPromoteUnassignedMatches(
+  tx: Prisma.TransactionClient,
   tournamentId: string,
   nbBoards: number
 ): Promise<void> {
-  const activeMatches = await prisma.match.findMany({
+  const activeMatches = await tx.match.findMany({
     where: { tournamentId, status: "IN_PROGRESS", boardNumber: { gt: 0 } },
     select: { boardNumber: true },
   });
@@ -1426,21 +1600,19 @@ export async function dbPromoteUnassignedMatches(
   }
   if (freeBoards.length === 0) return;
 
-  const pending = await prisma.match.findMany({
+  const pending = await tx.match.findMany({
     where: { tournamentId, status: "PENDING", boardNumber: 0 },
     select: { id: true },
     orderBy: { id: "asc" },
     take: freeBoards.length,
   });
 
-  await prisma.$transaction(
-    pending.map((m, i) =>
-      prisma.match.update({
-        where: { id: m.id },
-        data: { status: "IN_PROGRESS", boardNumber: freeBoards[i] },
-      })
-    )
-  );
+  for (let i = 0; i < pending.length; i++) {
+    await tx.match.update({
+      where: { id: pending[i].id },
+      data: { status: "IN_PROGRESS", boardNumber: freeBoards[i] },
+    });
+  }
 }
 
 // ── Organization (liaison BApps Studio / SterPlatform) ────────────────────────

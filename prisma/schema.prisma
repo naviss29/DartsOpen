@@ -229,6 +229,16 @@ model Match {
   player1Id       String      @map("player1_id")
   player2Id       String?     @map("player2_id")
   winnerId        String?     @map("winner_id")
+  /**
+   * DO-SPORT-001 — garde d'idempotence pour l'avancement du tournoi rapide
+   * (doAdvanceQuickTournament, perte de vie + création des matchs suivants) : posé une seule
+   * fois, sous le verrou tournoi, au moment où CE match terminé est effectivement traité.
+   * Un rejeu (retry réseau, double appel) de l'avancement pour le même match devient un no-op
+   * explicite plutôt qu'une seconde perte de vie ou une double création de matchs suivants.
+   * Toujours null en mode standard (l'avancement de bracket a sa propre garde, voir
+   * lib/actions/bracket.ts::doAdvanceToNextRound).
+   */
+  quickAdvanceProcessedAt DateTime? @map("quick_advance_processed_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
   tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -242,6 +252,14 @@ model Match {
   @@index([tournamentId, bracketRound])
   @@index([tournamentId, poolId, status])
   @@index([poolId])
+  // DO-SPORT-001 — deux contraintes d'unicité partielles (index PostgreSQL filtrés, ajoutées
+  // en migration SQL manuscrite — non représentables par la syntaxe @@unique de Prisma) :
+  // 1. au plus un match IN_PROGRESS par (tournoi, cible réelle) — une cible ne peut jamais
+  //    avoir deux matchs actifs, même sous une course entre deux affectations concurrentes ;
+  // 2. au plus un match par (tournoi, type de bracket, round, position) hors matchs de poule —
+  //    empêche la création en double d'un même tour/slot de bracket sous concurrence, filet de
+  //    sécurité derrière le verrou applicatif (withTournamentLock), jamais le seul mécanisme.
+  // Voir la migration dédiée pour le SQL exact.
   @@map("matches")
 }
 
