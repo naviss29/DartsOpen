@@ -158,35 +158,69 @@ retirés.
   webhook Stripe local : reçoit les notifications de paiement signées par SterPlatform
   (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`). Sur
   `payment.succeeded`, appelle `dbConfirmPendingPayment()` (jamais un `UPDATE` aveugle — voir
-  "Capacité et paiement tardif" ci-dessous) : `CONFIRMED` → email de confirmation ;
-  `ALREADY_CONFIRMED`/`NOT_FOUND` → no-op silencieux (redélivraison ou état déjà terminal) ;
-  `CAPACITY_LOST` → remboursement automatique via `refundPayment()`
-  (`lib/api/sterplatformInternal.ts`, `POST /api/internal/payments/{id}/refund`), jamais un
-  paiement silencieusement gardé.
+  "Capacité, paiement tardif et remboursement" ci-dessous) : `CONFIRMED` → email de
+  confirmation ; `ALREADY_CONFIRMED`/`NOT_FOUND`/`ALREADY_REFUNDED` → no-op silencieux
+  (redélivraison ou état déjà terminal) ; `REFUND_NEEDED`/`REFUND_IN_PROGRESS` → tentative de
+  remboursement via `refundPayment()` (`lib/api/sterplatformInternal.ts`,
+  `POST /api/internal/payments/{id}/refund`, ciblé par le `paymentId` du webhook lui-même —
+  jamais uniquement la copie locale `ster_payment_id`), un échec renvoyant un statut non-2xx
+  pour permettre une redélivraison ultérieure. Sur `payment.refunded` (confirmation Stripe
+  asynchrone), confirme le remboursement via `dbMarkRefundConfirmed()`.
 - `PLATFORM_FEE_CENTS` (`lib/platformFee.ts`) — reste une décision métier propre à DartsOpen
   (transmise en paramètre `platformFeeCents` à l'appel de checkout, jamais calculée côté
   SterPlatform, qui reste générique entre modules).
 - `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) inchangés en base.
 
-### Capacité et paiement tardif (DARTSOPEN-MONETIZATION-003, contre-audit P1)
+### Capacité, paiement tardif et remboursement (DARTSOPEN-MONETIZATION-003/004, contre-audit P1/P3/P4)
 
 `dbReserveRegistrationSlot()` (verrou + comptage + insertion atomiques, voir mission
-DARTSOPEN-MONETIZATION-002) réserve la place à la création de l'inscription. Mais un paiement
-en ligne peut arriver **après** l'expiration de sa réservation, une fois la place reprise par
-quelqu'un d'autre — `dbConfirmPendingPayment()` (`lib/db/tournament.ts`) est le seul point qui
-peut faire passer une inscription PENDING → PAID sur réception du webhook : verrouille le
-tournoi, relit la réservation sous ce verrou, et ne confirme que si la réservation est encore
-valide **ou** si la capacité a été revérifiée et reste disponible. Si la place a été reprise
-(`CAPACITY_LOST`), l'inscription passe `REFUNDED` (jamais PAID au-delà de `maxPlayers`) et le
-webhook déclenche un remboursement automatique — jamais un dépassement de capacité, jamais un
-paiement perdu silencieusement.
+DARTSOPEN-MONETIZATION-002) réserve la place à la création de l'inscription. Elle relit
+`status`/`maxPlayers`/`playersPerTeam` du tournoi **sous le même verrou** (jamais une valeur lue
+par l'appelant avant un appel réseau, ex. le statut Stripe Connect) et n'accepte que si le
+tournoi est encore dans un statut autorisé par l'appelant (`allowedStatuses` — `["OPEN"]` pour
+l'inscription publique, `["DRAFT","OPEN"]` pour l'ajout organisateur). Règle de capacité :
+`(occupied + 1) * playersPerTeam <= maxPlayers` (jamais `occupied * playersPerTeam < maxPlayers`,
+qui laissait passer une équipe de trop quand `maxPlayers` n'est pas un multiple de
+`playersPerTeam`).
 
-### Entitlement >10 joueurs : idempotence, réconciliation, état intermédiaire (DARTSOPEN-MONETIZATION-003, contre-audit P2/P3/P4)
+Mais un paiement en ligne peut arriver **après** l'expiration de sa réservation (place reprise
+par quelqu'un d'autre) ou **après** le démarrage du tournoi (`IN_PROGRESS`) — `dbConfirmPendingPayment()`
+(`lib/db/tournament.ts`) est le seul point qui peut faire passer une inscription PENDING → PAID
+sur réception du webhook : verrouille le tournoi, relit la réservation et le tournoi sous ce
+verrou, et ne confirme que si la réservation est encore valide **et** le tournoi encore `OPEN`
+(ou, réservation expirée, si la capacité re-vérifiée reste disponible). Si l'une de ces
+conditions manque, l'inscription passe `REFUND_PENDING` — jamais `REFUNDED` directement.
 
-- **Idempotence scopée par propriétaire** — `Tournament.idempotencyKey` est unique sur
-  `(userId, idempotencyKey)`, jamais globalement unique : une clé soumise par un organisateur B
-  ne peut jamais résoudre au tournoi d'un organisateur A (voir le docblock du champ,
-  `prisma/schema.prisma`).
+**`REFUND_PENDING` vs `REFUNDED`** (DARTSOPEN-MONETIZATION-004, P1) — un remboursement décidé
+n'est jamais supposé terminé avant confirmation financière réelle : `REFUND_PENDING` signifie
+« remboursement nécessaire/en cours », `REFUNDED` signifie « confirmé par SterPlatform ». Seule
+`dbMarkRefundConfirmed()` (idempotente) transitionne vers `REFUNDED`, appelée soit
+immédiatement après un `refundPayment()` synchrone confirmé (`RefundOutcome` `REFUNDED` ou
+`ALREADY_REFUNDED` — ce dernier couvrant le 409 « déjà remboursé », distingué du 409 « non
+remboursable » par une relecture explicite du paiement via `getPayment()`, jamais par le
+message d'erreur), soit plus tard par le webhook `payment.refunded` (remboursement Stripe
+resté asynchrone). Un échec de `refundPayment()` (réseau, timeout, 5xx, Stripe indisponible)
+laisse l'inscription `REFUND_PENDING` et fait répondre le webhook par un statut non-2xx — le
+mécanisme de retry est la file de notifications sortantes déjà existante côté SterPlatform
+(Module Payments, `PaymentNotificationService`, backoff jusqu'à 15 tentatives sur 6h ; voir
+CLAUDE.md de SterPlatform) plutôt qu'une infrastructure dédiée côté DartsOpen — voir les
+limites du rapport de mission pour sa portée opérationnelle réelle (dispatch non planifié en
+cron aujourd'hui).
+
+### Entitlement >10 joueurs : idempotence, réconciliation, état intermédiaire (DARTSOPEN-MONETIZATION-003/004, contre-audit P2/P3/P4)
+
+- **Idempotence de création scopée par propriétaire** — `Tournament.idempotencyKey` est unique
+  sur `(userId, idempotencyKey)`, jamais globalement unique : une clé soumise par un
+  organisateur B ne peut jamais résoudre au tournoi d'un organisateur A (voir le docblock du
+  champ, `prisma/schema.prisma`).
+- **Référence de consommation de crédit dérivée du tournoi, jamais de `idempotencyKey`**
+  (DARTSOPEN-MONETIZATION-004, P2) — `createTournament()`/`retryTournamentEntitlementConfirmation()`
+  envoient `tournament.id` (identifiant serveur) à `consumeTournamentSizeCredit()`, jamais la
+  valeur `idempotencyKey` fournie par le client. SterPlatform scope sa propre idempotence sur
+  `(organisation, produit, référence)`, pas sur l'utilisateur DartsOpen appelant : deux
+  organisateurs de la même organisation choisissant volontairement la même valeur
+  `idempotencyKey` auraient sinon partagé une seule consommation de crédit pour deux tournois
+  distincts. `tournament.id` est unique par tournoi et jamais choisi par le client.
 - **Trois issues de consommation de crédit** (`lib/entitlements/tournamentSizeGuard.ts`,
   `CreditConsumptionOutcome`) — `CONFIRMED`/`REJECTED`/`INDETERMINATE`, jamais un booléen : une
   erreur réseau/timeout sur `POST .../tournament-credits/consume` n'est jamais assimilée à un
@@ -204,9 +238,9 @@ paiement perdu silencieusement.
   `PENDING_ENTITLEMENT` (jamais exploitable par construction, la cohérence commerciale ne
   dépend donc jamais du succès de cette seule suppression). Sur `INDETERMINATE`, le tournoi
   reste `PENDING_ENTITLEMENT` — réconciliable via une nouvelle soumission du même formulaire
-  (même `idempotencyKey`) ou via `retryTournamentEntitlementConfirmation()`
-  (`RetryEntitlementButton`, page `/tournaments/[id]`), qui réutilise
-  `tournament.idempotency_key` comme référence stable.
+  (même `idempotencyKey`, donc même tournoi retrouvé) ou via
+  `retryTournamentEntitlementConfirmation()` (`RetryEntitlementButton`, page
+  `/tournaments/[id]`), qui réutilise `tournamentId` (même référence que celle déjà tentée).
 
 ### Dette métier assumée : `RegistrationStatus.PAID` ne prouve pas un encaissement (DARTSOPEN-MONETIZATION-003, contre-audit P6)
 

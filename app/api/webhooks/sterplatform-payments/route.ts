@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
-import { dbConfirmPendingPayment, dbGetRegistrationWithTournament, type ConfirmPendingPaymentResult } from "@/lib/db/tournament";
+import { dbConfirmPendingPayment, dbMarkRefundConfirmed, dbGetRegistrationWithTournament, type ConfirmPendingPaymentResult } from "@/lib/db/tournament";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { refundPayment } from "@/lib/api/sterplatformInternal";
 import { NextResponse } from "next/server";
@@ -42,6 +42,35 @@ export function verifySignature(payload: string, header: string | null): boolean
   return timingSafeEqual(expectedBuf, signatureBuf);
 }
 
+/**
+ * DARTSOPEN-MONETIZATION-004 (P1, contre-audit) — tente le remboursement réel et ne confirme
+ * REFUNDED que sur une issue financièrement certaine (REFUNDED synchrone, ou ALREADY_REFUNDED —
+ * un appel précédent ou le webhook `payment.refunded` a déjà confirmé). PENDING (remboursement
+ * Stripe encore asynchrone) n'est jamais un échec : la confirmation arrivera plus tard via
+ * `payment.refunded`. Utilise `paymentId` reçu par le webhook lui-même — jamais uniquement la
+ * copie locale `ster_payment_id`, qui peut être absente (voir docblock de refundPayment()).
+ *
+ * Retourne `true` si la situation est résolue ou converge d'elle-même (REFUNDED/ALREADY_REFUNDED/
+ * PENDING), `false` uniquement sur un échec réel (réseau, timeout, 5xx, Stripe a refusé) — le
+ * seul cas où l'appelant doit répondre un statut non-2xx pour permettre une redélivraison.
+ */
+async function attemptRefund(registrationId: string, paymentId: string): Promise<boolean> {
+  const result = await refundPayment(paymentId);
+
+  if (result.outcome === "REFUNDED" || result.outcome === "ALREADY_REFUNDED") {
+    await dbMarkRefundConfirmed(registrationId);
+    return true;
+  }
+
+  if (result.outcome === "PENDING") {
+    console.info("[webhook] Remboursement initié, confirmation asynchrone attendue (payment.refunded):", registrationId, paymentId);
+    return true;
+  }
+
+  console.error("[webhook] Échec de la tentative de remboursement:", registrationId, paymentId, result.error);
+  return false;
+}
+
 export async function POST(req: Request) {
   const rawBody = await req.text();
   const header = req.headers.get("x-sterplatform-signature");
@@ -63,16 +92,25 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Produit inattendu." }, { status: 400 });
   }
 
+  if (notification.event === "payment.refunded") {
+    // DARTSOPEN-MONETIZATION-004 (P1) — confirmation asynchrone d'un remboursement dont l'appel
+    // initial (attemptRefund ci-dessus) avait renvoyé PENDING (certains moyens de paiement
+    // Stripe). Idempotent (dbMarkRefundConfirmed ne touche que REFUND_PENDING) — une
+    // redélivraison ou un événement reçu deux fois n'a aucun effet la deuxième fois.
+    await dbMarkRefundConfirmed(notification.externalReference).catch((err) => {
+      console.error("[webhook] Erreur confirmation remboursement:", notification.externalReference, err);
+    });
+    return NextResponse.json({ received: true });
+  }
+
   if (notification.event === "payment.succeeded") {
     const registrationId = notification.externalReference;
 
-    // DARTSOPEN-MONETIZATION-003 (P1, contre-audit) — dbConfirmPendingPayment() est la seule
+    // DARTSOPEN-MONETIZATION-003/004 (P1, contre-audit) — dbConfirmPendingPayment() est la seule
     // façon dont ce webhook peut faire passer une inscription PENDING → PAID : il relit la
-    // réservation sous verrou et revérifie la capacité si elle a expiré, jamais un simple
-    // `UPDATE ... WHERE status = 'PENDING'` aveugle (voir son docblock, lib/db/tournament.ts).
-    // Laisser remonter une erreur DB inattendue : SterPlatform ne retente pas (v1, delivery
-    // unique) mais GET /api/internal/payments/{id} reste la source de vérité si cette écriture
-    // échoue.
+    // réservation ET le tournoi sous verrou, revérifie la capacité (formule correcte) et le
+    // statut du tournoi, jamais un simple `UPDATE ... WHERE status = 'PENDING'` aveugle (voir
+    // son docblock, lib/db/tournament.ts).
     let result: ConfirmPendingPaymentResult;
     try {
       result = await dbConfirmPendingPayment(registrationId);
@@ -81,40 +119,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
     }
 
-    if (result === "NOT_FOUND") {
-      console.warn("[webhook] payment.succeeded pour une inscription introuvable ou déjà non-PENDING (CANCELLED/REFUNDED) :", registrationId);
+    if (result === "NOT_FOUND" || result === "ALREADY_CONFIRMED" || result === "ALREADY_REFUNDED") {
+      // Rien à faire : inscription introuvable/CANCELLED, déjà confirmée, ou déjà remboursée et
+      // financièrement close — jamais un second email, jamais une seconde tentative.
       return NextResponse.json({ received: true });
     }
 
-    if (result === "ALREADY_CONFIRMED") {
-      // Redélivraison du webhook (ou confirmation déjà traitée par une tentative précédente) —
-      // aucune nouvelle transition, jamais un second email de confirmation.
-      return NextResponse.json({ received: true });
-    }
-
-    if (result === "CAPACITY_LOST") {
-      // La réservation avait expiré et la place a été reprise par quelqu'un d'autre avant que
-      // ce paiement tardif n'arrive : dbConfirmPendingPayment() a déjà marqué l'inscription
-      // REFUNDED (jamais PAID au-delà de maxPlayers). Traitement financier explicite —
-      // remboursement automatique via SterPlatform, jamais un paiement silencieusement gardé.
-      console.error(
-        "[webhook] Paiement reçu après expiration de la réservation et perte de la place — remboursement déclenché:",
-        registrationId,
-      );
-      const reg = await dbGetRegistrationWithTournament(registrationId).catch((err) => {
-        console.error("[webhook] Impossible de récupérer la registration pour le remboursement:", registrationId, err);
-        return null;
-      });
-      if (reg?.ster_payment_id) {
-        const refund = await refundPayment(reg.ster_payment_id);
-        if (!refund.ok) {
-          console.error(
-            "[webhook] Échec du remboursement automatique — intervention manuelle requise:",
-            registrationId, reg.ster_payment_id, refund.error,
-          );
-        }
-      } else {
-        console.error("[webhook] Aucun ster_payment_id enregistré — remboursement manuel requis:", registrationId);
+    if (result === "REFUND_NEEDED" || result === "REFUND_IN_PROGRESS") {
+      // La réservation n'est plus honorable (capacité reprise, ou tournoi plus dans un état
+      // permettant l'inscription) — un remboursement est nécessaire, jamais un paiement
+      // silencieusement gardé. `REFUND_IN_PROGRESS` signifie qu'une tentative précédente a déjà
+      // échoué : ceci EST le retry (déclenché par une redélivraison du webhook), pas un nouvel
+      // état — même chemin de code, idempotent.
+      const ok = await attemptRefund(registrationId, notification.paymentId);
+      if (!ok) {
+        // Statut non-2xx : SterPlatform (Module Payments, file de notifications sortantes)
+        // considère la livraison en échec et la retente avec un backoff — ceci EST le
+        // mécanisme de retry (aucune infrastructure supplémentaire côté DartsOpen), voir le
+        // rapport final pour sa portée opérationnelle réelle.
+        return NextResponse.json({ error: "Remboursement non confirmé, nouvelle tentative nécessaire." }, { status: 502 });
       }
       return NextResponse.json({ received: true });
     }

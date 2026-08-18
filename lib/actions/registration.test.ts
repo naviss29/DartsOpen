@@ -53,7 +53,7 @@ function stripeStatus(overrides: Partial<{ status: string; canReceivePayments: b
 
 beforeEach(() => {
   vi.mocked(dbGetTournament).mockReset();
-  vi.mocked(dbReserveRegistrationSlot).mockReset().mockResolvedValue({ id: "registration-1" } as never);
+  vi.mocked(dbReserveRegistrationSlot).mockReset().mockResolvedValue({ outcome: "RESERVED", registration: { id: "registration-1" } } as never);
   vi.mocked(dbUpdateRegistrationPaymentId).mockReset().mockResolvedValue(undefined as never);
   vi.mocked(dbGetOrganization).mockReset();
   vi.mocked(getStripeConnectStatus).mockReset();
@@ -169,18 +169,31 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     ).rejects.toThrow("NEXT_REDIRECT");
 
     expect(dbReserveRegistrationSlot).toHaveBeenCalledTimes(1);
-    const [, , , reservation] = vi.mocked(dbReserveRegistrationSlot).mock.calls[0];
+    const [, allowedStatuses, reservation] = vi.mocked(dbReserveRegistrationSlot).mock.calls[0];
     expect(reservation.status).toBe("PAID");
     expect(reservation.reservationExpiresAt).toBeUndefined();
+    // DARTSOPEN-MONETIZATION-004 (P4, contre-audit) : l'inscription publique n'autorise jamais
+    // un tournoi DRAFT — seul OPEN, revérifié sous le verrou par dbReserveRegistrationSlot lui-même.
+    expect(allowedStatuses).toEqual(["OPEN"]);
   });
 
   it("tournoi complet (confirmation immédiate) : refuse proprement, jamais d'email ni de redirection", async () => {
     vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
-    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue(null as never);
+    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue({ outcome: "FULL" } as never);
 
     const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
 
     expect(result.error).toMatch(/complet/i);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("DARTSOPEN-MONETIZATION-004 (P4, contre-audit) : tournoi devenu fermé sous le verrou (NOT_OPEN) : refuse proprement, message distinct de 'complet'", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
+    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue({ outcome: "NOT_OPEN" } as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toMatch(/n'accepte plus/i);
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -197,7 +210,7 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     ).rejects.toThrow("NEXT_REDIRECT");
 
     expect(dbReserveRegistrationSlot).toHaveBeenCalledTimes(1);
-    const [, , , reservation] = vi.mocked(dbReserveRegistrationSlot).mock.calls[0];
+    const [, , reservation] = vi.mocked(dbReserveRegistrationSlot).mock.calls[0];
     expect(reservation.status).toBe("PENDING");
     expect(reservation.reservationExpiresAt).toBeInstanceOf(Date);
     expect((reservation.reservationExpiresAt as Date).getTime()).toBeGreaterThan(Date.now());
@@ -207,7 +220,7 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
     vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
-    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue(null as never);
+    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue({ outcome: "FULL" } as never);
 
     const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
 

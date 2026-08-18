@@ -530,17 +530,30 @@ export async function dbAddRegistration(tournamentId: string, data: {
   return mapRegistration(r);
 }
 
+export type ReserveSlotResult =
+  | { outcome: "RESERVED"; registration: ReturnType<typeof mapRegistration> }
+  | { outcome: "FULL" }
+  | { outcome: "NOT_OPEN" }
+  | { outcome: "NOT_FOUND" };
+
 /**
- * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-003/DO-AUD-004/DO-AUD-009) — atomically checks
- * capacity and inserts a registration for a single tournament, replacing the previous
- * count-then-insert pattern (two separate queries, never atomic — two concurrent requests for
- * the last slot could both pass the check).
+ * DARTSOPEN-MONETIZATION-002/004 (audit DO-AUD-003/DO-AUD-004/DO-AUD-009, contre-audit P3/P4) —
+ * atomically checks capacity and tournament eligibility, then inserts a registration, replacing
+ * the previous count-then-insert pattern (two separate queries, never atomic — two concurrent
+ * requests for the last slot could both pass the check).
  *
  * `SELECT ... FOR UPDATE` locks the tournament row for the transaction's duration, serializing
  * concurrent reservation attempts *for this tournament* (never a global lock — unrelated
- * tournaments never contend with each other): a second concurrent transaction attempting the
- * same lock blocks until the first commits, then re-reads a count that already includes the
- * first's insert.
+ * tournaments never contend with each other). `maxPlayers`/`playersPerTeam`/`status` are all
+ * re-read from the DB *inside* this lock — never trusted from a value the caller read earlier
+ * (contre-audit P4: `createRegistration()` reads the tournament, then makes a network call to
+ * SterPlatform for Stripe Connect status, then reaches this function — the tournament's real
+ * state could easily have changed in that window, e.g. the organizer just started the
+ * tournament).
+ *
+ * `allowedStatuses` lets each caller specify which tournament statuses may still accept this
+ * kind of registration (public registration: `["OPEN"]` only; organizer manual add: `["DRAFT",
+ * "OPEN"]`) — the check itself always happens fresh, under the lock, regardless of caller.
  *
  * A slot is occupied by a PAID registration (free or confirmed onsite/online — permanent, never
  * expires) or by a PENDING registration whose `reservationExpiresAt` hasn't passed yet (online
@@ -548,12 +561,15 @@ export async function dbAddRegistration(tournamentId: string, data: {
  * slot the instant its expiry passes, with no separate cleanup job required (DO-AUD-009: never a
  * permanent orphan, and this lazy-expiry check is what makes it "explicitly expiring").
  *
- * Returns the new registration, or `null` if the tournament is full.
+ * Capacity rule (contre-audit P3) — accepts only if the slot's own *full* team fits:
+ * `(occupied + 1) * playersPerTeam <= maxPlayers`, never merely `occupied * playersPerTeam <
+ * maxPlayers` (the old formula only checked capacity *before* adding this registration, so with
+ * e.g. maxPlayers=10/playersPerTeam=3, three teams already in — 9 players — a fourth team was
+ * wrongly accepted, reaching 12).
  */
 export async function dbReserveRegistrationSlot(
   tournamentId: string,
-  maxPlayers: number,
-  playersPerTeam: number,
+  allowedStatuses: TournamentStatus[],
   data: {
     playerName: string;
     playerEmail: string;
@@ -563,9 +579,13 @@ export async function dbReserveRegistrationSlot(
     status: "PAID" | "PENDING";
     reservationExpiresAt?: Date | null;
   },
-) {
+): Promise<ReserveSlotResult> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM tournaments WHERE id = ${tournamentId} FOR UPDATE`;
+
+    const tournament = await tx.tournament.findUnique({ where: { id: tournamentId } });
+    if (!tournament) return { outcome: "NOT_FOUND" };
+    if (!allowedStatuses.includes(tournament.status)) return { outcome: "NOT_OPEN" };
 
     const now = new Date();
     const occupied = await tx.registration.count({
@@ -578,8 +598,8 @@ export async function dbReserveRegistrationSlot(
       },
     });
 
-    if (occupied * playersPerTeam >= maxPlayers) {
-      return null;
+    if ((occupied + 1) * tournament.playersPerTeam > tournament.maxPlayers) {
+      return { outcome: "FULL" };
     }
 
     const r = await tx.registration.create({
@@ -594,33 +614,45 @@ export async function dbReserveRegistrationSlot(
         reservationExpiresAt: data.reservationExpiresAt ?? null,
       },
     });
-    return mapRegistration(r);
+    return { outcome: "RESERVED", registration: mapRegistration(r) };
   });
 }
 
-export type ConfirmPendingPaymentResult = "CONFIRMED" | "ALREADY_CONFIRMED" | "CAPACITY_LOST" | "NOT_FOUND";
+export type ConfirmPendingPaymentResult =
+  | "CONFIRMED"
+  | "ALREADY_CONFIRMED"
+  | "REFUND_NEEDED"
+  | "REFUND_IN_PROGRESS"
+  | "ALREADY_REFUNDED"
+  | "NOT_FOUND";
 
 /**
- * DARTSOPEN-MONETIZATION-003 (P1, contre-audit) — the only way a webhook `payment.succeeded`
+ * DARTSOPEN-MONETIZATION-003/004 (P1, contre-audit) — the only way a webhook `payment.succeeded`
  * may ever turn a registration PAID. Replaces the previous blind `UPDATE ... WHERE status =
- * 'PENDING'` (dbMarkRegistrationPaid), which ignored `reservationExpiresAt` entirely: a late
- * webhook for A's payment could flip A to PAID even after A's reservation had already expired
- * and B had legitimately taken the last slot — pushing the tournament to maxPlayers + 1.
+ * 'PENDING'` (dbMarkRegistrationPaid, removed), which ignored `reservationExpiresAt` entirely: a
+ * late webhook for A's payment could flip A to PAID even after A's reservation had already
+ * expired and B had legitimately taken the last slot — pushing the tournament to maxPlayers + 1.
  *
  * Same lock discipline as dbReserveRegistrationSlot(): `SELECT ... FOR UPDATE` on the tournament
  * row serializes this confirmation against every concurrent reservation/confirmation attempt for
- * the same tournament, and the registration itself is re-read *after* acquiring that lock (never
- * trusting a value read before it) so a concurrent expiry/reclaim can never be missed.
+ * the same tournament, and the registration + tournament are both re-read *after* acquiring that
+ * lock (never trusting a value read before it) so a concurrent expiry/reclaim/status change can
+ * never be missed.
  *
- * - Reservation still valid (`reservationExpiresAt` in the future) → confirms normally, the slot
- *   was never at risk.
- * - Reservation expired but the freed slot was never reclaimed by anyone else → still safe to
- *   confirm (capacity re-checked, not just assumed).
- * - Reservation expired *and* capacity has been reclaimed (by another registration, exactly the
- *   contre-audit's A/B scenario) → CAPACITY_LOST, never silently turned into PAID. The caller
- *   (the webhook route) is responsible for the explicit financial treatment (refund) — this
- *   function only ever decides the registration's own state, never talks to SterPlatform itself
- *   (no network I/O inside a DB transaction holding a row lock).
+ * A late payment is confirmed (PAID) only if ALL of the following hold, checked under the lock:
+ * - the reservation is still valid, OR capacity is re-verified and available for it
+ *   (contre-audit P3: same `(occupied + 1) * playersPerTeam <= maxPlayers` rule as
+ *   dbReserveRegistrationSlot(), never the old off-by-one-team formula);
+ * - the tournament is still `OPEN` (contre-audit P4: a still-valid, never-expired reservation
+ *   whose payment arrives *after* the organizer started the tournament — `IN_PROGRESS` — must
+ *   never be silently honored either; the registration was never actually part of the running
+ *   tournament).
+ *
+ * If either condition fails, this is never silently dropped nor immediately marked REFUNDED:
+ * it transitions to `REFUND_PENDING` (contre-audit P1) — REFUNDED is reserved for a *financially
+ * confirmed* refund (see dbMarkRefundConfirmed()). This function never talks to SterPlatform
+ * itself (no network I/O inside a DB transaction holding a row lock) — the caller (the webhook
+ * route) is responsible for actually attempting the refund after this transaction commits.
  */
 export async function dbConfirmPendingPayment(registrationId: string): Promise<ConfirmPendingPaymentResult> {
   const initial = await prisma.registration.findUnique({
@@ -638,12 +670,16 @@ export async function dbConfirmPendingPayment(registrationId: string): Promise<C
     ]);
     if (!reg || !tournament) return "NOT_FOUND";
     if (reg.status === "PAID") return "ALREADY_CONFIRMED";
-    if (reg.status !== "PENDING") return "NOT_FOUND"; // CANCELLED/REFUNDED — a late webhook must never resurrect it
+    if (reg.status === "REFUNDED") return "ALREADY_REFUNDED";
+    if (reg.status === "REFUND_PENDING") return "REFUND_IN_PROGRESS";
+    if (reg.status !== "PENDING") return "NOT_FOUND"; // CANCELLED — a late webhook must never resurrect it
 
     const now = new Date();
     const reservationStillValid = reg.reservationExpiresAt !== null && reg.reservationExpiresAt > now;
+    const tournamentStillOpen = tournament.status === "OPEN";
 
-    if (!reservationStillValid) {
+    let capacityAvailable = true;
+    if (!reservationStillValid || !tournamentStillOpen) {
       const occupied = await tx.registration.count({
         where: {
           tournamentId: reg.tournamentId,
@@ -654,17 +690,19 @@ export async function dbConfirmPendingPayment(registrationId: string): Promise<C
           ],
         },
       });
-      if (occupied * tournament.playersPerTeam >= tournament.maxPlayers) {
-        // The slot this registration used to reserve has genuinely been reclaimed by someone
-        // else — confirming would push the tournament past maxPlayers. Transition straight to
-        // REFUNDED here, inside the same lock: leaving it PENDING-but-expired between
-        // transactions would let a concurrent redelivery re-evaluate it inconsistently.
-        await tx.registration.update({
-          where: { id: registrationId },
-          data: { status: "REFUNDED", reservationExpiresAt: null },
-        });
-        return "CAPACITY_LOST";
-      }
+      capacityAvailable = (occupied + 1) * tournament.playersPerTeam <= tournament.maxPlayers;
+    }
+
+    if (!tournamentStillOpen || !capacityAvailable) {
+      // The slot this registration used to reserve has genuinely been reclaimed by someone else,
+      // or the tournament is no longer accepting registrations at all — confirming would push
+      // the tournament past maxPlayers or honor an illegitimate late registration. A refund is
+      // needed, but not yet financially confirmed — see this function's own docblock.
+      await tx.registration.update({
+        where: { id: registrationId },
+        data: { status: "REFUND_PENDING", reservationExpiresAt: null },
+      });
+      return "REFUND_NEEDED";
     }
 
     await tx.registration.update({
@@ -672,6 +710,21 @@ export async function dbConfirmPendingPayment(registrationId: string): Promise<C
       data: { status: "PAID", feeCollected: true, reservationExpiresAt: null },
     });
     return "CONFIRMED";
+  });
+}
+
+/**
+ * DARTSOPEN-MONETIZATION-004 (P1, contre-audit) — the only way a registration ever reaches
+ * REFUNDED: called once SterPlatform has *actually confirmed* the refund (an immediate
+ * synchronous confirmation from refundPayment(), or the later `payment.refunded` webhook event
+ * for an initially-asynchronous Stripe refund). Idempotent — a no-op (never throws) if the
+ * registration isn't currently REFUND_PENDING, so a webhook redelivery or a concurrent retry
+ * can call this safely any number of times.
+ */
+export async function dbMarkRefundConfirmed(registrationId: string): Promise<void> {
+  await prisma.registration.updateMany({
+    where: { id: registrationId, status: "REFUND_PENDING" },
+    data: { status: "REFUNDED" },
   });
 }
 

@@ -34,12 +34,21 @@ enum RegistrationStatus {
   PAID
   CANCELLED
   /**
-   * DARTSOPEN-MONETIZATION-003 (P1) — paiement en ligne reçu après coup (webhook tardif) alors
-   * que la réservation avait expiré et que la place a été reprise par un autre joueur : jamais
-   * transformé en PAID (dépasserait maxPlayers), jamais silencieusement ignoré non plus — un
-   * remboursement automatique est déclenché via SterPlatform (voir
-   * app/api/webhooks/sterplatform-payments/route.ts). Traitement financier explicite, jamais
-   * une perte silencieuse du paiement.
+   * DARTSOPEN-MONETIZATION-004 (P1, contre-audit) — un remboursement a été décidé et demandé à
+   * SterPlatform, mais n'est pas encore confirmé financièrement (appel en échec/timeout, ou
+   * remboursement Stripe encore asynchrone côté SterPlatform). État intermédiaire obligatoire :
+   * REFUNDED ne doit jamais être atteint avant confirmation réelle (voir
+   * dbConfirmPendingPayment()/dbMarkRefundConfirmed(), lib/db/tournament.ts). Sûr et réconciliable
+   * — n'occupe jamais de place, n'est jamais compté PAID.
+   */
+  REFUND_PENDING
+  /**
+   * DARTSOPEN-MONETIZATION-003/004 (P1) — paiement en ligne reçu après coup (webhook tardif)
+   * alors que la place n'était plus disponible pour cette inscription (capacité reprise, ou
+   * tournoi plus dans un état permettant l'inscription) : jamais transformé en PAID (dépasserait
+   * maxPlayers ou honorerait une inscription illégitime), jamais silencieusement ignoré non plus.
+   * N'est atteint qu'après confirmation financière réelle du remboursement par SterPlatform —
+   * jamais au moment de la simple décision de rembourser (voir REFUND_PENDING ci-dessus).
    */
   REFUNDED
 }

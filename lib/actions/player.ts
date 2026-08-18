@@ -76,10 +76,13 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
   // playerEmail vide ("") = inscription mode rapide sans adresse email
   const playerEmail = parsed.data.player_email || "";
 
-  // DARTSOPEN-MONETIZATION-002 : un ajout manuel par l'organisateur occupe une place tout autant
-  // qu'une inscription publique — même garde de capacité atomique (aucun tournoi ne peut
-  // dépasser max_players, quel que soit le canal d'inscription).
-  const reg = await dbReserveRegistrationSlot(parsed.data.tournament_id, tournament.max_players, playersPerTeam, {
+  // DARTSOPEN-MONETIZATION-002/004 : un ajout manuel par l'organisateur occupe une place tout
+  // autant qu'une inscription publique — même garde de capacité atomique (aucun tournoi ne peut
+  // dépasser max_players, quel que soit le canal d'inscription), `maxPlayers`/`playersPerTeam`
+  // relus sous le même verrou depuis la base (jamais depuis ce formulaire). DRAFT reste autorisé
+  // ici (contrairement à l'inscription publique, réservée à OPEN) : un organisateur peut
+  // pré-inscrire des joueurs avant l'ouverture.
+  const result = await dbReserveRegistrationSlot(parsed.data.tournament_id, ["DRAFT", "OPEN"], {
     playerName: parsed.data.player_name,
     playerEmail,
     playerPhone: parsed.data.player_phone ?? null,
@@ -88,11 +91,15 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     status: "PAID",
   }).catch((err) => {
     console.error('[addPlayer] dbReserveRegistrationSlot:', err);
-    return undefined;
+    return null;
   });
 
-  if (reg === undefined) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
-  if (reg === null) return { error: "Ce tournoi est complet.", fields: rawFields, ts: Date.now() };
+  if (!result) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
+  if (result.outcome === "FULL") return { error: "Ce tournoi est complet.", fields: rawFields, ts: Date.now() };
+  if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
+    return { error: "Les inscriptions sont fermées pour ce tournoi.", fields: rawFields, ts: Date.now() };
+  }
+  const reg = result.registration;
 
   // Confirmation email uniquement si une adresse a été fournie (pas en mode rapide)
   if (playerEmail) {

@@ -335,20 +335,45 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
 
     expect(callOrder).toEqual(["create", "consume"]);
-    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "idem-key-1");
+    // DARTSOPEN-MONETIZATION-004 (P2, contre-audit) : la référence de consommation est
+    // `tournament.id` (identifiant serveur renvoyé par dbCreateTournament), jamais
+    // `idempotency_key` (valeur client) — voir le test dédié ci-dessous pour la preuve complète
+    // qu'une collision inter-utilisateurs volontaire sur cette valeur ne partage plus de crédit.
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "tournament-1");
     // DARTSOPEN-MONETIZATION-003 (P3) : créé PENDING_ENTITLEMENT, jamais directement DRAFT.
     expect(dbCreateTournament).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), "PENDING_ENTITLEMENT");
     expect(dbConfirmTournamentEntitlement).toHaveBeenCalledWith("tournament-1");
   });
 
-  it("CREDIT : la clé d'idempotence du formulaire sert de référence de consommation (jamais l'id auto-généré du tournoi)", async () => {
+  it("DARTSOPEN-MONETIZATION-004 (P2, contre-audit) : la référence de consommation est l'id serveur du tournoi, jamais idempotency_key (valeur client) — même si celle-ci change, la référence suit l'id réel", async () => {
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
     vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
+    vi.mocked(dbCreateTournament).mockResolvedValue({ id: "tournament-real-id-xyz" } as never);
     const fd = tournamentFormData({ max_players: "16", idempotency_key: "stable-key-xyz" });
 
     await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
 
-    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "stable-key-xyz");
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "tournament-real-id-xyz");
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalledWith("club-a", "stable-key-xyz");
+  });
+
+  it("DARTSOPEN-MONETIZATION-004 (P2, contre-audit) — preuve anti-collision : deux organisateurs de la MÊME organisation soumettant volontairement la MÊME idempotency_key obtiennent deux références de consommation distinctes (tournament.id de chacun), jamais partagées", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
+    const sharedIdempotencyKey = "shared-key-chosen-by-both-users";
+
+    vi.mocked(dbCreateTournament).mockResolvedValueOnce({ id: "tournament-user-a" } as never);
+    const fdA = tournamentFormData({ max_players: "16", idempotency_key: sharedIdempotencyKey });
+    await expect(createTournament(undefined, fdA)).rejects.toThrow("NEXT_REDIRECT");
+
+    vi.mocked(dbCreateTournament).mockResolvedValueOnce({ id: "tournament-user-b" } as never);
+    const fdB = tournamentFormData({ max_players: "16", idempotency_key: sharedIdempotencyKey });
+    await expect(createTournament(undefined, fdB)).rejects.toThrow("NEXT_REDIRECT");
+
+    // Les deux appels envoient la MÊME idempotency_key côté formulaire, mais deux références de
+    // consommation DISTINCTES (l'id réel de chaque tournoi) — jamais la valeur partagée elle-même.
+    expect(consumeTournamentSizeCredit).toHaveBeenNthCalledWith(1, "club-a", "tournament-user-a");
+    expect(consumeTournamentSizeCredit).toHaveBeenNthCalledWith(2, "club-a", "tournament-user-b");
   });
 
   it("SUBSCRIPTION : le tournoi est créé directement en DRAFT, jamais PENDING_ENTITLEMENT (aucun crédit à confirmer)", async () => {
@@ -543,14 +568,15 @@ describe("retryTournamentEntitlementConfirmation — DARTSOPEN-MONETIZATION-003 
     expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
   });
 
-  it("réutilise idempotency_key (jamais un nouvel identifiant) comme référence de consommation", async () => {
+  it("DARTSOPEN-MONETIZATION-004 (P2, contre-audit) : réutilise l'id réel du tournoi (jamais idempotency_key) comme référence de consommation — exactement la même référence que celle tentée par createTournament()", async () => {
     vi.mocked(getOwnedTournament).mockResolvedValue({ id: "tournament-1", association_id: "user-1", status: "PENDING_ENTITLEMENT", idempotency_key: "idem-key-1" } as never);
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
     vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
 
     await retryTournamentEntitlementConfirmation("tournament-1");
 
-    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "idem-key-1");
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-a", "tournament-1");
+    expect(consumeTournamentSizeCredit).not.toHaveBeenCalledWith("club-a", "idem-key-1");
     expect(dbConfirmTournamentEntitlement).toHaveBeenCalledWith("tournament-1");
   });
 

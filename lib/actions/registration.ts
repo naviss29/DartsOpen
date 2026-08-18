@@ -45,11 +45,13 @@ export async function createRegistration(
   const confirmsImmediately = tournament.entry_fee === 0 || tournament.payment_mode !== "ONLINE";
 
   if (confirmsImmediately) {
-    // DARTSOPEN-MONETIZATION-002 (audit DO-AUD-003/DO-AUD-004) : une inscription gratuite ou
-    // payée sur place occupe réellement une place dès sa création (status PAID, jamais PENDING)
-    // — vérifiée et réservée atomiquement avec la capacité du tournoi (jamais un count-then-insert
-    // séparé).
-    const registration = await dbReserveRegistrationSlot(tournamentId, tournament.max_players, tournament.players_per_team, {
+    // DARTSOPEN-MONETIZATION-002/004 (audit DO-AUD-003/DO-AUD-004, contre-audit P3/P4) : une
+    // inscription gratuite ou payée sur place occupe réellement une place dès sa création
+    // (status PAID, jamais PENDING) — capacité ET éligibilité du tournoi (statut OPEN) revérifiées
+    // atomiquement sous le même verrou, jamais un count-then-insert séparé ni une lecture de
+    // statut faite avant cet appel (la lecture ci-dessus n'est qu'un filtre rapide, pas la
+    // décision finale).
+    const result = await dbReserveRegistrationSlot(tournamentId, ["OPEN"], {
       playerName: teamName,
       playerEmail: contactEmail,
       playerPhone: phone,
@@ -58,11 +60,14 @@ export async function createRegistration(
       status: "PAID",
     }).catch((err) => {
       console.error('[createRegistration] dbReserveRegistrationSlot (confirmsImmediately):', err);
-      return undefined;
+      return null;
     });
 
-    if (registration === undefined) return { error: "Erreur lors de l'inscription." };
-    if (registration === null) return { error: "Ce tournoi est complet." };
+    if (!result) return { error: "Erreur lors de l'inscription." };
+    if (result.outcome === "FULL") return { error: "Ce tournoi est complet." };
+    if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
+      return { error: "Ce tournoi n'accepte plus les inscriptions." };
+    }
 
     const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
     const d = new Date(tournament.date);
@@ -110,7 +115,7 @@ export async function createRegistration(
   // d'occuper sa place dès l'expiration, sans nécessiter de nettoyage explicite ni laisser une
   // inscription orpheline permanente.
   const reservationExpiresAt = new Date(Date.now() + RESERVATION_TTL_MINUTES * 60 * 1000);
-  const registration = await dbReserveRegistrationSlot(tournamentId, tournament.max_players, tournament.players_per_team, {
+  const result = await dbReserveRegistrationSlot(tournamentId, ["OPEN"], {
     playerName: teamName,
     playerEmail: contactEmail,
     playerPhone: phone,
@@ -120,11 +125,15 @@ export async function createRegistration(
     reservationExpiresAt,
   }).catch((err) => {
     console.error('[createRegistration] dbReserveRegistrationSlot (online):', err);
-    return undefined;
+    return null;
   });
 
-  if (registration === undefined) return { error: "Erreur lors de l'inscription." };
-  if (registration === null) return { error: "Ce tournoi est complet." };
+  if (!result) return { error: "Erreur lors de l'inscription." };
+  if (result.outcome === "FULL") return { error: "Ce tournoi est complet." };
+  if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
+    return { error: "Ce tournoi n'accepte plus les inscriptions." };
+  }
+  const registration = result.registration;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const amountCents = tournament.entry_fee * tournament.players_per_team;

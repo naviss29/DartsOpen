@@ -174,11 +174,18 @@ export async function createTournament(prevState: TournamentState, formData: For
   if (!tournament) return { error: "Erreur lors de la création du tournoi.", fields: raw };
 
   if (creditToConsume) {
-    // Consommation — idempotente sur idempotencyKey elle-même (SterPlatform) : rejouer la même
-    // clé (retry après un succès déjà obtenu) renvoie le crédit déjà consommé, n'en consomme
-    // jamais un second (audit DO-AUD-002, "2 crédits disponibles + double soumission → pas de
-    // double création involontaire").
-    const outcome = await consumeTournamentSizeCredit(creditToConsume.organizationSlug, idempotencyKey);
+    // DARTSOPEN-MONETIZATION-004 (P2, contre-audit) — référence de consommation dérivée de
+    // `tournament.id` (identifiant serveur, jamais choisi par le client), pas de
+    // `idempotencyKey` : SterPlatform scope son idempotence sur (organisation, produit,
+    // référence), pas sur l'utilisateur DartsOpen qui appelle. Deux organisateurs de la MÊME
+    // organisation pouvaient donc, en soumettant volontairement la même valeur de
+    // idempotencyKey, faire correspondre deux tournois locaux distincts à une seule
+    // consommation SterPlatform (un seul crédit dépensé pour deux tournois confirmés).
+    // `tournament.id` est généré serveur (uuid), unique par tournoi, stable pour les retries de
+    // CE tournoi (dbCreateTournament() est idempotent sur (userId, idempotencyKey) : une
+    // relance retrouve la même ligne, donc le même id) — jamais choisi ni influençable par le
+    // client, donc jamais sujet à collision volontaire entre deux tournois distincts.
+    const outcome = await consumeTournamentSizeCredit(creditToConsume.organizationSlug, tournament.id);
 
     if (outcome === "CONFIRMED") {
       await dbConfirmTournamentEntitlement(tournament.id);
@@ -209,14 +216,15 @@ export async function createTournament(prevState: TournamentState, formData: For
 }
 
 /**
- * DARTSOPEN-MONETIZATION-003 (P2/P3, contre-audit) — seul moyen de faire sortir un tournoi de
- * PENDING_ENTITLEMENT une fois l'organisateur reparti de la page de création (createTournament()
- * lui-même gère déjà la ré-soumission du même formulaire, même idempotencyKey). Réutilise
- * `tournament.idempotency_key`, stable et déjà stocké sur la ligne — jamais un nouvel identifiant
- * qui romprait l'idempotence côté SterPlatform.
+ * DARTSOPEN-MONETIZATION-003/004 (P2/P3, contre-audit) — seul moyen de faire sortir un tournoi
+ * de PENDING_ENTITLEMENT une fois l'organisateur reparti de la page de création
+ * (createTournament() lui-même gère déjà la ré-soumission du même formulaire). Réutilise
+ * `tournamentId` (l'id réel du tournoi, stable) comme référence de consommation — jamais
+ * `idempotency_key` (valeur client, voir DARTSOPEN-MONETIZATION-004 P2) — donc exactement la
+ * même référence que celle déjà tentée par createTournament() pour ce tournoi.
  */
 export async function retryTournamentEntitlementConfirmation(tournamentId: string): Promise<{ error?: string } | void> {
-  const tournament = await getOwnedTournament(tournamentId) as { status: string; association_id: string; idempotency_key: string };
+  const tournament = await getOwnedTournament(tournamentId) as { status: string; association_id: string };
 
   if (tournament.status !== "PENDING_ENTITLEMENT") {
     revalidatePath(`/tournaments/${tournamentId}`);
@@ -233,7 +241,7 @@ export async function retryTournamentEntitlementConfirmation(tournamentId: strin
     return;
   }
 
-  const outcome = await consumeTournamentSizeCredit(entitlement.organizationSlug, tournament.idempotency_key);
+  const outcome = await consumeTournamentSizeCredit(entitlement.organizationSlug, tournamentId);
 
   if (outcome === "CONFIRMED") {
     await dbConfirmTournamentEntitlement(tournamentId);

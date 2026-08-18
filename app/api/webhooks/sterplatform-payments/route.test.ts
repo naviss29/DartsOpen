@@ -6,6 +6,7 @@ process.env.STER_PAYMENTS_CALLBACK_SECRET = SECRET;
 
 vi.mock("@/lib/db/tournament", () => ({
   dbConfirmPendingPayment: vi.fn(),
+  dbMarkRefundConfirmed: vi.fn(),
   dbGetRegistrationWithTournament: vi.fn(),
 }));
 vi.mock("@/lib/api/sterplatform", () => ({
@@ -19,7 +20,7 @@ vi.mock("@/lib/api/sterplatformInternal", () => ({
 // dans une constante de module au chargement, donc un import statique classique l'évaluerait
 // avant que la ligne ci-dessus ne s'exécute.
 const { POST, verifySignature } = await import("./route");
-const { dbConfirmPendingPayment, dbGetRegistrationWithTournament } = await import("@/lib/db/tournament");
+const { dbConfirmPendingPayment, dbMarkRefundConfirmed, dbGetRegistrationWithTournament } = await import("@/lib/db/tournament");
 const { sendEmail } = await import("@/lib/api/sterplatform");
 const { refundPayment } = await import("@/lib/api/sterplatformInternal");
 
@@ -103,6 +104,7 @@ describe("verifySignature — pure", () => {
 describe("POST /api/webhooks/sterplatform-payments", () => {
   beforeEach(() => {
     vi.mocked(dbConfirmPendingPayment).mockReset().mockResolvedValue("CONFIRMED");
+    vi.mocked(dbMarkRefundConfirmed).mockReset().mockResolvedValue(undefined);
     vi.mocked(dbGetRegistrationWithTournament).mockReset().mockResolvedValue({
       player_name: "Équipe Test",
       player_email: "test@example.com",
@@ -113,7 +115,7 @@ describe("POST /api/webhooks/sterplatform-payments", () => {
       tournament_location: "Salle Test",
     } as never);
     vi.mocked(sendEmail).mockReset().mockResolvedValue(undefined as never);
-    vi.mocked(refundPayment).mockReset().mockResolvedValue({ ok: true });
+    vi.mocked(refundPayment).mockReset().mockResolvedValue({ outcome: "REFUNDED" });
   });
 
   it("confirme l'inscription et envoie l'email sur une notification valide (CONFIRMED)", async () => {
@@ -183,9 +185,9 @@ describe("POST /api/webhooks/sterplatform-payments", () => {
     expect(refundPayment).not.toHaveBeenCalled();
   });
 
-  describe("CAPACITY_LOST (DARTSOPEN-MONETIZATION-003 P1, contre-audit) — paiement tardif après reprise de la place", () => {
-    it("déclenche un remboursement automatique via SterPlatform, jamais un email de confirmation", async () => {
-      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("CAPACITY_LOST");
+  describe("REFUND_NEEDED/REFUND_IN_PROGRESS (DARTSOPEN-MONETIZATION-003/004, contre-audit P1) — paiement tardif après reprise de la place", () => {
+    it("déclenche une tentative de remboursement via SterPlatform, jamais un email de confirmation", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("REFUND_NEEDED");
       const req = buildRequest(baseNotification());
       const res = await POST(req);
 
@@ -194,44 +196,130 @@ describe("POST /api/webhooks/sterplatform-payments", () => {
       expect(refundPayment).toHaveBeenCalledWith("payment-1");
     });
 
-    it("journalise (jamais silencieux) si le remboursement automatique échoue lui-même", async () => {
-      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("CAPACITY_LOST");
-      vi.mocked(refundPayment).mockResolvedValue({ ok: false, error: "Stripe indisponible" });
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it("DARTSOPEN-MONETIZATION-004 (P1, important) : utilise le paymentId reçu par le webhook lui-même, jamais uniquement la copie locale ster_payment_id — fonctionne même si celle-ci est absente en base", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("REFUND_NEEDED");
+      vi.mocked(dbGetRegistrationWithTournament).mockResolvedValue({
+        player_name: "Équipe Test",
+        player_email: "test@example.com",
+        player_names: ["Alice", "Bob"],
+        ster_payment_id: null, // absent en base — le webhook ne doit pas en dépendre
+        tournament_name: "Open Test",
+        tournament_date: "1 janvier 2027",
+        tournament_location: "Salle Test",
+      } as never);
+
+      const req = buildRequest(baseNotification({ paymentId: "payment-from-webhook" }));
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(refundPayment).toHaveBeenCalledWith("payment-from-webhook");
+      // La cible du remboursement ne dépend jamais d'une lecture de la copie locale
+      // ster_payment_id — cette lecture n'est même jamais faite sur ce chemin.
+      expect(dbGetRegistrationWithTournament).not.toHaveBeenCalled();
+    });
+
+    it("REFUNDED (confirmation synchrone) : marque REFUNDED immédiatement, jamais un statut non-2xx", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("REFUND_NEEDED");
+      vi.mocked(refundPayment).mockResolvedValue({ outcome: "REFUNDED" });
 
       const req = buildRequest(baseNotification());
       const res = await POST(req);
 
       expect(res.status).toBe(200);
+      expect(dbMarkRefundConfirmed).toHaveBeenCalledWith("registration-1");
+    });
+
+    it("ALREADY_REFUNDED (409 déjà remboursé côté SterPlatform) : marque REFUNDED, jamais traité comme un échec", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("REFUND_IN_PROGRESS");
+      vi.mocked(refundPayment).mockResolvedValue({ outcome: "ALREADY_REFUNDED" });
+
+      const req = buildRequest(baseNotification());
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(dbMarkRefundConfirmed).toHaveBeenCalledWith("registration-1");
+    });
+
+    it("PENDING (remboursement Stripe asynchrone) : 200, mais jamais marqué REFUNDED tant que payment.refunded n'est pas reçu", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("REFUND_NEEDED");
+      vi.mocked(refundPayment).mockResolvedValue({ outcome: "PENDING" });
+
+      const req = buildRequest(baseNotification());
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(dbMarkRefundConfirmed).not.toHaveBeenCalled();
+    });
+
+    it("SterPlatform indisponible (timeout/réseau) : la tentative de remboursement échoue, réponse non-2xx pour permettre une redélivraison, jamais REFUNDED", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("REFUND_NEEDED");
+      vi.mocked(refundPayment).mockResolvedValue({ outcome: "FAILED", error: "Timeout réseau" });
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const req = buildRequest(baseNotification());
+      const res = await POST(req);
+
+      expect(res.status).toBe(502);
+      expect(dbMarkRefundConfirmed).not.toHaveBeenCalled();
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining("remboursement"),
+        expect.stringContaining("Échec"),
         "registration-1",
         "payment-1",
-        "Stripe indisponible",
+        "Timeout réseau",
       );
       consoleErrorSpy.mockRestore();
     });
 
-    it("journalise si aucun ster_payment_id n'est enregistré (remboursement manuel requis)", async () => {
-      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("CAPACITY_LOST");
-      vi.mocked(dbGetRegistrationWithTournament).mockResolvedValue({
-        player_name: "Équipe Test",
-        player_email: "test@example.com",
-        player_names: ["Alice", "Bob"],
-        ster_payment_id: null,
-        tournament_name: "Open Test",
-        tournament_date: "1 janvier 2027",
-        tournament_location: "Salle Test",
-      } as never);
-      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    it("DARTSOPEN-MONETIZATION-004 (P1) : retry ultérieur réussi — un premier appel échoué (502) puis une redélivraison réussie confirment REFUNDED, jamais un double remboursement demandé au-delà du nécessaire", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValueOnce("REFUND_NEEDED");
+      vi.mocked(refundPayment).mockResolvedValueOnce({ outcome: "FAILED", error: "SterPlatform indisponible" });
 
+      const firstAttempt = await POST(buildRequest(baseNotification()));
+      expect(firstAttempt.status).toBe(502);
+      expect(dbMarkRefundConfirmed).not.toHaveBeenCalled();
+
+      // Redélivraison du même événement (même deliveryId) — dbConfirmPendingPayment relit l'état
+      // réel (REFUND_PENDING désormais) et renvoie REFUND_IN_PROGRESS : c'est le retry.
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValueOnce("REFUND_IN_PROGRESS");
+      vi.mocked(refundPayment).mockResolvedValueOnce({ outcome: "REFUNDED" });
+
+      const retry = await POST(buildRequest(baseNotification()));
+      expect(retry.status).toBe(200);
+      expect(dbMarkRefundConfirmed).toHaveBeenCalledWith("registration-1");
+      expect(refundPayment).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("ALREADY_REFUNDED/ALREADY_CONFIRMED (DARTSOPEN-MONETIZATION-004) — webhook répété sans double remboursement", () => {
+    it("ALREADY_REFUNDED (déjà confirmé financièrement) : 200, aucune nouvelle tentative de remboursement", async () => {
+      vi.mocked(dbConfirmPendingPayment).mockResolvedValue("ALREADY_REFUNDED");
       const req = buildRequest(baseNotification());
       const res = await POST(req);
 
       expect(res.status).toBe(200);
       expect(refundPayment).not.toHaveBeenCalled();
-      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Aucun ster_payment_id"), "registration-1");
-      consoleErrorSpy.mockRestore();
+      expect(dbMarkRefundConfirmed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("payment.refunded — confirmation asynchrone (DARTSOPEN-MONETIZATION-004, contre-audit P1)", () => {
+    it("marque le remboursement confirmé pour la registration désignée par externalReference", async () => {
+      const req = buildRequest(baseNotification({ event: "payment.refunded", externalReference: "registration-42" }));
+      const res = await POST(req);
+
+      expect(res.status).toBe(200);
+      expect(dbMarkRefundConfirmed).toHaveBeenCalledWith("registration-42");
+      expect(dbConfirmPendingPayment).not.toHaveBeenCalled();
+    });
+
+    it("idempotent : appelé deux fois (redélivraison), toujours 200, jamais d'erreur", async () => {
+      const notif = baseNotification({ event: "payment.refunded", externalReference: "registration-42" });
+      const first = await POST(buildRequest(notif));
+      const second = await POST(buildRequest(notif));
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(dbMarkRefundConfirmed).toHaveBeenCalledTimes(2);
     });
   });
 });
