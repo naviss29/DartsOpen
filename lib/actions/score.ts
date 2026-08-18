@@ -9,6 +9,7 @@ import {
   dbRecordThrow,
   dbCancelLastThrow,
 } from "@/lib/db/tournament";
+import type { CheckoutDart } from "@/lib/utils/x01";
 import { doAdvanceToNextRound } from "@/lib/actions/bracket";
 import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 import { publishMatchUpdate } from "@/lib/mercure";
@@ -119,40 +120,37 @@ export async function markWinnerDirect(
 }
 
 /**
- * DO-SCORING-001 — enregistre une volée X01 en mode traditionnel. Même modèle d'autorisation
+ * DO-SCORING-001/002 — enregistre une volée X01 en mode traditionnel. Même modèle d'autorisation
  * que markWinnerDirect() (organisateur uniquement, `getOwnedTournament`) : la saisie
  * traditionnelle se fait sur l'appareil de l'organisateur/marqueur, jamais par les joueurs
  * eux-mêmes (voir le mode ÉLECTRONIQUE pour la saisie publique par les joueurs).
  *
  * `clientRequestId` doit être généré une seule fois côté client par volée (pas régénéré à
  * chaque tentative) pour que le double-clic/retry réseau soit absorbé côté serveur — voir
- * dbRecordThrow(). Le serveur ne fait jamais confiance à `player`/`scoreEntered` au-delà de la
- * saisie brute : la conséquence (bust, restant, fin de manche) est entièrement recalculée par
- * dbRecordThrow() à partir de l'historique réel en base.
+ * dbRecordThrow(). `checkoutDart` (segment + multiplicateur de la fléchette de fermeture)
+ * n'est utile que lorsque cette volée atteint exactement zéro ; le serveur seul décide si le
+ * checkout est valide (DO-SCORING-002 Étape 5). Le serveur ne fait jamais confiance à
+ * `player`/`scoreEntered`/`checkoutDart` au-delà de la saisie brute : la conséquence (bust,
+ * restant, fin de manche, fin de match, progression DO-SPORT) est entièrement recalculée et
+ * appliquée par dbRecordThrow(), dans UNE SEULE transaction — DO-SCORING-002 (Étape 4) a
+ * supprimé l'appel séparé à doAdvanceToNextRound()/doAdvanceQuickTournament() qui existait ici
+ * depuis DO-SCORING-001 : la progression sportive fait désormais partie de cette même
+ * transaction, jamais un second verrou après coup dont l'échec pourrait être absorbé.
  */
 export async function recordThrow(
   matchSetId: string,
   tournamentId: string,
   player: 1 | 2,
   scoreEntered: number,
-  clientRequestId: string
+  clientRequestId: string,
+  checkoutDart?: CheckoutDart | null
 ): Promise<{ error?: string; bust?: boolean; reason?: string | null; impossibleCheckout?: boolean }> {
   await getOwnedTournament(tournamentId);
 
-  const result = await dbRecordThrow(matchSetId, tournamentId, player, scoreEntered, clientRequestId).catch(
+  const result = await dbRecordThrow(matchSetId, tournamentId, player, scoreEntered, clientRequestId, checkoutDart).catch(
     () => ({ error: "Erreur lors de l'enregistrement de la volée." })
   );
   if ("error" in result) return { error: result.error };
-
-  if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
-    if (result.match.quickMode) {
-      await doAdvanceQuickTournament(tournamentId, result.match.id).catch((err) =>
-        console.warn("[recordThrow] doAdvanceQuickTournament:", err)
-      );
-    } else {
-      await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
-    }
-  }
 
   if (result.matchFinished) {
     publishMatchUpdate(tournamentId).catch(() => {});

@@ -105,3 +105,56 @@ export function computeActivePlayer(throws: X01ThrowLike[], player1Id: string, p
   const activeCount = throws.filter((t) => !t.cancelled).length;
   return activeCount % 2 === 0 ? player1Id : player2Id;
 }
+
+/**
+ * DO-SCORING-002 (Étape 5) — la fléchette de fermeture d'une volée qui atteint exactement zéro.
+ * `segment` : 1-20, ou 25 pour le bull (pas de distinction simple/double bull dans `segment` —
+ * elle se fait par `multiplier`, voir isValidDartShape). `multiplier` : 1=simple, 2=double,
+ * 3=triple (jamais 3 sur le bull, il n'existe pas de triple bull aux fléchettes).
+ */
+export interface CheckoutDart {
+  segment: number;
+  multiplier: 1 | 2 | 3;
+}
+
+export const BULL_SEGMENT = 25;
+
+/** Légalité structurelle d'une fléchette, indépendamment de toute règle de fermeture. */
+export function isValidDartShape(dart: CheckoutDart): boolean {
+  if (!Number.isInteger(dart.segment) || !Number.isInteger(dart.multiplier)) return false;
+  if (dart.multiplier < 1 || dart.multiplier > 3) return false;
+  if (dart.segment === BULL_SEGMENT) return dart.multiplier !== 3; // pas de triple bull
+  return dart.segment >= 1 && dart.segment <= 20;
+}
+
+/** Valeur en points d'une fléchette structurellement valide. */
+export function checkoutDartValue(dart: CheckoutDart): number {
+  return dart.segment * dart.multiplier;
+}
+
+const FINISH_RULE_LABEL: Record<FinishType, string> = {
+  SINGLE: "n'importe quelle fléchette légale",
+  DOUBLE: "un double",
+  MASTER: "un double ou un triple",
+  TRIPLE: "un triple",
+};
+
+/**
+ * Décision Product Owner (DO-SCORING-002) — la vraie signification de chaque `finishType` :
+ * SINGLE/open-out accepte toute fléchette légale amenant à zéro ; DOUBLE exige un double en
+ * dernière fléchette ; MASTER un double OU un triple ; TRIPLE un triple. Ne suppose jamais que
+ * "le score restant tombe à zéro" suffit à valider la fermeture — c'est précisément le défaut
+ * que cette fonction corrige (Codex, post-DO-SCORING-001).
+ */
+export function satisfiesFinishType(dart: CheckoutDart, finishType: FinishType): boolean {
+  switch (finishType) {
+    case "DOUBLE": return dart.multiplier === 2;
+    case "MASTER": return dart.multiplier === 2 || dart.multiplier === 3;
+    case "TRIPLE": return dart.multiplier === 3;
+    case "SINGLE": default: return true;
+  }
+}
+
+export function finishRuleLabel(finishType: FinishType): string {
+  return FINISH_RULE_LABEL[finishType] ?? FINISH_RULE_LABEL.SINGLE;
+}

@@ -171,7 +171,7 @@ describe("dbRecordThrow — checkout, victoire, changement de manche (DO-SCORING
     const { match, sets } = await makeMatchWithSets(t.id, p1.id, p2.id, [round1, round2]);
     const [set1, set2] = sets;
 
-    const checkout = await dbRecordThrow(set1.id, t.id, 1, 40, randomUUID());
+    const checkout = await dbRecordThrow(set1.id, t.id, 1, 40, randomUUID(), { segment: 20, multiplier: 2 });
     if ("error" in checkout) throw new Error(checkout.error);
     expect(checkout.bust).toBe(false);
     expect(checkout.matchSetFinished).toBe(true);
@@ -426,7 +426,7 @@ describe("Limites de saisie et de finalisation (DO-SCORING-001, points 17/18/19)
     const { match, sets } = await makeMatchWithSets(t.id, p1.id, p2.id, [roundId]);
     const setId = sets[0].id;
 
-    const checkout = await dbRecordThrow(setId, t.id, 1, 40, randomUUID());
+    const checkout = await dbRecordThrow(setId, t.id, 1, 40, randomUUID(), { segment: 20, multiplier: 2 });
     if ("error" in checkout) throw new Error(checkout.error);
     expect(checkout.matchFinished).toBe(true);
 
@@ -457,7 +457,7 @@ describe("Limites de saisie et de finalisation (DO-SCORING-001, points 17/18/19)
     const { match, sets } = await makeMatchWithSets(t.id, p1.id, p2.id, [roundId]);
     const setId = sets[0].id;
 
-    const checkout = await dbRecordThrow(setId, t.id, 1, 40, randomUUID());
+    const checkout = await dbRecordThrow(setId, t.id, 1, 40, randomUUID(), { segment: 20, multiplier: 2 });
     if ("error" in checkout) throw new Error(checkout.error);
     expect(checkout.matchFinished).toBe(true);
 

@@ -319,6 +319,17 @@ model MatchSetThrow {
   remainingBefore Int       @map("remaining_before")
   remainingAfter  Int       @map("remaining_after")
   bust            Boolean   @default(false)
+  /**
+   * DO-SCORING-002 (Étape 5) — segment (1-20, ou 25 pour le bull) et multiplicateur (1=simple,
+   * 2=double, 3=triple ; jamais 3 sur le bull) de la fléchette de fermeture, renseignés
+   * uniquement quand cette volée atteint exactement zéro (checkout). Persistés AVEC la volée
+   * (jamais une table séparée) pour qu'un replay/rechargement conserve la preuve de la
+   * validation sans avoir à la redemander. `null`/`null` pour toute volée qui n'est pas une
+   * tentative de fermeture. Le serveur (lib/utils/x01.ts) vérifie leur légalité et leur
+   * cohérence avec `Round.finishType` avant d'accepter le checkout — jamais le client.
+   */
+  checkoutSegment    Int?    @map("checkout_segment")
+  checkoutMultiplier Int?    @map("checkout_multiplier")
   clientRequestId String    @map("client_request_id")
   cancelledAt     DateTime? @map("cancelled_at")
   cancelRequestId String?   @map("cancel_request_id")

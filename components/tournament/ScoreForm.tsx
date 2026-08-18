@@ -2,7 +2,10 @@
 
 import { useTransition, useState, useRef } from "react";
 import { proposeWinner, confirmWinner, disputeResult, markWinnerDirect, recordThrow, cancelLastThrow } from "@/lib/actions/score";
-import { computeRemaining, computeActivePlayer, x01StartScore, type X01ThrowLike } from "@/lib/utils/x01";
+import { computeRemaining, computeActivePlayer, x01StartScore, type X01ThrowLike, type CheckoutDart } from "@/lib/utils/x01";
+
+const DART_SEGMENTS = Array.from({ length: 20 }, (_, i) => i + 1);
+const BULL = 25;
 
 interface Player { id: string; player_name: string }
 interface MatchSet {
@@ -287,6 +290,15 @@ function SetScoreTracker({
   const [message, setMessage] = useState<{ tone: "error" | "warning"; text: string } | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
+  // DO-SCORING-002 (Étape 5) — fléchette de fermeture : ne sert qu'à guider l'affichage (le
+  // serveur seul décide si le checkout est valable, jamais ce pré-calcul client). Défaut
+  // raisonnable selon le type de fermeture configuré, pour limiter la saisie au strict minimum.
+  const isDoubleOrMasterOut = round?.finish_type === "DOUBLE" || round?.finish_type === "MASTER";
+  const isTripleOut = round?.finish_type === "TRIPLE";
+  const defaultMultiplier: 1 | 2 | 3 = isTripleOut ? 3 : isDoubleOrMasterOut ? 2 : 1;
+  const [checkoutSegment, setCheckoutSegment] = useState("20");
+  const [checkoutMultiplier, setCheckoutMultiplier] = useState<1 | 2 | 3>(defaultMultiplier);
+
   // Identité stable de commande par volée (Étape 4) : un même clic répété ou un retry réseau
   // avant qu'une réponse ne soit reçue réutilise le MÊME identifiant tant que la saisie n'a pas
   // changé — le serveur (dbRecordThrow) les traite alors comme une seule et même volée, jamais
@@ -294,6 +306,14 @@ function SetScoreTracker({
   const requestIdP1 = useRef(crypto.randomUUID());
   const requestIdP2 = useRef(crypto.randomUUID());
   const cancelRequestId = useRef(crypto.randomUUID());
+
+  const parsedP1 = parseInt(inputP1, 10);
+  const parsedP2 = parseInt(inputP2, 10);
+  // DO-SCORING-002 (Étape 5, UX) — n'affiche les champs de fléchette de fermeture que lorsque la
+  // saisie en cours atteindrait exactement zéro : jamais pour une volée normale. Purement
+  // indicatif côté client — le serveur revalide tout (dbRecordThrow).
+  const isClosingAttemptP1 = !isCricket && activePlayerId === p1.id && !isNaN(parsedP1) && rp1 - parsedP1 === 0;
+  const isClosingAttemptP2 = !isCricket && activePlayerId === p2.id && !isNaN(parsedP2) && rp2 - parsedP2 === 0;
 
   function handleVolee(player: "p1" | "p2") {
     if (isPending) return; // anti double-clic UX — la vraie idempotence reste côté serveur
@@ -303,10 +323,15 @@ function SetScoreTracker({
 
     const playerNum = player === "p1" ? 1 : 2;
     const requestIdRef = player === "p1" ? requestIdP1 : requestIdP2;
+    const remaining = player === "p1" ? rp1 : rp2;
+    const isClosingAttempt = !isCricket && remaining - voleeScore === 0;
+    const checkoutDart: CheckoutDart | null = isClosingAttempt
+      ? { segment: parseInt(checkoutSegment, 10), multiplier: checkoutMultiplier }
+      : null;
 
     setMessage(null);
     startTransition(async () => {
-      const result = await recordThrow(set.id, tournamentId, playerNum, voleeScore, requestIdRef.current);
+      const result = await recordThrow(set.id, tournamentId, playerNum, voleeScore, requestIdRef.current, checkoutDart);
 
       if (result.error) {
         // Ne jamais régénérer l'identifiant sur erreur : un nouveau clic sur OK avec la même
@@ -318,6 +343,8 @@ function SetScoreTracker({
       // Volée confirmée par le serveur (bust ou non) — la prochaine sera une commande différente.
       requestIdRef.current = crypto.randomUUID();
       if (player === "p1") setInputP1(""); else setInputP2("");
+      setCheckoutSegment("20");
+      setCheckoutMultiplier(defaultMultiplier);
 
       if (result.bust) {
         setMessage({ tone: "error", text: result.reason ?? "Bust !" });
@@ -427,6 +454,15 @@ function SetScoreTracker({
                   OK
                 </button>
               </div>
+              {isClosingAttemptP1 && (
+                <CheckoutDartFields
+                  segment={checkoutSegment}
+                  multiplier={checkoutMultiplier}
+                  onSegmentChange={setCheckoutSegment}
+                  onMultiplierChange={setCheckoutMultiplier}
+                  disabled={isPending}
+                />
+              )}
             </div>
 
             {/* P2 */}
@@ -454,6 +490,15 @@ function SetScoreTracker({
                   OK
                 </button>
               </div>
+              {isClosingAttemptP2 && (
+                <CheckoutDartFields
+                  segment={checkoutSegment}
+                  multiplier={checkoutMultiplier}
+                  onSegmentChange={setCheckoutSegment}
+                  onMultiplierChange={setCheckoutMultiplier}
+                  disabled={isPending}
+                />
+              )}
             </div>
           </div>
 
@@ -542,6 +587,52 @@ function SetScoreTracker({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * DO-SCORING-002 (Étape 5) — saisie de la fléchette de fermeture, affichée uniquement quand la
+ * volée en cours atteindrait exactement zéro (voir isClosingAttemptP1/P2 ci-dessus). Purement
+ * indicatif : le serveur (dbRecordThrow) revalide tout, jamais le client qui ne fait que
+ * proposer des valeurs structurellement plausibles.
+ */
+function CheckoutDartFields({
+  segment, multiplier, onSegmentChange, onMultiplierChange, disabled,
+}: {
+  segment: string;
+  multiplier: 1 | 2 | 3;
+  onSegmentChange: (v: string) => void;
+  onMultiplierChange: (v: 1 | 2 | 3) => void;
+  disabled: boolean;
+}) {
+  const isBull = segment === String(BULL);
+  return (
+    <div className="rounded-lg border border-success-solid/40 bg-success-solid/10 p-2 space-y-1.5">
+      <p className="text-[11px] text-success-solid font-medium">Fléchette de fermeture</p>
+      <div className="flex gap-1.5">
+        <select
+          value={segment}
+          disabled={disabled}
+          onChange={(e) => onSegmentChange(e.target.value)}
+          className="flex-1 rounded-md bg-surface border border-border-default px-1.5 py-1 text-xs text-text-primary focus:border-success-solid focus:outline-none"
+        >
+          {DART_SEGMENTS.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+          <option value={BULL}>Bull</option>
+        </select>
+        <select
+          value={multiplier}
+          disabled={disabled}
+          onChange={(e) => onMultiplierChange(Number(e.target.value) as 1 | 2 | 3)}
+          className="flex-1 rounded-md bg-surface border border-border-default px-1.5 py-1 text-xs text-text-primary focus:border-success-solid focus:outline-none"
+        >
+          <option value={1}>Simple</option>
+          <option value={2}>Double</option>
+          {!isBull && <option value={3}>Triple</option>}
+        </select>
+      </div>
     </div>
   );
 }
