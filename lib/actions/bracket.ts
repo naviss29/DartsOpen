@@ -15,19 +15,29 @@ import {
   withTournamentLock,
   isSportEngineUniqueConflict,
 } from "@/lib/db/tournament";
+import { prisma } from "@/lib/db/client";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
+/**
+ * DO-SPORT-002 — `tx` optionnel (défaut : le client Prisma global) : quand cette fonction est
+ * invoquée depuis l'intérieur d'un withTournamentLock() déjà tenu (chemin byes de
+ * doAdvanceToNextRound()), le tx de cette transaction doit être propagé à ses trois lectures —
+ * jamais une lecture décisionnelle sur une connexion séparée pendant que le verrou tournoi est
+ * détenu (audit Codex post-DO-SPORT-001).
+ */
 async function getAdvancingPlayerIds(
   tournamentId: string,
-  tournament: NonNullable<Awaited<ReturnType<typeof dbGetTournament>>>
+  tournament: NonNullable<Awaited<ReturnType<typeof dbGetTournament>>>,
+  tx: Prisma.TransactionClient = prisma
 ): Promise<string[]> {
   if (tournament.nb_pools === 1) {
-    const registrations = await dbListRegistrations(tournamentId, "PAID");
+    const registrations = await dbListRegistrations(tournamentId, "PAID", tx);
     return registrations.map((r) => r.id);
   }
 
   const [allMatches, pools] = await Promise.all([
-    dbListMatches(tournamentId),
-    dbListPools(tournamentId),
+    dbListMatches(tournamentId, undefined, tx),
+    dbListPools(tournamentId, tx),
   ]);
   const poolMatches = allMatches.filter((m) => m.pool_id !== null);
   if (!pools.length) return [];
@@ -108,7 +118,10 @@ export async function generateBracket(tournamentId: string): Promise<{ error?: s
       player2Id: pair.player2_id,
       bracketRound: 1,
       bracketPosition: pair.bracket_position,
-      boardNumber: boardNum,
+      // DO-SPORT-002 — un match PENDING n'a jamais de cible préaffectée (voir le modèle déjà
+      // correct du tournoi rapide) : seul un match qui démarre réellement IN_PROGRESS reçoit un
+      // boardNumber réel, jamais un numéro cyclique "réservé" pour un match encore en attente.
+      boardNumber: isFirst ? boardNum : 0,
       status: isFirst ? "IN_PROGRESS" : "PENDING",
       roundIds: rounds.map((r) => r.id),
     });
@@ -199,7 +212,9 @@ export async function doAdvanceToNextRound(
 
     if (hasByes) {
       // Tour 1 avec byes : recalculer le seeding pour apparier les bye-joueurs avec les vainqueurs R1
-      const advancingPlayers = await getAdvancingPlayerIds(tournamentId, tournament);
+      // DO-SPORT-002 — `tx` propagé explicitement : cette lecture décisionnelle doit rester sous
+      // le verrou tournoi déjà tenu (voir docblock de getAdvancingPlayerIds ci-dessus).
+      const advancingPlayers = await getAdvancingPlayerIds(tournamentId, tournament, tx);
       const pairs = seedBracket(advancingPlayers);
       const matchByPos = new Map(sortedMatches.map((m) => [m.bracket_position!, m]));
       const pairsByPos = new Map(pairs.map((p) => [p.bracket_position, p]));
@@ -228,7 +243,8 @@ export async function doAdvanceToNextRound(
           player2Id: p2,
           bracketRound: nextRound,
           bracketPosition: j,
-          boardNumber: boardNum,
+          // DO-SPORT-002 — voir la note équivalente dans generateBracket ci-dessus.
+          boardNumber: isFirst ? boardNum : 0,
           status: isFirst ? "IN_PROGRESS" : "PENDING",
           roundIds: rounds.map((r) => r.id),
         });
@@ -250,7 +266,8 @@ export async function doAdvanceToNextRound(
           player2Id: p2,
           bracketRound: nextRound,
           bracketPosition: j,
-          boardNumber: boardNum,
+          // DO-SPORT-002 — voir la note équivalente dans generateBracket ci-dessus.
+          boardNumber: isFirst ? boardNum : 0,
           status: isFirst ? "IN_PROGRESS" : "PENDING",
           roundIds: rounds.map((r) => r.id),
         });

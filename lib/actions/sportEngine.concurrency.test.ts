@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db/client";
 import {
@@ -6,11 +6,27 @@ import {
   dbConfirmWinner,
   dbMarkWinnerDirect,
   dbUpdateTournamentStatus,
+  dbArbitrateMatch,
   bulkCreateMatchesTx,
   withTournamentLock,
 } from "@/lib/db/tournament";
-import { doAdvanceToNextRound } from "@/lib/actions/bracket";
+import { doAdvanceToNextRound, generateBracket } from "@/lib/actions/bracket";
 import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
+
+// DO-SPORT-002 — pour tester generateBracket() (le vrai code de "génération initiale", pas une
+// réimplémentation) sans dépendre du SSO/cookies : seule la frontière d'autorisation est
+// remplacée par une lecture DB directe, la logique métier de generateBracket() elle-même tourne
+// intégralement, contre le vrai Postgres.
+vi.mock("@/lib/actions/access", async () => {
+  const { dbGetTournament } = await import("@/lib/db/tournament");
+  return {
+    getOwnedTournament: async (id: string) => {
+      const t = await dbGetTournament(id);
+      if (!t) throw new Error("Tournoi introuvable (mock getOwnedTournament).");
+      return t;
+    },
+  };
+});
 
 /**
  * DO-SPORT-001 — preuves réelles, contre un vrai PostgreSQL (jamais mocké), des garanties
@@ -431,5 +447,190 @@ describe("doAdvanceQuickTournament — mode rapide (DO-SPORT-001, Étape 7, test
       _count: { id: true },
     });
     expect(activeByBoard.every((row) => row._count.id === 1)).toBe(true);
+  });
+});
+
+describe("File d'attente standard sans cible préaffectée (DO-SPORT-002, problème 1)", () => {
+  it("génération initiale (generateBracket réel) : aucun match PENDING n'a de cible préaffectée", async () => {
+    const t = await makeTournament({ nb_boards: 2 });
+    await makeRound(t.id);
+    await Promise.all(
+      ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"].map((n) => makePlayer(t.id, n))
+    );
+
+    const result = await generateBracket(t.id);
+    expect(result.error).toBeUndefined();
+
+    const matches = await prisma.match.findMany({ where: { tournamentId: t.id, poolId: null } });
+    expect(matches).toHaveLength(4); // 8 joueurs, aucun bye
+
+    const active = matches.filter((m) => m.status === "IN_PROGRESS");
+    const pending = matches.filter((m) => m.status === "PENDING");
+    expect(active).toHaveLength(2); // nb_boards = 2
+    expect(pending).toHaveLength(2);
+    expect(active.every((m) => m.boardNumber > 0)).toBe(true);
+    // Le cœur de la régression DO-SPORT-002 : plus jamais de cible "réservée" sur un PENDING.
+    expect(pending.every((m) => m.boardNumber === 0)).toBe(true);
+  });
+
+  it("§1/§2/§3/§4 — deux cibles occupées, cible 2 libérée avant cible 1 : finalisation réussie sans rollback, la cible réellement libérée est affectée au prochain PENDING", async () => {
+    const t = await makeTournament({ nb_boards: 2 });
+    const [pA1, pA2, pB1, pB2, pC1, pC2, pD1, pD2] = await Promise.all(
+      ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2"].map((n) => makePlayer(t.id, n))
+    );
+    const roundId = await makeRound(t.id);
+
+    const matchA = await makeMatch(t.id, roundId, pA1.id, pA2.id, { boardNumber: 1, status: "IN_PROGRESS", bracketPosition: 0 });
+    const matchB = await makeMatch(t.id, roundId, pB1.id, pB2.id, { boardNumber: 2, status: "IN_PROGRESS", bracketPosition: 1 });
+    // Aucune cible préaffectée sur les PENDING — même le "premier" (matchC, créé en premier)
+    // n'a jamais boardNumber=1 : c'est précisément l'ancien comportement qui provoquait le
+    // rollback décrit par l'audit Codex (tentative d'activation sur une cible encore occupée).
+    const matchC = await makeMatch(t.id, roundId, pC1.id, pC2.id, { boardNumber: 0, status: "PENDING", bracketPosition: 2 });
+    const matchD = await makeMatch(t.id, roundId, pD1.id, pD2.id, { boardNumber: 0, status: "PENDING", bracketPosition: 3 });
+
+    // Cible 2 se libère AVANT cible 1.
+    const resultB = await dbMarkWinnerDirect(matchB.sets[0].id, pB1.id);
+    expect(resultB.error).toBeUndefined(); // §3 — finalisation réussie, jamais de rollback
+    expect(resultB.matchFinished).toBe(true);
+
+    const promotedAfterB = await prisma.match.findFirst({
+      where: { id: { in: [matchC.id, matchD.id] }, status: "IN_PROGRESS" },
+    });
+    expect(promotedAfterB).not.toBeNull();
+    expect(promotedAfterB!.boardNumber).toBe(2); // §4 — affecté à la cible réellement libérée (2), jamais 1
+    const remainingPendingId = promotedAfterB!.id === matchC.id ? matchD.id : matchC.id;
+
+    // Cible 1 se libère ensuite.
+    const resultA = await dbMarkWinnerDirect(matchA.sets[0].id, pA1.id);
+    expect(resultA.error).toBeUndefined();
+    expect(resultA.matchFinished).toBe(true);
+
+    const lastPromoted = await prisma.match.findUniqueOrThrow({ where: { id: remainingPendingId } });
+    expect(lastPromoted.status).toBe("IN_PROGRESS");
+    expect(lastPromoted.boardNumber).toBe(1);
+
+    // Invariant final : plus aucun match de ce tournoi n'est PENDING avec une cible non nulle.
+    const stalePending = await prisma.match.count({
+      where: { tournamentId: t.id, status: "PENDING", boardNumber: { gt: 0 } },
+    });
+    expect(stalePending).toBe(0);
+
+    const activeByBoard = await prisma.match.groupBy({
+      by: ["boardNumber"],
+      where: { tournamentId: t.id, status: "IN_PROGRESS", boardNumber: { gt: 0 } },
+      _count: { id: true },
+    });
+    expect(activeByBoard.every((row) => row._count.id === 1)).toBe(true);
+  });
+
+  it("§5/§6 — aucun match PENDING avec boardNumber > 0 après génération d'un tour standard, vérifié sur deux tours consécutifs", async () => {
+    const t = await makeTournament({ nb_boards: 2 });
+    const players = await Promise.all(
+      Array.from({ length: 16 }, (_, i) => `P${i}`).map((n) => makePlayer(t.id, n))
+    );
+    const roundId = await makeRound(t.id);
+
+    // Round 1 : 8 matchs (16 joueurs), les 2 premiers actifs (nb_boards=2), les 6 autres en
+    // attente sans cible — reproduit exactement ce que produit désormais generateBracket().
+    const r1 = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => i).map((i) =>
+        makeMatch(t.id, roundId, players[i * 2].id, players[i * 2 + 1].id, {
+          boardNumber: i < 2 ? i + 1 : 0,
+          status: i < 2 ? "IN_PROGRESS" : "PENDING",
+          bracketRound: 1,
+          bracketPosition: i,
+        })
+      )
+    );
+    await Promise.all(r1.map((m) => forceFinishMatch(m.id, m.player1Id)));
+
+    const advance1 = await doAdvanceToNextRound(t.id, 1);
+    expect(advance1.error).toBeUndefined();
+
+    const round2 = await prisma.match.findMany({ where: { tournamentId: t.id, bracketRound: 2, poolId: null } });
+    expect(round2).toHaveLength(4);
+    expect(round2.filter((m) => m.status === "IN_PROGRESS")).toHaveLength(2);
+    expect(round2.filter((m) => m.status === "PENDING").every((m) => m.boardNumber === 0)).toBe(true);
+    expect(round2.filter((m) => m.status === "IN_PROGRESS").every((m) => m.boardNumber > 0)).toBe(true);
+
+    // Second tour consécutif : même invariant.
+    await Promise.all(round2.map((m) => forceFinishMatch(m.id, m.player1Id)));
+    const advance2 = await doAdvanceToNextRound(t.id, 2);
+    expect(advance2.error).toBeUndefined();
+
+    const round3 = await prisma.match.findMany({ where: { tournamentId: t.id, bracketRound: 3, poolId: null } });
+    expect(round3.length).toBeGreaterThan(0);
+    expect(round3.filter((m) => m.status === "PENDING").every((m) => m.boardNumber === 0)).toBe(true);
+    expect(round3.filter((m) => m.status === "IN_PROGRESS").every((m) => m.boardNumber > 0)).toBe(true);
+
+    const stalePendingAnywhere = await prisma.match.count({
+      where: { tournamentId: t.id, status: "PENDING", boardNumber: { gt: 0 } },
+    });
+    expect(stalePendingAnywhere).toBe(0);
+  });
+});
+
+describe("dbArbitrateMatch — arbitrage rapide déjà propagé (DO-SPORT-002, problème 2)", () => {
+  async function makeQuickMatch(nbBoards = 2) {
+    const t = await makeTournament({ nb_boards: nbBoards, players_per_team: 1 });
+    await prisma.tournament.update({ where: { id: t.id }, data: { quickMode: true } });
+    const p1 = await makePlayer(t.id, "Winner", 2);
+    const p2 = await makePlayer(t.id, "Loser", 2);
+    const roundId = await makeQuickRounds(t.id);
+    const match = await makeMatch(t.id, roundId, p1.id, p2.id, {
+      boardNumber: 1, status: "IN_PROGRESS", bracketRound: 1, bracketPosition: 0, bracketType: "WINNERS",
+    });
+    return { t, p1, p2, match, setId: match.sets[0].id };
+  }
+
+  it("1 — avant propagation (quickAdvanceProcessedAt = null) : l'arbitrage reste autorisé selon les règles existantes", async () => {
+    const { t, p1, match, setId } = await makeQuickMatch();
+
+    const result = await dbArbitrateMatch(match.id, t.id, [{ setId, winnerId: p1.id }]);
+    expect(result.error).toBeUndefined();
+    expect(result.matchFinished).toBe(true);
+
+    const finalMatch = await prisma.match.findUniqueOrThrow({ where: { id: match.id } });
+    expect(finalMatch.status).toBe("FINISHED");
+    expect(finalMatch.winnerId).toBe(p1.id);
+  });
+
+  it("2/3/4/5/6/7 — après propagation : refus explicite, aucune donnée modifiée, comportement identique en appel répété", async () => {
+    const { t, p1, p2, match, setId } = await makeQuickMatch();
+
+    // Simule l'état laissé par doAdvanceQuickTournament une fois ce résultat propagé : match
+    // FINISHED, vie du perdant déjà décrémentée, marqueur d'idempotence posé.
+    await prisma.match.update({
+      where: { id: match.id },
+      data: { status: "FINISHED", winnerId: p1.id, quickAdvanceProcessedAt: new Date() },
+    });
+    await prisma.registration.update({ where: { id: p2.id }, data: { lives: 1 } });
+
+    const matchBefore = await prisma.match.findUniqueOrThrow({ where: { id: match.id } });
+    const loserBefore = await prisma.registration.findUniqueOrThrow({ where: { id: p2.id } });
+    const setBefore = await prisma.matchSet.findUniqueOrThrow({ where: { id: setId } });
+    const matchCountBefore = await prisma.match.count({ where: { tournamentId: t.id } });
+
+    // Tentative de correction organisateur : changer le vainqueur vers le perdant d'origine.
+    const attempt1 = await dbArbitrateMatch(match.id, t.id, [{ setId, winnerId: p2.id }]);
+    expect(attempt1.error).toBeDefined(); // 2 — refus explicite
+    expect(attempt1.error).toMatch(/déjà été propagé/i); // 5 — message explicite (voir UX attendue)
+    expect(attempt1.matchFinished).toBeUndefined();
+
+    // 7 — rejeu de la même commande : comportement identique, jamais une issue différente.
+    const attempt2 = await dbArbitrateMatch(match.id, t.id, [{ setId, winnerId: p2.id }]);
+    expect(attempt2.error).toBe(attempt1.error);
+
+    const matchAfter = await prisma.match.findUniqueOrThrow({ where: { id: match.id } });
+    const loserAfter = await prisma.registration.findUniqueOrThrow({ where: { id: p2.id } });
+    const setAfter = await prisma.matchSet.findUniqueOrThrow({ where: { id: setId } });
+    const matchCountAfter = await prisma.match.count({ where: { tournamentId: t.id } });
+
+    expect(matchAfter.winnerId).toBe(matchBefore.winnerId); // 3 — aucune modification du vainqueur
+    expect(matchAfter.status).toBe(matchBefore.status);
+    expect(matchAfter.updatedAt.getTime()).toBe(matchBefore.updatedAt.getTime()); // 6 — match non modifié
+    expect(setAfter.winnerId).toBe(setBefore.winnerId); // aucune modification du set d'origine
+    expect(loserAfter.lives).toBe(loserBefore.lives); // 4 — aucune modification des vies
+    expect(matchCountAfter).toBe(matchCountBefore); // aucun nouveau match créé
   });
 });

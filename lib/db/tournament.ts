@@ -567,8 +567,18 @@ export async function dbDeleteRound(roundId: string, tournamentId: string) {
 
 // ── Registrations ─────────────────────────────────────────────────────────────
 
-export async function dbListRegistrations(tournamentId: string, status?: string) {
-  const rows = await prisma.registration.findMany({
+/**
+ * DO-SPORT-002 — `client` optionnel (défaut : `prisma` global), même discipline que
+ * dbGetTournament()/dbListMatches() : permet une lecture sous le verrou tournoi déjà tenu
+ * (withTournamentLock) quand cette lecture participe à une décision sportive (voir
+ * getAdvancingPlayerIds() dans lib/actions/bracket.ts, chemin byes de doAdvanceToNextRound()).
+ */
+export async function dbListRegistrations(
+  tournamentId: string,
+  status?: string,
+  client: Prisma.TransactionClient = prisma,
+) {
+  const rows = await client.registration.findMany({
     where: {
       tournamentId,
       ...(status ? { status: status as RegistrationStatus } : {}),
@@ -938,8 +948,12 @@ export async function dbCountOccupiedSlots(tournamentId: string): Promise<number
 
 // ── Pools ─────────────────────────────────────────────────────────────────────
 
-export async function dbListPools(tournamentId: string) {
-  const rows = await prisma.pool.findMany({
+/**
+ * DO-SPORT-002 — `client` optionnel (défaut : `prisma` global), même discipline que
+ * dbListRegistrations() ci-dessus.
+ */
+export async function dbListPools(tournamentId: string, client: Prisma.TransactionClient = prisma) {
+  const rows = await client.pool.findMany({
     where: { tournamentId },
     include: {
       players: {
@@ -1131,6 +1145,14 @@ export async function dbDeleteBracketMatches(tournamentId: string, client: Prism
  * un autre état, OU un changement de vainqueur) — jamais sur un simple rejeu identique d'une
  * correction déjà appliquée (double-clic/retry), qui redéclencherait sinon une seconde perte de
  * vie/création de matchs en mode rapide pour un résultat pourtant inchangé.
+ *
+ * DO-SPORT-002 — règle minimale sûre pour le mode rapide : une fois qu'un match a été propagé
+ * par doAdvanceQuickTournament (`quickAdvanceProcessedAt != null` — perte de vie déjà appliquée,
+ * matchs suivants WB/LB/Grande Finale déjà créés à partir de CE résultat), son vainqueur ne peut
+ * plus être modifié par l'arbitrage standard : reconstruire rétroactivement la perte de vie et
+ * les matchs descendants déjà créés est hors périmètre de cette mission (aucun mécanisme de
+ * rollback n'existe). Refus explicite, avant toute écriture — aucune donnée n'est modifiée. Un
+ * éventuel mécanisme de réouverture/reconstruction explicite reste à étudier séparément.
  */
 export async function dbArbitrateMatch(
   matchId: string,
@@ -1150,6 +1172,13 @@ export async function dbArbitrateMatch(
       if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
 
       const isQuickMode = match.tournament.quickMode;
+
+      if (isQuickMode && match.quickAdvanceProcessedAt !== null) {
+        return {
+          error:
+            "Ce résultat a déjà été propagé dans le tournoi (perte de vie et matchs suivants déjà créés) : il ne peut plus être modifié par l'arbitrage normal.",
+        };
+      }
 
       const p1Wins = setWinners.filter((s) => s.winnerId === match.player1Id).length;
       const p2Wins = setWinners.filter((s) => s.winnerId === match.player2Id).length;
@@ -1398,9 +1427,17 @@ async function tryFinalizeMatch(tx: Prisma.TransactionClient, match: {
     data: { status: "FINISHED", winnerId },
   });
 
-  // Prendre le prochain match en attente et lui assigner la cible libérée
+  // Prendre le prochain match en attente et lui assigner la cible libérée.
+  //
+  // DO-SPORT-002 — l'ancien fallback "rétro-compatibilité" qui activait un match PENDING sans
+  // toucher son boardNumber a été retiré : depuis DO-SPORT-001, tout match PENDING (standard ou
+  // rapide) a systématiquement boardNumber=0 à la création (plus jamais de cible préaffectée,
+  // voir bracket.ts/quickTournament.ts/pool.ts). Ce fallback pouvait sélectionner un match dont
+  // le boardNumber préaffecté N'ÉTAIT PAS la cible qui venait de se libérer, et tenter de
+  // l'activer dessus alors qu'elle restait occupée par un autre match actif — l'index unique
+  // partiel matches_one_active_per_board refusait alors l'écriture et faisait échouer toute la
+  // transaction de finalisation (bug confirmé par l'audit Codex post-DO-SPORT-001).
   if (match.boardNumber > 0) {
-    // Nouveau format : board=0 = file d'attente globale
     const next = await tx.match.findFirst({
       where: { tournamentId: match.tournament.id, boardNumber: 0, status: "PENDING" },
       orderBy: { id: "asc" },
@@ -1410,18 +1447,6 @@ async function tryFinalizeMatch(tx: Prisma.TransactionClient, match: {
         where: { id: next.id },
         data: { status: "IN_PROGRESS", boardNumber: match.boardNumber },
       });
-    } else {
-      // Ancien format : matchs PENDING avec boardNumber déjà assigné (rétro-compatibilité)
-      const nextLegacy = await tx.match.findFirst({
-        where: { tournamentId: match.tournament.id, status: "PENDING" },
-        orderBy: { id: "asc" },
-      });
-      if (nextLegacy) {
-        await tx.match.update({
-          where: { id: nextLegacy.id },
-          data: { status: "IN_PROGRESS" },
-        });
-      }
     }
   }
 
