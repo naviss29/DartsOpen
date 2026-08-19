@@ -3,6 +3,7 @@
 import { useTransition, useState, useRef } from "react";
 import { proposeWinner, confirmWinner, disputeResult, markWinnerDirect, recordThrow, cancelLastThrow } from "@/lib/actions/score";
 import { computeRemaining, computeActivePlayer, x01StartScore, type X01ThrowLike, type CheckoutDart } from "@/lib/utils/x01";
+import type { ScoringAuthorization } from "@/lib/actions/fieldAccess";
 
 const DART_SEGMENTS = Array.from({ length: 20 }, (_, i) => i + 1);
 const BULL = 25;
@@ -25,6 +26,12 @@ interface Match {
   match_sets: MatchSet[];
 }
 
+/** DO-FIELD-ACCESS-001 — droit du visiteur courant sur CE match, calculé côté serveur
+ * (authorizeScoring) et transmis en lecture seule pour n'afficher que les contrôles qu'un appel
+ * serveur accepterait de toute façon — jamais l'inverse : le frontend n'est jamais la barrière
+ * de sécurité, seulement un confort d'affichage. */
+type AuthorizedAccess = ScoringAuthorization & { ok: true };
+
 interface Props {
   match: Match;
   rounds: Round[];
@@ -34,6 +41,7 @@ interface Props {
    * est ÉLECTRONIQUE). Seule source de vérité pour reconstruire le score restant/joueur actif —
    * voir SetScoreTracker ci-dessous. */
   currentSetThrows?: X01ThrowLike[];
+  access: ScoringAuthorization;
 }
 
 const GAME_LABELS: Record<string, string> = {
@@ -42,7 +50,7 @@ const GAME_LABELS: Record<string, string> = {
 const ENTRY_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Double", TRIPLE: "Triple" };
 const FINISH_LABELS: Record<string, string> = { SINGLE: "Simple", DOUBLE: "Double", TRIPLE: "Triple", MASTER: "Master" };
 
-export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSetThrows = [] }: Props) {
+export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSetThrows = [], access }: Props) {
   const sets = [...match.match_sets].sort((a, b) => a.round_order - b.round_order);
 
   if (rounds.length === 0) {
@@ -55,6 +63,20 @@ export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSet
     );
   }
 
+  // DO-FIELD-ACCESS-001 (Étape 3/4) — le QR de la cible mène ici, mais le droit de saisir dépend
+  // de l'état serveur au moment du scan, jamais de la seule possession de l'URL : sans session
+  // terrain valide (ni compte organisateur), aucun contrôle interactif n'est rendu — seule une
+  // invitation à rescanner le QR de la cible.
+  if (!access.ok) {
+    return (
+      <div className="text-center py-16 space-y-3">
+        <p className="text-4xl">🔒</p>
+        <p className="text-text-primary font-semibold">Accès terrain requis</p>
+        <p className="text-text-secondary text-sm max-w-xs mx-auto">{access.error}</p>
+      </div>
+    );
+  }
+
   if (scoringMode === "TRADITIONAL") {
     return (
       <TraditionalScoreForm
@@ -63,6 +85,7 @@ export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSet
         rounds={rounds}
         tournamentId={tournamentId}
         currentSetThrows={currentSetThrows}
+        access={access}
       />
     );
   }
@@ -76,6 +99,20 @@ export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSet
 function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string }) {
   const [isPending, startTransition] = useTransition();
   const [side, setSide] = useState<1 | 2 | null>(null);
+  // DO-FIELD-ACCESS-001 — jusqu'ici les erreurs de ces actions (dont un refus d'autorisation
+  // terrain, ex. session expirée en cours de match) étaient silencieusement perdues (`void`).
+  // Affiche désormais le message serveur tel quel (déjà rédigé pour inviter à rescanner le QR —
+  // voir fieldAccess.ts) plutôt que de laisser le clic paraître sans effet.
+  const [error, setError] = useState<string | null>(null);
+
+  function runAction(action: () => Promise<{ error?: string }>) {
+    if (isPending) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (result.error) setError(result.error);
+    });
+  }
 
   if (side === null) {
     return (
@@ -115,6 +152,12 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
         </button>
       </div>
 
+      {error && (
+        <div className="rounded-lg px-4 py-2 text-sm text-center border bg-danger-solid/10 border-danger-solid/40 text-danger-solid">
+          {error}
+        </div>
+      )}
+
       <div className="space-y-3">
         {sets.map((set) => {
           const round = rounds.find((r) => r.order === set.round_order);
@@ -146,14 +189,14 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
                   <div className="flex gap-2">
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(() => void confirmWinner(set.id, side, tournamentId))}
+                      onClick={() => runAction(() => confirmWinner(set.id, side, tournamentId))}
                       className="flex-1 rounded-lg bg-success-solid py-2.5 text-sm font-semibold text-white hover:bg-success-solid/90 disabled:opacity-60 transition-colors"
                     >
                       ✓ Confirmer
                     </button>
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(() => void disputeResult(set.id, tournamentId))}
+                      onClick={() => runAction(() => disputeResult(set.id, tournamentId))}
                       className="rounded-lg border border-danger-solid/60 text-danger-solid px-4 py-2.5 text-sm font-semibold hover:bg-danger-solid/10 disabled:opacity-60 transition-colors"
                     >
                       Contester
@@ -168,7 +211,7 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
                       <button
                         key={player.id}
                         disabled={isPending}
-                        onClick={() => startTransition(() => void proposeWinner(set.id, player.id, side, tournamentId))}
+                        onClick={() => runAction(() => proposeWinner(set.id, player.id, side, tournamentId))}
                         className={`rounded-lg border py-3 px-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
                           player.id === me.id
                             ? "border-success-solid text-success-solid hover:bg-success-solid/10"
@@ -193,8 +236,8 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
    Mode TRADITIONNEL
 ───────────────────────────────────────────── */
 function TraditionalScoreForm({
-  match, sets, rounds, tournamentId, currentSetThrows,
-}: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string; currentSetThrows: X01ThrowLike[] }) {
+  match, sets, rounds, tournamentId, currentSetThrows, access,
+}: { match: Match; sets: MatchSet[]; rounds: Round[]; tournamentId: string; currentSetThrows: X01ThrowLike[]; access: AuthorizedAccess }) {
   const completedSets = sets.filter((s) => s.validated_p1 && s.validated_p2);
   const currentSet = sets.find((s) => !(s.validated_p1 && s.validated_p2));
 
@@ -241,6 +284,7 @@ function TraditionalScoreForm({
           totalSets={sets.length}
           tournamentId={tournamentId}
           throws={currentSetThrows}
+          access={access}
         />
       ) : (
         <div className="rounded-xl bg-surface-secondary border border-border-default p-8 text-center">
@@ -256,7 +300,7 @@ function TraditionalScoreForm({
 }
 
 function SetScoreTracker({
-  set, p1, p2, round, setNumber, totalSets, tournamentId, throws,
+  set, p1, p2, round, setNumber, totalSets, tournamentId, throws, access,
 }: {
   set: MatchSet;
   p1: Player;
@@ -266,10 +310,18 @@ function SetScoreTracker({
   totalSets: number;
   tournamentId: string;
   throws: X01ThrowLike[];
+  access: AuthorizedAccess;
 }) {
   const [isPending, startTransition] = useTransition();
   const isCricket = round?.game_type === "CRICKET";
   const startScore = isCricket ? 0 : x01StartScore(round?.game_type ?? "501");
+  // DO-FIELD-ACCESS-001 — reflète exactement fieldAccess.ts::canMarkWinnerDirect (organisateur
+  // et arbitre terrain toujours autorisés ; joueur terrain uniquement en Cricket, seule voie de
+  // saisie normale de ce mode — jamais pour le raccourci X01, plus proche d'une correction
+  // d'arbitrage). Purement un confort d'affichage : markWinnerDirect() revalide cette même règle
+  // côté serveur, jamais en confiance du seul rendu du bouton.
+  const canOverrideWinner =
+    access.actor === "ORGANIZER" || access.role === "REFEREE" || isCricket;
 
   // DO-SCORING-001 (Étape 5) — état entièrement dérivé des props (l'historique persisté), plus
   // jamais un état local qui pourrait diverger de la base ou se perdre au refresh. Un
@@ -569,22 +621,26 @@ function SetScoreTracker({
             </div>
           )}
 
-          {/* Override manuel */}
-          <div className="border-t border-border-default pt-4">
-            <p className="text-xs text-text-secondary text-center mb-3">Ou désigner manuellement le gagnant</p>
-            <div className="grid grid-cols-2 gap-2">
-              {[p1, p2].map((p) => (
-                <button
-                  key={p.id}
-                  disabled={isPending}
-                  onClick={() => forceWinner(p.id)}
-                  className="rounded-lg border border-border-default py-2 text-xs font-semibold text-text-secondary hover:border-success-solid hover:text-success-solid disabled:opacity-60 transition-colors"
-                >
-                  🏆 {p.player_name}
-                </button>
-              ))}
+          {/* Override manuel — DO-FIELD-ACCESS-001 : réservé à l'organisateur et à l'arbitre
+              terrain, jamais à une simple session terrain joueur (voir canOverrideWinner
+              ci-dessus, à protéger davantage qu'une saisie normale de volée). */}
+          {canOverrideWinner && (
+            <div className="border-t border-border-default pt-4">
+              <p className="text-xs text-text-secondary text-center mb-3">Ou désigner manuellement le gagnant</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[p1, p2].map((p) => (
+                  <button
+                    key={p.id}
+                    disabled={isPending}
+                    onClick={() => forceWinner(p.id)}
+                    className="rounded-lg border border-border-default py-2 text-xs font-semibold text-text-secondary hover:border-success-solid hover:text-success-solid disabled:opacity-60 transition-colors"
+                  >
+                    🏆 {p.player_name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </div>

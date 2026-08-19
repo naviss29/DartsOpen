@@ -9,6 +9,7 @@ const { loadMatchSetChain, resolveAuthorizedSide, isValidMatchPlayer } = await i
 
 function dbSetRow(matchOverrides: Record<string, unknown> = {}) {
   return {
+    round: { gameType: "501" },
     match: {
       id: "match-1",
       tournamentId: "tournament-1",
@@ -51,6 +52,7 @@ describe("loadMatchSetChain", () => {
       match: { id: "match-1", tournamentId: "tournament-1", player1Id: "reg-1", player2Id: "reg-2" },
       player1Email: "alice@example.com",
       player2Email: "bob@example.com",
+      gameType: "501",
     });
   });
 
@@ -70,6 +72,7 @@ describe("resolveAuthorizedSide", () => {
     match: { id: "match-1", tournamentId: "tournament-1", player1Id: "reg-1", player2Id: "reg-2" },
     player1Email: "alice@example.com",
     player2Email: "bob@example.com",
+    gameType: "501",
   };
 
   function user(email: string) {
@@ -103,6 +106,7 @@ describe("isValidMatchPlayer", () => {
     match: { id: "match-1", tournamentId: "tournament-1", player1Id: "reg-1", player2Id: "reg-2" },
     player1Email: "alice@example.com",
     player2Email: "bob@example.com",
+    gameType: "501",
   };
 
   it("accepte le player1Id du match", () => {

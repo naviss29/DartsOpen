@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ScoreForm } from "@/components/tournament/ScoreForm";
 import { dbGetTournamentPublic, dbListMatches, dbListMatchSetThrows } from "@/lib/db/tournament";
+import { authorizeScoring, type ScoringAuthorization } from "@/lib/actions/fieldAccess";
 import type { Metadata } from "next";
 
 interface Props {
@@ -71,6 +72,16 @@ export default async function ScorePage({ params, searchParams }: Props) {
     })),
   } : null;
 
+  // DO-FIELD-ACCESS-001 — lecture seule (authorizeScoring ne fait que consulter le JWT
+  // organisateur et le cookie de session terrain, jamais une écriture) : détermine ce que CE
+  // visiteur a le droit de faire sur CE match avant même de rendre le formulaire, pour que
+  // l'interface n'affiche jamais des contrôles qu'un appel serveur refuserait de toute façon.
+  // Le vrai rempart reste authorizeScoring() côté Server Actions (score.ts) — jamais cette
+  // seule vérification d'affichage.
+  const access: ScoringAuthorization = match
+    ? await authorizeScoring(id, match.id)
+    : { ok: false, error: "Aucun match en cours sur cette cible. Scannez le QR code de la cible." };
+
   const rounds = tournament.rounds ?? [];
 
   // DO-SCORING-001 (Étape 5) — reprise d'état : seule la manche en cours (la première non
@@ -103,6 +114,7 @@ export default async function ScorePage({ params, searchParams }: Props) {
             scoringMode={tournament.scoring_mode === "TRADITIONAL" ? "TRADITIONAL" : "ELECTRONIC"}
             tournamentId={id}
             currentSetThrows={currentSetThrows}
+            access={access}
           />
         )}
       </div>

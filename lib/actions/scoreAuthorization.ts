@@ -12,6 +12,11 @@ export type MatchSetChain = {
   };
   player1Email: string;
   player2Email: string | null;
+  /** DO-FIELD-ACCESS-001 — game_type de la Round de CE set (ex. "501", "CRICKET") : nécessaire
+   * pour distinguer, côté autorisation, la désignation directe Cricket (saisie normale terrain)
+   * du raccourci "désigner manuellement le gagnant" du mode X01 (voir
+   * lib/actions/fieldAccess.ts::canMarkWinnerDirect). */
+  gameType: string;
 };
 
 /**
@@ -25,6 +30,7 @@ export async function loadMatchSetChain(matchSetId: string, tournamentId: string
   const set = await prisma.matchSet.findUnique({
     where: { id: matchSetId },
     select: {
+      round: { select: { gameType: true } },
       match: {
         select: {
           id: true,
@@ -49,6 +55,7 @@ export async function loadMatchSetChain(matchSetId: string, tournamentId: string
     },
     player1Email: set.match.player1.playerEmail,
     player2Email: set.match.player2?.playerEmail ?? null,
+    gameType: set.round.gameType,
   };
 }
 
