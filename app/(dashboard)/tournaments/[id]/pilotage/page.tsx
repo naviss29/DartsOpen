@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Alert, Card, EmptyState, Pill } from "@naviss29/design-system";
 import { getOwnedTournament } from "@/lib/actions/access";
-import { dbListRegistrations, dbListPools, dbListMatches } from "@/lib/db/tournament";
+import { loadTournamentConsoleData } from "@/lib/ops/loadConsoleData";
 import {
   buildConsoleSummary,
   buildReadinessChecklist,
@@ -38,22 +38,6 @@ type Tournament = {
   players_per_team: number;
 };
 
-type Registration = { id: string; status: string };
-type Pool = { id: string };
-type Match = {
-  id: string;
-  status: string;
-  board_number: number;
-  bracket_round: number | null;
-  bracket_position: number | null;
-  pool_id: string | null;
-  player1_id: string;
-  player2_id: string | null;
-  winner_id: string | null;
-  player1?: { id: string; player_name: string } | null;
-  player2?: { id: string; player_name: string } | null;
-};
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const tournament = (await getOwnedTournament(id)) as Tournament;
@@ -84,24 +68,13 @@ export default async function TournamentPilotagePage({ params }: Props) {
 
   const tournament = (await getOwnedTournament(id)) as Tournament;
 
-  // DO-OPS-001 — la console agrège l'existant : mêmes fonctions db* que le reste du dashboard
-  // (page.tsx, players/page.tsx, pools/page.tsx), jamais une seconde source de vérité. `.catch`
-  // journalisé (jamais un `.catch(() => null)` silencieux, voir CLAUDE.md §Gestion des erreurs) :
-  // une panne DB inattendue donne un état vide propre, pas une page blanche.
-  const [registrations, pools, matches] = await Promise.all([
-    dbListRegistrations(id).catch((err) => {
-      console.warn("[pilotage] dbListRegistrations:", err);
-      return [] as Registration[];
-    }),
-    dbListPools(id).catch((err) => {
-      console.warn("[pilotage] dbListPools:", err);
-      return [] as Pool[];
-    }),
-    dbListMatches(id).catch((err) => {
-      console.warn("[pilotage] dbListMatches:", err);
-      return [] as Match[];
-    }),
-  ]);
+  // DO-OPS-002 (défaut 2) — la console agrège l'existant : mêmes fonctions db* que le reste du
+  // dashboard (page.tsx, players/page.tsx, pools/page.tsx), jamais une seconde source de vérité.
+  // Une panne sur l'une de ces trois lectures critiques n'est PLUS jamais rattrapée en `[]` ici :
+  // loadTournamentConsoleData() journalise puis laisse l'erreur se propager jusqu'à error.tsx
+  // (déjà en place) — un état d'erreur explicite, jamais une synthèse calculée sur un faux "zéro
+  // élément" qui mentirait à l'organisateur sur l'état réel du tournoi.
+  const { registrations, pools, matches } = await loadTournamentConsoleData(id);
 
   const summary = buildConsoleSummary(tournament, registrations, matches);
   const checklist = buildReadinessChecklist(tournament, registrations, pools);
@@ -114,6 +87,11 @@ export default async function TournamentPilotagePage({ params }: Props) {
   const isPreStart = ["DRAFT", "OPEN", "PENDING_ENTITLEMENT"].includes(tournament.status);
   const isRunning = tournament.status === "IN_PROGRESS";
   const isFinished = tournament.status === "FINISHED";
+
+  // DO-OPS-002 — défaut 1 : ne propose plus la clôture manuelle tant qu'il reste du jeu. La
+  // vraie barrière reste serveur (dbUpdateTournamentStatus, lib/db/tournament.ts) — ceci n'est
+  // qu'un confort d'affichage cohérent avec elle, jamais l'inverse.
+  const closureBlocked = NEXT_STATUS[tournament.status] === "FINISHED" && (summary.matchesInProgress > 0 || summary.matchesPending > 0);
 
   return (
     <div className="space-y-6">
@@ -141,18 +119,23 @@ export default async function TournamentPilotagePage({ params }: Props) {
             <StatusBadge status={tournament.status} />
             {tournament.quick_mode && <Pill tone="success">⚡ Rapide</Pill>}
           </div>
-          {NEXT_STATUS[tournament.status] && (
+          {NEXT_STATUS[tournament.status] && !closureBlocked && (
             <TournamentStatusButton
               tournamentId={id}
               nextStatus={NEXT_STATUS[tournament.status]}
               label={NEXT_STATUS_LABEL[tournament.status]}
             />
           )}
+          {closureBlocked && (
+            <p className="text-xs text-brand-text-secondary text-right max-w-[200px]">
+              Clôture indisponible : {summary.matchesInProgress} match(s) en cours, {summary.matchesPending} en attente.
+            </p>
+          )}
         </div>
         <p className="text-sm text-brand-text-secondary">{summary.formatLabel}</p>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Stat label="Inscrits" value={`${summary.registrationCount}`} sub={`/ ${summary.capacity} max`} />
+          <Stat label="Joueurs confirmés" value={`${summary.confirmedPlayerCount}`} sub={`/ ${summary.capacity} max`} />
           <Stat label="Cibles" value={`${summary.boardsCount}`} />
           <Stat label="Terminés" value={`${summary.matchesFinished}`} />
           <Stat label="En cours" value={`${summary.matchesInProgress}`} />
@@ -280,15 +263,18 @@ export default async function TournamentPilotagePage({ params }: Props) {
         </section>
       )}
 
-      {/* ── File d'attente des matchs (§7) ───────────────────────────────── */}
+      {/* ── Matchs en attente (§7) ───────────────────────────────────────── */}
       {isRunning && (
         <section className="space-y-2">
-          <h2 className="font-semibold text-brand-dark">File d&apos;attente ({queue.length})</h2>
+          <h2 className="font-semibold text-brand-dark">Matchs en attente ({queue.length})</h2>
           {queue.length === 0 ? (
             <EmptyState icon={<span aria-hidden>⏳</span>} title="Aucun match en attente" />
           ) : (
             <div className="space-y-2">
-              {queue.map((m, i) => (
+              {/* DO-OPS-002 (défaut 5) — jamais de numérotation ("#1", "#2"...) : le moteur réel
+                  (dbPromoteUnassignedMatches) promeut par id de création, pas par cet ordre de
+                  lecture — aucune promesse d'ordre de passage ici, voir buildMatchQueue(). */}
+              {queue.map((m) => (
                 <div key={m.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm">
                   <div>
                     <p className="font-medium text-brand-dark">
@@ -298,7 +284,6 @@ export default async function TournamentPilotagePage({ params }: Props) {
                       {m.pool_id ? "Poule" : `Phase finale — tour ${m.bracket_round ?? "?"}`}
                     </p>
                   </div>
-                  <span className="text-xs text-brand-text-secondary shrink-0">#{i + 1}</span>
                 </div>
               ))}
             </div>

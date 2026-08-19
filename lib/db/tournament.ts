@@ -581,8 +581,34 @@ async function dbUpdateTournamentStatusTx(tx: Prisma.TransactionClient, id: stri
   return mapTournament({ ...t, rounds: t.rounds.map(mapRound) });
 }
 
+/**
+ * DO-OPS-002 — la clôture MANUELLE (bouton organisateur, `updateTournamentStatus` dans
+ * lib/actions/tournament.ts, seul appelant de cette fonction publique) ne doit jamais couper une
+ * compétition encore en cours : refuse IN_PROGRESS → FINISHED tant qu'il reste au moins un match
+ * IN_PROGRESS ou PENDING. Vérifié sous le même verrou/transaction que l'écriture elle-même
+ * (withTournamentLock) — jamais une vérification séparée qu'une course pourrait contourner.
+ *
+ * Ne touche jamais dbUpdateTournamentStatusTx() : la clôture AUTOMATIQUE du moteur sportif
+ * (doAdvanceToNextRoundTx/doAdvanceQuickTournamentTx, lignes ~1625/~2400) l'appelle directement,
+ * sans passer par cette fonction publique — cette garde ne s'applique donc jamais à elle. C'est
+ * d'ailleurs cohérent : la clôture automatique ne se déclenche déjà que lorsque le dernier match
+ * vient de passer FINISHED, donc précisément quand cette même condition serait de toute façon
+ * remplie.
+ */
 export async function dbUpdateTournamentStatus(id: string, status: string) {
-  return withTournamentLock(id, (tx) => dbUpdateTournamentStatusTx(tx, id, status));
+  return withTournamentLock(id, async (tx) => {
+    if (status === "FINISHED") {
+      const unfinishedCount = await tx.match.count({
+        where: { tournamentId: id, status: { in: ["IN_PROGRESS", "PENDING"] } },
+      });
+      if (unfinishedCount > 0) {
+        throw new Error(
+          `Impossible de clôturer : ${unfinishedCount} match(s) encore en cours ou en attente.`
+        );
+      }
+    }
+    return dbUpdateTournamentStatusTx(tx, id, status);
+  });
 }
 
 // ── Rounds ────────────────────────────────────────────────────────────────────

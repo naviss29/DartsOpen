@@ -33,11 +33,18 @@ export function ConsoleAutoRefresh({ tournamentId, intervalMs = 8000 }: { tourna
       }
       try {
         const tokenRes = await fetch(`/api/public/tournaments/${tournamentId}/mercure-token`);
+        // DO-OPS-002 — le composant peut avoir été démonté PENDANT ce fetch async (navigation,
+        // changement d'onglet du dashboard) : sans cette vérification, le code qui suit
+        // s'exécuterait quand même après le nettoyage de l'effet (qui n'a alors rien eu à fermer,
+        // `es`/`poll` étant encore `null` à ce moment-là), créant un EventSource ou un timer
+        // orphelin qu'aucun cleanup ne referme plus jamais.
+        if (!mounted) return;
         if (!tokenRes.ok) {
           startPolling();
           return;
         }
         const { token, topic } = (await tokenRes.json()) as { token: string; topic: string };
+        if (!mounted) return;
         const url = new URL(MERCURE_URL);
         url.searchParams.append("topic", topic);
         url.searchParams.append("authorization", token);

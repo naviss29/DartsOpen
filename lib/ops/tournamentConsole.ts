@@ -17,6 +17,7 @@ export interface ConsoleTournament {
   nb_boards: number;
   nb_pools: number;
   max_players: number;
+  players_per_team: number;
 }
 
 export interface ConsoleRegistration {
@@ -45,8 +46,19 @@ export interface ConsoleMatch {
 // ── Vue synthétique (mission §3) ────────────────────────────────────────────────
 
 export interface ConsoleSummary {
+  /** Nombre brut d'inscriptions, tous statuts confondus (PENDING/PAID/CANCELLED/REFUND_PENDING/
+   * REFUNDED inclus) — jamais utilisé seul comme métrique de participation, voir paidCount. */
   registrationCount: number;
+  /** Inscriptions PAID — même population que celle utilisée par le moteur sportif pour la
+   * participation réelle (generatePools()/generateQuickBracket(), lib/actions/pool.ts et
+   * lib/actions/quickTournament.ts, toutes deux basées sur dbListRegistrations(id, "PAID")).
+   * Une inscription = une équipe/entrée, jamais directement un nombre de joueurs. */
   paidCount: number;
+  /** DO-OPS-002 (défaut 3) — joueurs réellement confirmés (paidCount × players_per_team),
+   * seule valeur comparable à `capacity` (qui est un plafond de JOUEURS, `max_players`, jamais
+   * un plafond d'inscriptions/équipes) — comparer paidCount à capacity mélangerait deux unités
+   * différentes selon players_per_team. */
+  confirmedPlayerCount: number;
   capacity: number;
   boardsCount: number;
   matchesFinished: number;
@@ -78,6 +90,7 @@ export function buildConsoleSummary(
   return {
     registrationCount: registrations.length,
     paidCount,
+    confirmedPlayerCount: paidCount * tournament.players_per_team,
     capacity: tournament.max_players,
     boardsCount: tournament.nb_boards,
     matchesFinished,
@@ -119,11 +132,18 @@ export function buildReadinessChecklist(
   items.push({
     id: "boards",
     label: "Cibles configurées",
-    level: tournament.nb_boards >= 1 ? "ok" : "blocking",
+    // DO-OPS-002 (défaut 4) — décision PO documentée dans le rapport de mission : nb_boards < 1
+    // est déjà impossible à créer (TournamentSchema, lib/actions/tournament.ts :
+    // z.coerce.number().int().min(1).max(32)), MAIS la transition serveur OPEN → IN_PROGRESS
+    // elle-même (dbUpdateTournamentStatusTx, lib/db/tournament.ts) n'applique aucune garde sur
+    // les cibles. Jamais "blocking" ici : la console ne doit jamais laisser croire à une garde
+    // serveur qui n'existe pas À CETTE étape précise (Option B de la mission, pas de nouvelle
+    // règle PO inventée).
+    level: tournament.nb_boards >= 1 ? "ok" : "warning",
     detail:
       tournament.nb_boards >= 1
         ? `${tournament.nb_boards} cible(s) configurée(s).`
-        : "Aucune cible configurée — impossible de démarrer.",
+        : "Aucune cible configurée sur ce tournoi.",
   });
 
   items.push({
@@ -411,10 +431,15 @@ export function buildBoardsView(tournament: ConsoleTournament, matches: ConsoleM
 // ── File d'attente des matchs (mission §7) ──────────────────────────────────────
 
 /**
- * Ordre de passage approximatif : matchs de poule avant les matchs de bracket (déjà déterminés,
- * jouables immédiatement dès qu'une cible se libère), puis par round/position croissants — le
- * même ordre que celui déjà utilisé par dbPromoteUnassignedMatches()/dbListMatches() (`orderBy`),
- * jamais un nouveau moteur de scheduling.
+ * DO-OPS-002 (défaut 5) — regroupement de LECTURE uniquement (poules avant bracket, puis
+ * round/position croissants, pour qu'un humain retrouve facilement un match dans la liste),
+ * jamais un ordre de passage garanti : le moteur réel (dbPromoteUnassignedMatches(),
+ * lib/db/tournament.ts) promeut les matchs PENDING par `orderBy: { id: "asc" }` — un simple
+ * ordre technique de création, sans rapport avec round/position, qu'afficher tel quel serait
+ * illisible pour l'organisateur. Le tri ci-dessous ne pilote AUCUNE décision d'affectation de
+ * cible (jamais un nouveau moteur de scheduling) ; l'UI (pilotage/page.tsx) ne doit jamais lui
+ * associer de numérotation ("#1", "#2"...) qui laisserait croire à un ordre de passage garanti —
+ * voir la mission DO-OPS-002 §5, option retenue : présentation sans promesse d'ordre.
  */
 export function buildMatchQueue(matches: ConsoleMatch[]): ConsoleMatch[] {
   return matches

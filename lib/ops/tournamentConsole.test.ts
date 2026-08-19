@@ -25,6 +25,7 @@ function tournament(overrides: Partial<ConsoleTournament> = {}): ConsoleTourname
     nb_boards: 4,
     nb_pools: 2,
     max_players: 16,
+    players_per_team: 1,
     ...overrides,
   };
 }
@@ -67,6 +68,38 @@ describe("buildConsoleSummary", () => {
     expect(summary.matchesPending).toBe(2);
     expect(summary.totalMatches).toBe(4);
     expect(summary.progressPercent).toBe(25);
+  });
+
+  // DO-OPS-002 (défaut 3, scénarios obligatoires 1/2/3) — le compteur "Inscrits" doit exclure
+  // PENDING/CANCELLED/REFUND_PENDING/REFUNDED et refléter la même population que le moteur
+  // sportif (generatePools()/generateQuickBracket(), toutes deux basées sur des inscriptions
+  // PAID), sans jamais confondre un nombre d'inscriptions (équipes) avec un nombre de joueurs.
+  it("paidCount exclut PENDING (scénario obligatoire 1)", () => {
+    const t = tournament();
+    const registrations = [reg("r1", "PAID"), reg("r2", "PENDING")];
+    expect(buildConsoleSummary(t, registrations, []).paidCount).toBe(1);
+  });
+
+  it("paidCount exclut CANCELLED/REFUND_PENDING/REFUNDED (scénario obligatoire 2)", () => {
+    const t = tournament();
+    const registrations = [
+      reg("r1", "PAID"),
+      reg("r2", "CANCELLED"),
+      reg("r3", "REFUND_PENDING"),
+      reg("r4", "REFUNDED"),
+    ];
+    expect(buildConsoleSummary(t, registrations, []).paidCount).toBe(1);
+  });
+
+  it("confirmedPlayerCount = paidCount × players_per_team, jamais confondu avec le nombre d'inscriptions (scénario obligatoire 3)", () => {
+    const t = tournament({ players_per_team: 2, max_players: 8 });
+    const registrations = [reg("r1", "PAID"), reg("r2", "PAID"), reg("r3", "PENDING")];
+
+    const summary = buildConsoleSummary(t, registrations, []);
+
+    expect(summary.paidCount).toBe(2); // 2 équipes payées
+    expect(summary.confirmedPlayerCount).toBe(4); // 2 équipes × 2 joueurs/équipe = 4 joueurs
+    expect(summary.confirmedPlayerCount).not.toBe(summary.registrationCount);
   });
 
   it("progression à 0 (jamais NaN) quand aucun match n'existe encore", () => {
@@ -122,6 +155,21 @@ describe("buildReadinessChecklist — scénario 2 (OPEN)", () => {
   });
 });
 
+// DO-OPS-002 (défaut 4, scénario obligatoire 12) — la transition serveur OPEN → IN_PROGRESS
+// (dbUpdateTournamentStatusTx) n'applique aucune garde sur nb_boards : la checklist ne doit
+// jamais prétendre le contraire en affichant "blocking".
+describe("buildReadinessChecklist — défaut 4 (checklist cibles cohérente avec la vraie garde serveur)", () => {
+  it("absence de cible : avertissement, jamais bloquant (aucune garde serveur réelle à cette transition)", () => {
+    const items = buildReadinessChecklist(tournament({ nb_boards: 0 }), [reg("r1"), reg("r2")], []);
+    expect(items.find((i) => i.id === "boards")!.level).toBe("warning");
+  });
+
+  it("cibles présentes : ok", () => {
+    const items = buildReadinessChecklist(tournament({ nb_boards: 4 }), [reg("r1"), reg("r2")], []);
+    expect(items.find((i) => i.id === "boards")!.level).toBe("ok");
+  });
+});
+
 // Scénario obligatoire 5 — cibles libres / Scénario 6 — cibles occupées
 describe("buildBoardsView — scénarios 5/6", () => {
   it("cible libre sans file d'attente : status free, aucun indice de prochain match", () => {
@@ -153,7 +201,11 @@ describe("buildBoardsView — scénarios 5/6", () => {
   });
 });
 
-// Scénario obligatoire 7 — plusieurs matchs en attente
+// Scénario obligatoire 7 — plusieurs matchs en attente / DO-OPS-002 défaut 5, scénario
+// obligatoire 13 : ce tri reste un regroupement de LECTURE, jamais l'ordre réel de promotion du
+// moteur (dbPromoteUnassignedMatches trie par id ASC) — voir le docblock de buildMatchQueue().
+// L'UI (pilotage/page.tsx) ne doit plus lui associer de numérotation "#N", vérifié par
+// pilotage/mobile.test.ts.
 describe("buildMatchQueue — scénario 7", () => {
   it("place les matchs de poule avant les matchs de bracket, puis trie par round/position", () => {
     const bracketLate = match({ id: "bracket-2", status: "PENDING", pool_id: null, bracket_round: 2, bracket_position: 0 });

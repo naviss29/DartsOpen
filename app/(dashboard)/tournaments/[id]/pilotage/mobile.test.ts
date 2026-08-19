@@ -51,3 +51,30 @@ describe("Console jour J — pas de tableau débordant pour l'information princi
     expect(source).toMatch(/flex-wrap/);
   });
 });
+
+describe("DO-OPS-002 défaut 5 — la file d'attente n'affiche aucune promesse d'ordre de passage", () => {
+  it("aucune numérotation \"#N\" n'est rendue à côté des matchs en attente", () => {
+    const source = readSource("page.tsx");
+    expect(source).not.toMatch(/#\{i\s*\+\s*1\}/);
+  });
+
+  it("la section est intitulée « Matchs en attente », jamais « File d'attente »", () => {
+    const source = readSource("page.tsx");
+    expect(source).toMatch(/Matchs en attente/);
+    expect(source).not.toMatch(/File d.attente/);
+  });
+});
+
+describe("DO-OPS-002 défaut 2 — aucune lecture critique n'est rattrapée en état vide silencieux", () => {
+  it("la page pilotage ne contient plus de .catch(() => []) sur les lectures registrations/pools/matches", () => {
+    const source = readSource("page.tsx");
+    expect(source).not.toMatch(/dbListRegistrations|dbListPools|dbListMatches/);
+    expect(source).toMatch(/loadTournamentConsoleData/);
+  });
+
+  it("loadTournamentConsoleData ne rattrape jamais une erreur en tableau vide (elle journalise puis relance)", () => {
+    const source = readFileSync(path.join(__dirname, "../../../../../lib/ops/loadConsoleData.ts"), "utf-8");
+    expect(source).toMatch(/throw err/);
+    expect(source).not.toMatch(/return \[\]/);
+  });
+});
