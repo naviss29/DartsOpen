@@ -129,10 +129,17 @@ export async function verifyFieldToken(
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    select: { status: true, tournamentId: true },
+    select: { status: true, tournamentId: true, tournament: { select: { status: true } } },
   });
   if (!match || match.tournamentId !== tournamentId || match.status !== "IN_PROGRESS") {
     return { ok: false, error: "Ce match n'est plus actif. Scannez à nouveau le QR code de la cible." };
+  }
+  // DO-FIELD-ACCESS-002 — un match individuel resté IN_PROGRESS ne suffit plus : le tournoi
+  // LUI-MÊME doit être IN_PROGRESS (jamais DRAFT/OPEN/FINISHED/PENDING_ENTITLEMENT). Un match
+  // techniquement encore IN_PROGRESS alors que le tournoi a basculé FINISHED (clôture manuelle,
+  // incident) ne doit jamais rester exploitable via une session terrain déjà émise.
+  if (match.tournament.status !== "IN_PROGRESS") {
+    return { ok: false, error: "Ce tournoi n'est plus en cours. Scannez à nouveau le QR code de la cible." };
   }
 
   return { ok: true, role: session.role };
@@ -183,4 +190,73 @@ export function canMarkWinnerDirect(access: ScoringAuthorization & { ok: true },
   if (access.actor === "ORGANIZER") return true;
   if (access.role === "REFEREE") return true;
   return gameType === "CRICKET";
+}
+
+/**
+ * DO-FIELD-ACCESS-002 — preuve arbitre temporaire (`FieldRefereeGrant`), jamais dérivable d'un
+ * paramètre d'URL public : seul un appelant qui a déjà passé `getOwnedTournament` (propriété du
+ * tournoi vérifiée côté serveur) peut en créer une — voir generateRefereeAccess()
+ * (lib/actions/fieldReferee.ts), le seul appelant prévu de cette fonction. Distincte de
+ * FieldSession dans son cycle de vie : à usage unique (voir redeemRefereeGrant), courte durée,
+ * jamais elle-même une session terrain — seulement un droit d'en obtenir une.
+ */
+const REFEREE_GRANT_DURATION_MS = 15 * 60 * 1000; // 15 min
+
+export async function createRefereeGrant(tournamentId: string, matchId: string): Promise<string> {
+  const rawToken = randomBytes(32).toString("base64url");
+  await prisma.fieldRefereeGrant.create({
+    data: {
+      tokenHash: hashToken(rawToken),
+      tournamentId,
+      matchId,
+      expiresAt: new Date(Date.now() + REFEREE_GRANT_DURATION_MS),
+    },
+  });
+  return rawToken;
+}
+
+export type RefereeGrantRedemption = { ok: true; matchId: string } | { ok: false; error: string };
+
+const INVALID_REFEREE_PROOF = (): RefereeGrantRedemption => ({
+  ok: false,
+  error: "Preuve arbitre invalide. Demandez à l'organisateur un nouveau QR arbitre.",
+});
+
+/**
+ * Échange une preuve arbitre brute contre l'autorisation d'émettre UNE session terrain
+ * REFEREE — jamais la session elle-même (voir le Route Handler /t/{id}/field/referee, seul
+ * appelant prévu, qui délègue ensuite l'émission proprement dite à issueFieldSession() avec
+ * role="REFEREE"). Consommation atomique à usage unique : le `UPDATE ... WHERE used_at IS NULL`
+ * garantit qu'une preuve rejouée (double scan, replay réseau) après une première consommation
+ * réussie échoue toujours, y compris sous concurrence réelle (deux requêtes simultanées sur la
+ * même ligne se sérialisent au niveau PostgreSQL, la seconde constate `used_at` déjà posé).
+ */
+export async function redeemRefereeGrant(rawProof: string | undefined, tournamentId: string): Promise<RefereeGrantRedemption> {
+  if (!rawProof) return INVALID_REFEREE_PROOF();
+
+  const grant = await prisma.fieldRefereeGrant.findUnique({ where: { tokenHash: hashToken(rawProof) } });
+  if (!grant) return INVALID_REFEREE_PROOF();
+  if (grant.tournamentId !== tournamentId) return INVALID_REFEREE_PROOF();
+  if (grant.usedAt !== null) return { ok: false, error: "Ce QR arbitre a déjà été utilisé. Demandez-en un nouveau à l'organisateur." };
+  if (grant.expiresAt.getTime() < Date.now()) {
+    return { ok: false, error: "Ce QR arbitre a expiré. Demandez-en un nouveau à l'organisateur." };
+  }
+
+  const match = await prisma.match.findUnique({
+    where: { id: grant.matchId },
+    select: { status: true, tournamentId: true, tournament: { select: { status: true } } },
+  });
+  if (!match || match.tournamentId !== tournamentId || match.status !== "IN_PROGRESS" || match.tournament.status !== "IN_PROGRESS") {
+    return { ok: false, error: "Ce match n'est plus actif. Demandez un nouveau QR arbitre à l'organisateur." };
+  }
+
+  const { count } = await prisma.fieldRefereeGrant.updateMany({
+    where: { id: grant.id, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+  if (count !== 1) {
+    return { ok: false, error: "Ce QR arbitre a déjà été utilisé. Demandez-en un nouveau à l'organisateur." };
+  }
+
+  return { ok: true, matchId: grant.matchId };
 }

@@ -2,6 +2,7 @@ import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 import { PrintButton } from "@/components/tournament/PrintButton";
 import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
+import { RefereeAccessButton } from "@/components/tournament/RefereeAccessButton";
 import { dbListPools, dbListRegistrations } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import NavPills from "@/components/ui/NavPills";
@@ -62,18 +63,6 @@ export default async function PoolsPage({ params }: Props) {
         Array.from({ length: tournament.nb_boards }, (_, i) => i + 1).map(async (board) => ({
           board,
           dataUrl: await generateQRCodeDataURL(`${baseUrl}/t/${id}/field?board=${board}`),
-        }))
-      )
-    : [];
-  // DO-FIELD-ACCESS-001 — second QR, réservé à l'organisateur (jamais affiché au joueur ni
-  // collé sur le fléchier) : ouvre un accès terrain REFEREE plutôt que PLAYER pour cette même
-  // cible. Un arbitre terrain reste néanmoins strictement scopé au match courant de cette cible
-  // (voir fieldAccess.ts::canMarkWinnerDirect) — jamais équivalent à une session organisateur.
-  const refereeQRCodes = showQRCodes
-    ? await Promise.all(
-        Array.from({ length: tournament.nb_boards }, (_, i) => i + 1).map(async (board) => ({
-          board,
-          dataUrl: await generateQRCodeDataURL(`${baseUrl}/t/${id}/field?board=${board}&role=referee`),
         }))
       )
     : [];
@@ -172,21 +161,14 @@ export default async function PoolsPage({ params }: Props) {
           <div>
             <h2 className="font-semibold text-brand-dark">Accès arbitre (réservé à l&apos;organisateur)</h2>
             <p className="text-sm text-brand-text-secondary mt-0.5">
-              À ne pas coller sur le fléchier ni diffuser aux joueurs — ce QR ouvre un accès terrain
-              étendu (désignation manuelle du vainqueur) sur la cible concernée, pour un arbitre
-              présent physiquement. Il ne donne jamais accès au tableau de bord organisateur.
+              À ne pas coller sur le fléchier ni diffuser aux joueurs. Générez un QR arbitre juste
+              avant de le remettre à la personne concernée : il n&apos;est valable que 15 minutes,
+              usage unique, et ne donne jamais accès au tableau de bord organisateur.
             </p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {refereeQRCodes.map(({ board, dataUrl }) => (
-              <div
-                key={board}
-                className="flex flex-col items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={dataUrl} alt={`QR Arbitre Cible ${board}`} width={140} height={140} />
-                <p className="font-semibold text-brand-dark">Cible {board}</p>
-              </div>
+            {Array.from({ length: tournament.nb_boards }, (_, i) => i + 1).map((board) => (
+              <RefereeAccessButton key={board} tournamentId={id} board={board} />
             ))}
           </div>
         </Card></section>

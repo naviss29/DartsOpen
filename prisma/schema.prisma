@@ -134,6 +134,7 @@ model Tournament {
   pools         Pool[]
   matches       Match[]
   fieldSessions FieldSession[]
+  fieldRefereeGrants FieldRefereeGrant[]
 
   @@unique([userId, idempotencyKey])
   @@index([userId])
@@ -250,6 +251,7 @@ model Match {
   winner     Registration? @relation("MatchWinner", fields: [winnerId], references: [id])
   sets       MatchSet[]
   fieldSessions FieldSession[]
+  fieldRefereeGrants FieldRefereeGrant[]
 
   @@index([tournamentId])
   @@index([tournamentId, bracketRound])
@@ -295,6 +297,31 @@ model FieldSession {
   @@index([matchId])
   @@index([expiresAt])
   @@map("field_sessions")
+}
+
+/// DO-FIELD-ACCESS-002 — preuve arbitre temporaire, distincte du QR PLAYER public : seul un
+/// organisateur authentifié et propriétaire du tournoi (getOwnedTournament) peut en créer une
+/// (lib/actions/fieldAccess.ts::createRefereeGrant). Jamais dérivable d'un paramètre d'URL
+/// librement modifiable — voir l'ancien défaut `?role=referee` corrigé par cette mission. À
+/// usage unique (`usedAt` posé de manière atomique à l'échange, voir redeemRefereeGrant) : une
+/// fois échangée contre une FieldSession REFEREE, la preuve elle-même ne peut plus jamais être
+/// rejouée, même si son `expiresAt` n'est pas encore atteint. Le token brut n'est jamais stocké
+/// (seul son hash SHA-256 l'est), même discipline que FieldSession.
+model FieldRefereeGrant {
+  id           String    @id @default(uuid())
+  tokenHash    String    @unique @map("token_hash")
+  tournamentId String    @map("tournament_id")
+  matchId      String    @map("match_id")
+  expiresAt    DateTime  @map("expires_at")
+  usedAt       DateTime? @map("used_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([expiresAt])
+  @@map("field_referee_grants")
 }
 
 model MatchSet {
