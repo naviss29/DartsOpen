@@ -55,12 +55,6 @@ export default function DashboardSidebar({ userEmail }: { userEmail: string }) {
         >
           <span aria-hidden="true">✉️</span> Contact
         </Link>
-        <Link
-          href="/dons"
-          className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-brand-text-secondary transition-colors hover:bg-slate-100"
-        >
-          <span aria-hidden="true">💛</span> Soutenir le projet
-        </Link>
         <LogoutButton />
         <p className="pt-3 text-center text-xs text-brand-text-secondary">
           DartsOpen · <span className="font-medium">by BApps Studio</span>

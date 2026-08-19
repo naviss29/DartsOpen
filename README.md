@@ -30,7 +30,7 @@ DartsOpen fait partie de l'écosystème [BApps Studio](https://github.com/naviss
 | Inscriptions par équipe (solo / doublette / triplette…) | ✅ |
 | Inscription en ligne + paiement (SterPlatform / Stripe Connect) | ✅ |
 | Mode inscriptions sur place uniquement | ✅ |
-| Frais plateforme 0,10 € / joueur (PayPal upfront + paiements en ligne via SterPlatform) | ✅ |
+| Frais plateforme 0,10 € / joueur (paiements en ligne via SterPlatform) | ✅ |
 | QR Code pré-tournoi par cible (à scotcher sur les machines avant l'événement) | ✅ |
 | Mode scoring électronique (clic sur le vainqueur — double validation) | ✅ |
 | Mode scoring traditionnel (saisie des scores par volée avec tableau de bord) | ✅ |
@@ -198,10 +198,12 @@ passent exclusivement par l'API interne de SterPlatform.
 ## Modèle économique
 
 - **0,10 € par joueur** retenu par DartsOpen (frais de service)
-- À la création : l'association règle `max_joueurs × 0,10 €` via PayPal
 - Inscriptions en ligne : le montant total et `platformFeeCents` sont transmis à l'API de
   paiement interne de SterPlatform, qui retient les frais via Stripe Connect
-- Inscriptions sur place (mode ONSITE) : frais couverts par le paiement PayPal initial
+- Inscriptions sur place (mode ONSITE) : aucun frais de plateforme prélevé automatiquement
+  (jamais transmis à Stripe)
+- Au-delà de la limite gratuite : abonnement DartsOpen ou crédit tournoi, gérés et consommés
+  exclusivement via SterPlatform (aucun palier de paiement intermédiaire dans DartsOpen)
 
 ---
 

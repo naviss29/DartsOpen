@@ -190,7 +190,10 @@ export async function createTournament(prevState: TournamentState, formData: For
     if (outcome === "CONFIRMED") {
       await dbConfirmTournamentEntitlement(tournament.id);
       revalidatePath("/tournaments");
-      redirect(`/tournaments/${tournament.id}/activate`);
+      // DO-PAYPAL-REMOVAL-001 — le tournoi rejoint directement sa page de gestion normale,
+      // plus jamais un palier PayPal intermédiaire (voir le second point de sortie plus bas
+      // pour le même changement sur le chemin gratuit/abonnement).
+      redirect(`/tournaments/${tournament.id}`);
     }
 
     if (outcome === "REJECTED") {
@@ -212,7 +215,9 @@ export async function createTournament(prevState: TournamentState, formData: For
   }
 
   revalidatePath("/tournaments");
-  redirect(`/tournaments/${tournament.id}/activate`);
+  // DO-PAYPAL-REMOVAL-001 — chemin gratuit ou déjà couvert par abonnement : plus de palier
+  // PayPal intermédiaire, direction directe vers la page de gestion normale du tournoi.
+  redirect(`/tournaments/${tournament.id}`);
 }
 
 /**

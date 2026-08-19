@@ -2,9 +2,17 @@
 
 > BAPPS-LEGAL-009 — ce document sépare explicitement ce qui existe aujourd'hui dans le code
 > (implémentation technique) de ce qui a été validé comme modèle économique définitif par le
-> Product Owner (rien, à ce jour). **Une constante, un montant ou un ancien document technique
-> ne constitue jamais une décision de business model** — voir la règle de gouvernance
-> formalisée dans `BApps-Studio/12-Legal/README.md`.
+> Product Owner. **Une constante, un montant ou un ancien document technique ne constitue
+> jamais une décision de business model** — voir la règle de gouvernance formalisée dans
+> `BApps-Studio/12-Legal/README.md`.
+>
+> **Mise à jour DO-PAYPAL-REMOVAL-001** — le volet PayPal décrit ci-dessous (`activate/page.tsx`,
+> `PaypalActivateButton.tsx`, `/dons`) a été **entièrement supprimé** du produit : DartsOpen ne
+> propose plus aucun prélèvement ni contribution via PayPal, nulle part. Le modèle économique
+> réel repose désormais exclusivement sur SterPlatform (accès gratuit selon limites, abonnements
+> DartsOpen, crédits tournoi). La description ci-dessous du parcours PayPal est conservée à
+> titre d'historique (elle explique pourquoi la question tarifaire ci-dessous restait ouverte) ;
+> elle ne décrit plus rien d'actif dans le produit.
 
 ## Ce qui existe réellement dans le code aujourd'hui
 
@@ -59,9 +67,10 @@ corrigée :
 ## Reste à faire — nécessite une décision Product Owner
 
 - Confirmer, modifier ou remplacer le montant de 0,10 € comme modèle économique officiel de
-  DartsOpen (fixe, pourcentage, abonnement, gratuité...).
-- Décider si l'activation par PayPal doit devenir un prélèvement réellement vérifié ou rester
-  une contribution volontaire non appliquée techniquement — état actuel : demandée, non
-  vérifiée.
-- Une fois décidé : mettre à jour `/cgu` (section « Frais de plateforme ») avec le tarif
+  DartsOpen (fixe, pourcentage, abonnement, gratuité...) — cette question reste ouverte,
+  indépendamment de la suppression de PayPal.
+- ~~Décider si l'activation par PayPal doit devenir un prélèvement réellement vérifié ou
+  rester une contribution volontaire~~ — **résolu par DO-PAYPAL-REMOVAL-001** : PayPal est
+  supprimé, la question ne se pose plus.
+- Une fois le tarif définitif décidé : mettre à jour `/cgu` (section « Frais de plateforme ») avec le tarif
   définitif, et lever la mention « non contractuel » qui y figure depuis BAPPS-LEGAL-009.

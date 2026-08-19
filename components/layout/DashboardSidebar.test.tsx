@@ -29,4 +29,10 @@ describe("DashboardSidebar", () => {
     render(<DashboardSidebar userEmail="organisateur@example.com" />);
     expect(screen.getByText("by BApps Studio")).toBeInTheDocument();
   });
+
+  it("DO-PAYPAL-REMOVAL-001 — n'affiche plus aucun lien vers /dons (legacy PayPal supprimé)", () => {
+    render(<DashboardSidebar userEmail="organisateur@example.com" />);
+    expect(screen.queryByRole("link", { name: /soutenir/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "/dons" })).not.toBeInTheDocument();
+  });
 });

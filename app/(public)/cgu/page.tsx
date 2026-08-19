@@ -39,8 +39,7 @@ export default function CguPage() {
       <p>
         À la date de cette page, DartsOpen prélève 0,10&nbsp;€ par joueur inscrit en ligne à un
         tournoi payant (prélevés automatiquement lors du paiement, le solde étant reversé à
-        l&apos;association organisatrice), et propose une contribution équivalente lors de la
-        création d&apos;un tournoi. Ce fonctionnement correspond à l&apos;implémentation
+        l&apos;association organisatrice). Ce fonctionnement correspond à l&apos;implémentation
         technique actuelle du service et ne constitue pas un tarif contractuel arrêté : le
         modèle économique définitif de DartsOpen n&apos;est pas encore décidé par l&apos;éditeur
         et pourra évoluer. Cette section sera mise à jour dès qu&apos;une décision définitive

@@ -157,7 +157,7 @@ describe("createTournament — DO-PAYMENT-GUARD-001", () => {
 
     expect(isOnlinePaymentAllowed).not.toHaveBeenCalled();
     expect(dbCreateTournament).toHaveBeenCalledTimes(1);
-    expect(redirect).toHaveBeenCalledWith("/tournaments/tournament-1/activate");
+    expect(redirect).toHaveBeenCalledWith("/tournaments/tournament-1");
   });
 
   it("2. organisation sans Stripe opérationnel : création avec paiement en ligne refusée", async () => {
@@ -343,6 +343,17 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     // DARTSOPEN-MONETIZATION-003 (P3) : créé PENDING_ENTITLEMENT, jamais directement DRAFT.
     expect(dbCreateTournament).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), "PENDING_ENTITLEMENT");
     expect(dbConfirmTournamentEntitlement).toHaveBeenCalledWith("tournament-1");
+  });
+
+  it("DO-PAYPAL-REMOVAL-001 — crédit confirmé : destination normale du tournoi, jamais l'ancien palier PayPal /activate", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-a" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
+    const fd = tournamentFormData({ max_players: "16" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(redirect).toHaveBeenCalledWith("/tournaments/tournament-1");
+    expect(redirect).not.toHaveBeenCalledWith(expect.stringContaining("/activate"));
   });
 
   it("DARTSOPEN-MONETIZATION-004 (P2, contre-audit) : la référence de consommation est l'id serveur du tournoi, jamais idempotency_key (valeur client) — même si celle-ci change, la référence suit l'id réel", async () => {

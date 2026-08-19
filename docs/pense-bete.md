@@ -6,8 +6,7 @@
 
 ## Modèle économique
 
-- **Frais plateforme (0,10 €/joueur) — actuellement sur bonne volonté** : pas de blocage au lancement. Si de grandes associations utilisent la plateforme sans payer, envisager un seuil : gratuit jusqu'à N joueurs (ex. 32), paiement obligatoire au-delà. À implémenter dans `createTournament` ou au démarrage du tournoi (`IN_PROGRESS`).
-- **Traçabilité PayPal** : les relevés mensuels PayPal (compte SEProduct) servent de justificatif comptable pour l'association. Webhooks PayPal à implémenter plus tard si le volume rend la vérification manuelle chronophage.
+- **Frais plateforme (0,10 €/joueur), inscriptions en ligne uniquement** : prélevé automatiquement via Stripe Connect (SterPlatform). Au-delà de la limite gratuite de joueurs, le modèle actuel (abonnement/crédit tournoi SterPlatform, voir DARTSOPEN-MONETIZATION) couvre déjà ce seuil — DO-PAYPAL-REMOVAL-001 a supprimé le palier PayPal manuel qui existait avant cette architecture.
 
 ## Dépendances SterPlatform (à implémenter après SterPlatform)
 
