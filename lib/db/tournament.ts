@@ -1621,6 +1621,16 @@ export async function getAdvancingPlayerIds(
  *   elle-même est annulée par le rollback (jamais un match FINISHED/cible libérée sans
  *   progression, jamais une progression partielle).
  */
+/**
+ * DO-BETA-001 — message distingué explicitement de toute autre erreur de doAdvanceToNextRoundTx :
+ * "le tour n'est pas encore complet" n'est PAS un échec, c'est l'issue normale et attendue
+ * chaque fois qu'un match se termine sur une cible pendant que d'autres cibles jouent encore le
+ * même tour (le cas le plus courant dans un tournoi multi-cibles réel). dbRecordThrow() (plus
+ * bas) doit pouvoir la distinguer d'une VRAIE erreur (tournoi introuvable, incohérence) — voir
+ * son propre commentaire.
+ */
+const ROUND_INCOMPLETE_ERROR = "Tous les matchs du tour en cours doivent être terminés.";
+
 export async function doAdvanceToNextRoundTx(
   tx: Prisma.TransactionClient,
   tournamentId: string,
@@ -1638,7 +1648,7 @@ export async function doAdvanceToNextRoundTx(
   if (!bracketMatches.length) return { error: "Aucun match trouvé pour ce tour." };
 
   const allFinished = bracketMatches.every((m) => m.status === "FINISHED");
-  if (!allFinished) return { error: "Tous les matchs du tour en cours doivent être terminés." };
+  if (!allFinished) return { error: ROUND_INCOMPLETE_ERROR };
 
   if (bracketMatches.length === 1) {
     // Miroir du mode rapide : la fin du bracket clôture automatiquement le tournoi, sans
@@ -2029,13 +2039,25 @@ export async function dbRecordThrow(
     // Étape 4 (DO-SCORING-002) — même frontière transactionnelle : si CE checkout vient de
     // finaliser le MATCH (pas seulement la manche), la progression sportive nécessaire tourne
     // ici, avec le même tx déjà verrouillé — jamais un second verrou, jamais un appel Prisma
-    // global séparé après le commit. Une erreur ici n'est jamais absorbée : elle remonte pour
-    // faire échouer (et annuler) toute la transaction, checkout compris.
+    // global séparé après le commit.
+    //
+    // DO-BETA-001 — la répétition générale multi-cibles a révélé qu'une VRAIE erreur (tournoi
+    // introuvable, incohérence) doit annuler tout le rollback comme prévu, MAIS que
+    // doAdvanceToNextRoundTx() renvoie aussi `error` pour un cas parfaitement normal : "les
+    // autres matchs de ce tour ne sont pas encore tous terminés" — la situation la plus banale
+    // qui soit dès qu'un tournoi a plus d'une cible (le premier match à finir pendant que ses
+    // co-équipiers de tour jouent encore). Avant ce correctif, CE cas annulait le checkout
+    // lui-même (transaction entière annulée) — un joueur qui fermait correctement sa manche sur
+    // la cible 1 pendant qu'un match tournait encore sur la cible 2 perdait sa volée. Seule une
+    // vraie erreur reste fatale ici ; "tour pas encore complet" laisse le match déjà finalisé
+    // (cible déjà libérée par markWinnerDirectTx ci-dessus) sans avancer le tour — exactement le
+    // même traitement que lib/actions/score.ts::confirmWinner/markWinnerDirect appliquent déjà
+    // au même retour d'erreur (`.catch(() => null)`), jamais un nouveau comportement inventé ici.
     if (matchFinished && finalizedMatch && finalizedMatch.bracketRound !== null) {
       const progression = finalizedMatch.quickMode
         ? await doAdvanceQuickTournamentTx(tx, tournamentId, finalizedMatch.id)
         : await doAdvanceToNextRoundTx(tx, tournamentId, finalizedMatch.bracketRound);
-      if (progression.error) {
+      if (progression.error && progression.error !== ROUND_INCOMPLETE_ERROR) {
         throw new Error(`Progression sportive impossible après ce checkout : ${progression.error}`);
       }
     }
