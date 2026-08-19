@@ -158,3 +158,60 @@ export function satisfiesFinishType(dart: CheckoutDart, finishType: FinishType):
 export function finishRuleLabel(finishType: FinishType): string {
   return FINISH_RULE_LABEL[finishType] ?? FINISH_RULE_LABEL.SINGLE;
 }
+
+/**
+ * DO-SCORING-003 — l'ensemble RÉEL des valeurs qu'une seule fléchette légale peut produire dans
+ * DartsOpen : simple 1..20, double 1..20, triple 1..20, bull simple (25), bull double (50) —
+ * jamais de triple bull. Généré depuis les segments/multiplicateurs légaux eux-mêmes (jamais une
+ * table codée à la main) pour que toute évolution future de la légalité des fléchettes reste
+ * automatiquement cohérente avec la faisabilité du préfixe ci-dessous.
+ */
+function computeLegalDartValues(): number[] {
+  const values = new Set<number>();
+  for (let segment = 1; segment <= 20; segment++) {
+    values.add(segment * 1);
+    values.add(segment * 2);
+    values.add(segment * 3);
+  }
+  values.add(BULL_SEGMENT * 1); // bull simple, 25
+  values.add(BULL_SEGMENT * 2); // bull double, 50 — pas de bull triple (BULL_SEGMENT * 3)
+  return [...values];
+}
+
+export const LEGAL_DART_VALUES: readonly number[] = computeLegalDartValues();
+
+/**
+ * Toutes les sommes atteignables avec exactement 0, 1 ou 2 fléchettes légales (une même valeur
+ * peut être comptée deux fois : deux fléchettes peuvent viser le même segment). Calculé une
+ * seule fois au chargement du module — ~60 valeurs légales, donc ~3600 combinaisons, trivial.
+ */
+function computeAchievablePrefixScores(): Set<number> {
+  const achievable = new Set<number>([0]);
+  for (const value of LEGAL_DART_VALUES) {
+    achievable.add(value);
+  }
+  for (const a of LEGAL_DART_VALUES) {
+    for (const b of LEGAL_DART_VALUES) {
+      achievable.add(a + b);
+    }
+  }
+  return achievable;
+}
+
+const ACHIEVABLE_PREFIX_SCORES = computeAchievablePrefixScores();
+
+/**
+ * DO-SCORING-003 — un "préfixe" (le score couvert par les fléchettes d'une volée AVANT sa
+ * fléchette de fermeture, jamais individuellement tracées côté DartsOpen) n'est réalisable que
+ * s'il correspond exactement à la somme de 0, 1 ou 2 fléchettes réellement légales. Jamais une
+ * simple borne `0 <= prefixScore <= 120` : certaines valeurs de cette plage ne sont atteignables
+ * par AUCUNE combinaison légale (ex. 178 — supérieur au maximum de 120 — ou certaines valeurs
+ * intermédiaires selon la même logique que les fermetures "impossibles" déjà connues du moteur).
+ * Défaut corrigé (Codex, post-DO-SCORING-002) : le serveur ne vérifiait jusqu'ici que
+ * `checkoutDartValue(dernière fléchette) <= scoreEntered`, acceptant par exemple une volée de
+ * 180 fermée par un simple D1 (2 points) — les 178 points restants n'étant réalisables par
+ * aucune paire de fléchettes légales (maximum T20+T20 = 120).
+ */
+export function isPrefixAchievable(prefixScore: number): boolean {
+  return ACHIEVABLE_PREFIX_SCORES.has(prefixScore);
+}

@@ -9,6 +9,7 @@ import {
   checkoutDartValue,
   satisfiesFinishType,
   finishRuleLabel,
+  isPrefixAchievable,
   type FinishType,
   type CheckoutDart,
 } from "../utils/x01";
@@ -1781,46 +1782,37 @@ type RecordThrowOutcome = {
 export type RecordThrowResult = { error: string } | RecordThrowOutcome;
 
 /**
- * DO-SCORING-002 (Étape 2) — rejeu d'une commande déjà appliquée (`clientRequestId` retrouvé).
- * Ne réapplique JAMAIS l'effet métier d'origine : si la volée a été annulée entre-temps, le
- * rejeu le signale (`cancelled: true`) sans jamais remettre de vainqueur ni redéclencher la
- * moindre conséquence sportive — l'ancien bug (Codex, post-DO-SCORING-001) laissait
- * `replayThrowOutcome` rappeler markWinnerDirectTx() sur une volée pourtant `cancelledAt != null`,
- * pouvant ressusciter un checkout annulé. Si la volée est toujours active, `markWinnerDirectTx`
- * reste appelé pour son propre no-op idempotent (tryFinalizeMatch refuse déjà de re-finaliser un
- * match déjà FINISHED) — mais jamais la progression DO-SPORT (doAdvanceToNextRoundTx/
- * doAdvanceQuickTournamentTx) : sous la nouvelle frontière transactionnelle (Étape 4), un
- * `existing` retrouvé ici signifie nécessairement que la transaction d'origine (volée +
- * progression) a déjà commité intégralement — jamais un besoin de la rejouer.
+ * DO-SCORING-003 — reconstruction STRICTEMENT en lecture d'un rejeu de commande déjà appliquée
+ * (`clientRequestId` retrouvé, paramètres identiques déjà vérifiés par l'appelant). N'écrit plus
+ * JAMAIS : ni `MatchSetThrow`, ni `MatchSet`, ni `Match`, ni tournoi ; aucun appel à
+ * `markWinnerDirectTx()`/`tryFinalizeMatch()` ; aucune progression DO-SPORT standard ou rapide ;
+ * aucune modification de cible ni de vie.
+ *
+ * Défaut corrigé (Codex, post-DO-SCORING-002) : l'ancienne version rappelait
+ * `markWinnerDirectTx()` pour toute volée de checkout encore non annulée — y compris quand cette
+ * volée n'était PLUS celle qui déterminait le vainqueur réel du set (arbitrage entre-temps en
+ * faveur d'un autre joueur). Un retry tardif du client A rejouait alors l'ANCIEN vainqueur A et
+ * écrasait silencieusement la correction. Un replay n'a plus aucune autorité pour réparer ou
+ * réappliquer quoi que ce soit : il reconstruit uniquement à partir des faits déjà tranchés au
+ * moment de l'écriture d'origine (`row`).
+ *
+ * `matchSetFinished`/`matchFinished` sont toujours renvoyés à `false` : aucun appelant ne les
+ * utilise pour autre chose que déclencher un effet (republier sur Mercure, lib/actions/score.ts)
+ * — un replay, par construction, n'en produit jamais un nouveau. `cancelled` reste le signal
+ * utile pour distinguer "commande historiquement appliquée" (false) de "volée depuis annulée"
+ * (true) ; l'état RÉEL actuel du match (potentiellement changé par arbitrage) reste consultable
+ * séparément (dbListMatchSetThrows/dbGetTournament), jamais recalculé ni réaffirmé ici.
  */
-async function replayThrowOutcome(
-  tx: Prisma.TransactionClient,
-  matchSetId: string,
-  row: { id: string; playerId: string; bust: boolean; remainingAfter: number; cancelledAt: Date | null },
-): Promise<RecordThrowOutcome> {
-  if (row.cancelledAt !== null) {
-    return {
-      bust: row.bust,
-      reason: null,
-      impossibleCheckout: false,
-      matchSetFinished: false,
-      matchFinished: false,
-      match: undefined,
-      throwId: row.id,
-      cancelled: true,
-    };
-  }
-  const wasCheckout = !row.bust && row.remainingAfter === 0;
-  const finalize = wasCheckout ? await markWinnerDirectTx(tx, matchSetId, row.playerId) : {};
+function replayThrowOutcome(row: { id: string; bust: boolean; cancelledAt: Date | null }): RecordThrowOutcome {
   return {
     bust: row.bust,
     reason: null,
     impossibleCheckout: false,
-    matchSetFinished: wasCheckout,
-    matchFinished: "matchFinished" in finalize ? (finalize.matchFinished ?? false) : false,
-    match: "match" in finalize ? finalize.match : undefined,
+    matchSetFinished: false,
+    matchFinished: false,
+    match: undefined,
     throwId: row.id,
-    cancelled: false,
+    cancelled: row.cancelledAt !== null,
   };
 }
 
@@ -1904,7 +1896,7 @@ export async function dbRecordThrow(
             "Cet identifiant de volée a déjà été utilisé pour une commande différente : aucune écriture effectuée.",
         };
       }
-      return replayThrowOutcome(tx, matchSetId, existing);
+      return replayThrowOutcome(existing);
     }
 
     if (set.round.gameType === "CRICKET") return { error: "Cette manche ne supporte pas la saisie de volées." };
@@ -1931,10 +1923,14 @@ export async function dbRecordThrow(
 
     // Étape 5 (DO-SCORING-002) — une volée qui atteint numériquement zéro n'est un checkout
     // VALIDE que si la fléchette de fermeture est fournie, structurellement légale, compatible
-    // avec la volée saisie, et respecte réellement la règle configurée (SINGLE : n'importe
-    // laquelle : DOUBLE : un double ; MASTER : un double ou un triple ; TRIPLE : un triple).
-    // Sinon : bust, exactement comme les autres violations de règle X01 déjà en place — jamais
-    // un gain accordé sur la seule foi du score restant.
+    // avec la volée saisie, respecte réellement la règle configurée (SINGLE : n'importe
+    // laquelle ; DOUBLE : un double ; MASTER : un double ou un triple ; TRIPLE : un triple), ET
+    // que le "préfixe" (le reste de la volée avant cette fléchette de fermeture) est lui-même
+    // réalisable avec au plus deux fléchettes légales (DO-SCORING-003 — ex. une volée de 180
+    // fermée par un simple D1 laisserait un préfixe de 178, strictement impossible : le maximum
+    // réalisable en deux fléchettes est T20+T20=120). Sinon : bust, exactement comme les autres
+    // violations de règle X01 déjà en place — jamais un gain accordé sur la seule foi du score
+    // restant.
     let finalBust = validation.bust;
     let finalRemainingAfter = validation.remainingAfter;
     let finalReason = validation.reason;
@@ -1955,6 +1951,10 @@ export async function dbRecordThrow(
           finalBust = true;
           finalRemainingAfter = remainingBefore;
           finalReason = `Bust ! La fermeture de cette manche exige ${finishRuleLabel(finishType)}.`;
+        } else if (!isPrefixAchievable(scoreEntered - checkoutDartValue(checkoutDart))) {
+          finalBust = true;
+          finalRemainingAfter = remainingBefore;
+          finalReason = "Bust ! Cette volée n'est pas réalisable avec au plus deux fléchettes avant la fermeture.";
         }
       }
     }
@@ -1985,7 +1985,7 @@ export async function dbRecordThrow(
         const winner = await tx.matchSetThrow.findUnique({
           where: { matchSetId_clientRequestId: { matchSetId, clientRequestId } },
         });
-        if (winner) return replayThrowOutcome(tx, matchSetId, winner);
+        if (winner) return replayThrowOutcome(winner);
       }
       throw err;
     }
