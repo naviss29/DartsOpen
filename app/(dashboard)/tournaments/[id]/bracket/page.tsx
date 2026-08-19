@@ -7,6 +7,7 @@ import { dbListMatches } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import Button from "@/components/ui/Button";
 import NavPills from "@/components/ui/NavPills";
+import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
 import { Card, EmptyState } from "@naviss29/design-system";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -112,6 +113,7 @@ export default async function BracketPage({ params }: Props) {
   }
 
   return (
+    <LandscapeGuard>
     <div className="space-y-6">
       <div className="space-y-3">
         <Link href={`/tournaments/${id}`} className="text-sm text-brand-text-secondary hover:text-brand-dark">
@@ -122,6 +124,7 @@ export default async function BracketPage({ params }: Props) {
             { href: `/tournaments/${id}/players`, label: "👥 Joueurs" },
             ...(tournament.quick_mode ? [] : [{ href: `/tournaments/${id}/pools`, label: "🏆 Poules & Matchs" }]),
             { href: `/tournaments/${id}/bracket`, label: tournament.quick_mode ? "⚡ Bracket rapide" : "🥇 Phases finales", current: true },
+            { href: `/tournaments/${id}/pilotage`, label: "🎛️ Pilotage" },
           ]}
         />
         {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
@@ -228,5 +231,6 @@ export default async function BracketPage({ params }: Props) {
         />
       )}
     </div>
+    </LandscapeGuard>
   );
 }

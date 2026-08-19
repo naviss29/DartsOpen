@@ -86,6 +86,7 @@ export default async function PoolsPage({ params }: Props) {
               disabled: !["IN_PROGRESS", "FINISHED"].includes(tournament.status),
               disabledReason: "Démarrez le tournoi pour accéder aux phases finales",
             },
+            { href: `/tournaments/${id}/pilotage`, label: "🎛️ Pilotage" },
           ]}
         />
         {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (

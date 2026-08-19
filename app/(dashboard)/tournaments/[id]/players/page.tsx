@@ -59,6 +59,7 @@ export default async function PlayersPage({ params }: Props) {
             { href: `/tournaments/${id}/players`, label: "👥 Joueurs", current: true },
             ...(!isQuick ? [{ href: `/tournaments/${id}/pools`, label: "🏆 Poules & Matchs" }] : []),
             { href: `/tournaments/${id}/bracket`, label: isQuick ? "⚡ Bracket rapide" : "🥇 Phases finales" },
+            { href: `/tournaments/${id}/pilotage`, label: "🎛️ Pilotage" },
           ]}
         />
       </div>

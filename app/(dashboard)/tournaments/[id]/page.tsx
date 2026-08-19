@@ -155,6 +155,7 @@ export default async function TournamentDetailPage({ params }: Props) {
               badge: poolCount > 0 ? poolCount : undefined,
             },
             { href: `/tournaments/${id}/bracket`, label: "🥇 Phases finales" },
+            { href: `/tournaments/${id}/pilotage`, label: "🎛️ Pilotage" },
           ]}
         />
 
