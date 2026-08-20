@@ -27,18 +27,6 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-/*
- * DO-BETA-UX-001 — sidebar sombre commune à l'écosystème (BAPPS-UX-UNIFICATION-001, voir
- * BApps-Studio/04-Architecture/UX-UI-Standards.md §3bis). Même valeur littérale que BSsite
- * (app/globals.css) et EventManager (styles.scss) : un contrat de valeurs à copier à
- * l'identique, pas un token du Design System (aucun composant Sidebar n'y existe).
- */
-:root {
-  --color-sidenav-surface: #2c4b55;
-  --color-sidenav-header: #13353e;
-  --color-sidenav-icon: #abccd8;
-}
-
 body {
   color: var(--color-brand-dark);
   background: var(--color-brand-light);

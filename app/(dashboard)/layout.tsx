@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/api/auth";
+import { AppHeader } from "@naviss29/design-system";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import DashboardMobileNav from "@/components/layout/DashboardMobileNav";
 import LogoutButton from "@/components/LogoutButton";
@@ -21,13 +22,22 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="flex min-h-screen bg-brand-light">
       <DashboardSidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        {/* DO-BETA-UX-001 — même langage que BSsite (UX-UI-Standards.md §3 "Header") :
-            identité utilisateur + déconnexion à droite d'un bandeau clair toujours visible
-            (desktop ET mobile), distinct de la sidebar sombre. */}
-        <header className="flex items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 py-4">
-          <span className="hidden truncate text-sm text-brand-text-secondary sm:block">{user.email}</span>
-          <LogoutButton />
-        </header>
+        {/* BAPPS-SHELL-001 — AppHeader (DS) : continuité visuelle avec la sidebar sombre,
+            jamais de bande blanche entre les deux (UX-UI-Standards.md §3ter). Toujours visible
+            (desktop ET mobile). L'email porte son propre min-w-0/truncate ; le bouton de
+            déconnexion reste shrink-0 — c'est l'email qui absorbe tout rétrécissement, jamais
+            le bouton qui sort du viewport. */}
+        <AppHeader
+          start={null}
+          end={
+            <>
+              <span className="hidden min-w-0 truncate text-sm text-white/80 sm:block">{user.email}</span>
+              <span className="shrink-0">
+                <LogoutButton className="text-white/90 hover:text-white" />
+              </span>
+            </>
+          }
+        />
         <DashboardMobileNav />
         <main className="flex-1 overflow-auto">
           <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>

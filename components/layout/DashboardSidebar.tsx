@@ -60,20 +60,22 @@ export const navIcons: Record<string, React.ReactNode> = {
  * blanc/gris translucide neutre). Repliée sous `md:` — voir DashboardMobileNav.tsx pour
  * l'équivalent mobile (menu hamburger, pas une barre qui fait disparaître logo/nav).
  *
- * Le logo DartsOpen (dégradé + texte marine `rgb(12,18,67)`) resterait illisible posé
- * directement sur le fond sombre du corps de nav — bandeau logo laissé sur fond clair,
- * volontairement, en l'absence d'une variante "light"/inversée de ce logo (voir le rapport de
- * mission, point 22 — variante à produire si l'écosystème veut aller plus loin).
+ * BAPPS-SHELL-001 — le logo DartsOpen (dégradé + texte marine `rgb(12,18,67)`) resterait
+ * illisible posé directement sur le fond sombre du shell : aucune variante "light"/inversée
+ * officielle n'existe pour ce produit (contrairement à `Logo`/`light` de BSsite) — plutôt que
+ * de recréer un fond blanc local (l'exact défaut que cette mission corrige) ou une variante SVG
+ * approximative, le shell affiche un wordmark texte (règle actée dans BApps-Studio/
+ * 04-Architecture/UX-UI-Standards.md §3ter). Le logo original reste utilisé tel quel partout où
+ * il est posé sur un fond compatible (ex. pages publiques).
  */
 export default function DashboardSidebar() {
   const pathname = usePathname();
 
   return (
     <aside className="hidden w-64 shrink-0 flex-col md:flex" style={{ backgroundColor: "var(--color-sidenav-surface)" }}>
-      <div className="border-b border-black/10 bg-white p-6">
-        <Link href="/dashboard">
-          {/* eslint-disable-next-line @next/next/no-img-element -- SVG local de confiance, next/image bloque le SVG par défaut */}
-          <img src="/brand/logo-horizontal.svg" alt="DartsOpen" width={166} height={70} className="h-9 w-auto" />
+      <div className="p-6" style={{ backgroundColor: "var(--color-sidenav-header)" }}>
+        <Link href="/dashboard" className="text-xl font-bold tracking-tight text-white">
+          DartsOpen
         </Link>
       </div>
 
