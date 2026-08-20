@@ -2,7 +2,7 @@ import { dbListTournaments, dbAnonymizeExpiredContacts } from "@/lib/db/tourname
 import { getUser } from "@/lib/api/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Card, EmptyState } from "@naviss29/design-system";
+import { Card, EmptyState, PageHeader } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
 
@@ -33,10 +33,7 @@ export default async function TournamentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-brand-dark">Mes tournois</h1>
-        <Button href="/tournaments/new">+ Nouveau tournoi</Button>
-      </div>
+      <PageHeader title="Mes tournois" actions={<Button href="/tournaments/new">+ Nouveau tournoi</Button>} />
 
       {!tournaments?.length ? (
         <EmptyState
@@ -48,7 +45,7 @@ export default async function TournamentsPage() {
         <div className="grid gap-4">
           {tournaments.map((t) => (
             <Link key={t.id} href={`/tournaments/${t.id}`} className="block">
-              <Card className="p-5 transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
+              <Card className="transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <h2 className="truncate font-semibold text-brand-dark">{t.name}</h2>

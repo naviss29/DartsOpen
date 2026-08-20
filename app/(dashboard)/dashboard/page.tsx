@@ -3,7 +3,7 @@ import { dbListTournaments, dbListAllTournaments } from "@/lib/db/tournament";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Card, EmptyState } from "@naviss29/design-system";
+import { Card, EmptyState, PageHeader, Pill } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
 
@@ -34,11 +34,14 @@ export default async function DashboardPage() {
     dbListAllTournaments(user.id).catch(() => []) as Promise<Tournament[]>,
   ]);
 
+  // DO-BETA-UX-001 — mêmes classes de couleur que Pill (DS) par souci d'un seul vocabulaire
+  // visuel de statut (UX-UI-Standards.md §3 "Badges/Status"), jamais une teinte inventée par
+  // écran (ancien "emerald-100"/"slate-50" propres à cette page).
   const stats = [
-    { label: "Total", value: myTournaments.length, color: "bg-slate-100 text-brand-dark" },
-    { label: "Ouvertes", value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-brand-turquoise/10 text-brand-turquoise" },
-    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-emerald-100 text-emerald-800" },
-    { label: "Terminés", value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-slate-50 text-brand-text-secondary" },
+    { label: "Total", value: myTournaments.length, color: "bg-surface-secondary text-text-strong" },
+    { label: "Ouvertes", value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-accent/10 text-accent" },
+    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-success-subtle-strong text-success" },
+    { label: "Terminés", value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-surface-secondary text-text-strong" },
   ];
 
   // Trier : OPEN en premier, puis IN_PROGRESS, puis FINISHED, puis DRAFT (les miens)
@@ -47,10 +50,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-brand-dark">Tableau de bord</h1>
-        <Button href="/tournaments/new">+ Nouveau tournoi</Button>
-      </div>
+      <PageHeader title="Tableau de bord" actions={<Button href="/tournaments/new">+ Nouveau tournoi</Button>} />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         {stats.map((stat) => (
@@ -107,9 +107,7 @@ function TournamentRow({ t }: { t: Tournament }) {
         <div className="flex items-center gap-2">
           <p className="truncate font-semibold text-brand-dark">{t.name}</p>
           {t.is_mine && (
-            <span className="shrink-0 rounded-full bg-brand-turquoise/10 px-2 py-0.5 text-xs font-medium text-brand-turquoise">
-              Mon tournoi
-            </span>
+            <Pill tone="brand" className="shrink-0">Mon tournoi</Pill>
           )}
         </div>
         <p className="mt-0.5 text-sm text-brand-text-secondary">

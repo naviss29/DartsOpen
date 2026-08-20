@@ -39,8 +39,8 @@ export default function NavPills({ items }: { items: Item[] }) {
             className={cn(
               "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
               item.current
-                ? "bg-brand-turquoise text-white"
-                : "border border-slate-200 bg-white text-brand-dark hover:border-brand-turquoise hover:text-brand-turquoise",
+                ? "bg-accent text-text-on-accent"
+                : "border border-border-muted bg-surface text-text-primary hover:border-accent hover:text-accent",
             )}
           >
             {item.label}

@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@naviss29/design-system";
+
 /**
  * "Se déconnecter" coupe la session partout (migration écosystème SSO, même comportement que
  * BilletAsso/BSsite AUTH-006) — pas seulement sur DartsOpen. Usage réel : ordinateur partagé
@@ -23,12 +25,8 @@ export default function LogoutButton() {
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleLogout}
-      className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-brand-text-secondary hover:bg-slate-100 transition-colors"
-    >
-      <span>🚪</span> Se déconnecter
-    </button>
+    <Button type="button" variant="text" onClick={handleLogout}>
+      Se déconnecter
+    </Button>
   );
 }

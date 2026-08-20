@@ -1,6 +1,7 @@
 import { dbGetRanking } from "@/lib/db/ranking";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { EmptyState } from "@naviss29/design-system";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,11 @@ export default async function ClassementPage() {
       </div>
 
       {ranking.length === 0 ? (
-        <div className="rounded-2xl bg-white border border-slate-200 p-12 text-center text-brand-text-secondary">
-          Aucun tournoi terminé pour le moment.
-        </div>
+        <EmptyState
+          icon={<span aria-hidden="true">🏆</span>}
+          title="Aucun classement pour l'instant"
+          description="Le classement se remplit après le premier tournoi terminé."
+        />
       ) : (
         <div className="space-y-2">
           {ranking.map((entry, i) => (

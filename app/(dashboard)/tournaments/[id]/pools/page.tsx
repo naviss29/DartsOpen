@@ -6,6 +6,7 @@ import { RefereeAccessButton } from "@/components/tournament/RefereeAccessButton
 import { dbListPools, dbListRegistrations } from "@/lib/db/tournament";
 import { getOwnedTournament } from "@/lib/actions/access";
 import NavPills from "@/components/ui/NavPills";
+import Button from "@/components/ui/Button";
 import { Card, EmptyState } from "@naviss29/design-system";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -177,18 +178,13 @@ export default async function PoolsPage({ params }: Props) {
 
       {tournament.nb_pools === 1 ? (
         ["IN_PROGRESS", "FINISHED"].includes(tournament.status) ? (
-          <div className="rounded-xl bg-brand-turquoise/10 border border-brand-turquoise/30 p-10 text-center space-y-3">
-            <p className="text-brand-turquoise font-semibold">Format élimination directe</p>
-            <p className="text-brand-turquoise text-sm">
+          <Card variant="info" className="space-y-3 py-10">
+            <p className="font-semibold text-accent">Format élimination directe</p>
+            <p className="text-sm text-accent">
               Tous les joueurs inscrits participent directement aux phases finales.
             </p>
-            <Link
-              href={`/tournaments/${id}/bracket`}
-              className="inline-block rounded-lg bg-brand-turquoise px-4 py-2 text-sm font-semibold text-white hover:bg-brand-turquoise/90 transition-colors"
-            >
-              Voir les phases finales →
-            </Link>
-          </div>
+            <Button href={`/tournaments/${id}/bracket`}>Voir les phases finales →</Button>
+          </Card>
         ) : (
           <EmptyState title="Format élimination directe" description="Démarrez le tournoi pour accéder aux phases finales." />
         )

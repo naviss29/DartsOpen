@@ -12,6 +12,7 @@ import type { Metadata } from "next";
 import { Alert, Card, Pill } from "@naviss29/design-system";
 import StatusBadge from "@/components/ui/StatusBadge";
 import NavPills from "@/components/ui/NavPills";
+import Button from "@/components/ui/Button";
 
 const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
 
@@ -160,14 +161,9 @@ export default async function TournamentDetailPage({ params }: Props) {
         />
 
         {tournament.status === "OPEN" && tournament.registration_mode === "ONLINE" && (
-          <Link
-            href={`/t/${id}/register`}
-            target="_blank"
-            className="flex items-center gap-2 rounded-lg border border-brand-turquoise bg-brand-turquoise/10 px-4 py-2.5 text-sm font-medium text-brand-turquoise transition-colors hover:bg-brand-turquoise/20"
-          >
-            📝 Page d&apos;inscription
-            <span className="text-xs opacity-70">↗</span>
-          </Link>
+          <Button href={`/t/${id}/register`} target="_blank" variant="secondary">
+            📝 Page d&apos;inscription <span className="text-xs opacity-70">↗</span>
+          </Button>
         )}
         {tournament.status === "OPEN" && tournament.registration_mode === "ONSITE" && (
           <p className="text-sm text-brand-text-secondary italic">
@@ -180,22 +176,12 @@ export default async function TournamentDetailPage({ params }: Props) {
 
         {["IN_PROGRESS", "FINISHED"].includes(tournament.status) && (
           <>
-            <Link
-              href={`/t/${id}/live`}
-              target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-brand-turquoise bg-brand-turquoise/10 px-4 py-2.5 text-sm font-medium text-brand-turquoise transition-colors hover:bg-brand-turquoise/20"
-            >
-              🎯 Vue Live
-              <span className="text-xs opacity-70">↗</span>
-            </Link>
-            <Link
-              href={`/t/${id}/tv`}
-              target="_blank"
-              className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-sm font-medium text-brand-dark transition-colors hover:bg-slate-100"
-            >
-              📺 Mode TV
-              <span className="text-xs opacity-70">↗</span>
-            </Link>
+            <Button href={`/t/${id}/live`} target="_blank" variant="secondary">
+              🎯 Vue Live <span className="text-xs opacity-70">↗</span>
+            </Button>
+            <Button href={`/t/${id}/tv`} target="_blank" variant="secondary">
+              📺 Mode TV <span className="text-xs opacity-70">↗</span>
+            </Button>
           </>
         )}
       </div>

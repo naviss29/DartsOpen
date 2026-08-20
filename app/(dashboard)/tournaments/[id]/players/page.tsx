@@ -93,7 +93,52 @@ export default async function PlayersPage({ params }: Props) {
           title={`Aucun${isTeam ? "e équipe" : " joueur"} inscrit${isTeam ? "e" : ""} pour l'instant`}
         />
       ) : (
-        <Card className="overflow-x-auto p-0">
+        <>
+          {/* DO-BETA-UX-001 — un tableau réel ne se lit plus sur téléphone (jamais un scroll
+              horizontal forcé comme seule réponse, voir BApps-Studio/04-Architecture/
+              UX-UI-Standards.md §3 "Tableaux") : reflow en cartes-lignes empilées sous md:. */}
+          <div className="space-y-3 md:hidden">
+            {registrations.map((reg, i) => (
+              <Card key={reg.id} className="space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs text-text-secondary">#{i + 1}</p>
+                    <p className="truncate font-medium text-brand-dark">{reg.player_name}</p>
+                    {isTeam && (
+                      <p className="mt-0.5 truncate text-sm text-text-secondary">
+                        {reg.player_names?.join(", ") ?? "—"}
+                      </p>
+                    )}
+                  </div>
+                  {canEdit && <RemovePlayerButton registrationId={reg.id} tournamentId={id} />}
+                </div>
+
+                {!isQuick && (
+                  <div className="space-y-0.5 text-sm text-text-secondary">
+                    <p className="truncate">{reg.player_email}</p>
+                    <p>{reg.player_phone ?? "—"}</p>
+                  </div>
+                )}
+
+                {canSeed && <SeedToggleButton registrationId={reg.id} tournamentId={id} seeded={reg.seeded} />}
+
+                <div className="flex flex-wrap gap-2 border-t border-border-muted pt-3">
+                  <EditPlayerButton
+                    registrationId={reg.id}
+                    tournamentId={id}
+                    playerName={reg.player_name}
+                    playerEmail={reg.player_email}
+                    playerPhone={reg.player_phone}
+                    playerNames={reg.player_names}
+                    isTeam={isTeam}
+                  />
+                  <EraseRegistrationButton registrationId={reg.id} tournamentId={id} />
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <Card className="hidden overflow-x-auto p-0 md:block">
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100 bg-slate-50">
               <tr>
@@ -151,7 +196,8 @@ export default async function PlayersPage({ params }: Props) {
               ))}
             </tbody>
           </table>
-        </Card>
+          </Card>
+        </>
       )}
     </div>
   );
