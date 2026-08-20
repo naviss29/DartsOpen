@@ -33,6 +33,12 @@ describe("DashboardSidebar", () => {
     expect(screen.getByRole("link", { name: /Contact/ })).toHaveAttribute("href", "/contact");
   });
 
+  it("BAPPS-SHELL-002 — la sidebar utilise le même token que le header (AppHeader, DS) : --color-sidenav-surface, jamais une couleur hardcodée localement", () => {
+    render(<DashboardSidebar />);
+    const sidebar = screen.getByRole("link", { name: /Tableau de bord/ }).closest("aside");
+    expect(sidebar).toHaveStyle({ backgroundColor: "var(--color-sidenav-surface)" });
+  });
+
   it("DO-PAYPAL-REMOVAL-001 — n'affiche plus aucun lien vers /dons (legacy PayPal supprimé)", () => {
     render(<DashboardSidebar />);
     expect(screen.queryByRole("link", { name: /soutenir/i })).not.toBeInTheDocument();
