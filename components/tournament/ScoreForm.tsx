@@ -4,6 +4,8 @@ import { useTransition, useState, useRef } from "react";
 import { proposeWinner, confirmWinner, disputeResult, markWinnerDirect, recordThrow, cancelLastThrow } from "@/lib/actions/score";
 import { computeRemaining, computeActivePlayer, x01StartScore, type X01ThrowLike, type CheckoutDart } from "@/lib/utils/x01";
 import type { ScoringAuthorization } from "@/lib/actions/fieldAccess";
+import { CallOrganizerButton } from "@/components/tournament/CallOrganizerButton";
+import { ForfeitControl } from "@/components/tournament/ForfeitControl";
 
 const DART_SEGMENTS = Array.from({ length: 20 }, (_, i) => i + 1);
 const BULL = 25;
@@ -77,20 +79,42 @@ export function ScoreForm({ match, rounds, scoringMode, tournamentId, currentSet
     );
   }
 
-  if (scoringMode === "TRADITIONAL") {
-    return (
-      <TraditionalScoreForm
-        match={match}
-        sets={sets}
-        rounds={rounds}
-        tournamentId={tournamentId}
-        currentSetThrows={currentSetThrows}
-        access={access}
-      />
-    );
-  }
+  // DO-FIELD-INCIDENT-001 (Étape 3, 4, 11) — mécanisme unique de signalement/forfait, affiché
+  // une seule fois ici (plutôt que dupliqué dans chaque mode de saisie) : "Appeler l'organisation"
+  // pour les trois profils, forfait réservé à l'arbitre/organisateur (jamais un joueur — voir la
+  // garde côté serveur dans declareForfeit, lib/actions/fieldIncident.ts).
+  const canDeclareForfeit = access.actor === "ORGANIZER" || access.role === "REFEREE";
 
-  return <ElectronicScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />;
+  return (
+    <div className="space-y-4">
+      {scoringMode === "TRADITIONAL" ? (
+        <TraditionalScoreForm
+          match={match}
+          sets={sets}
+          rounds={rounds}
+          tournamentId={tournamentId}
+          currentSetThrows={currentSetThrows}
+          access={access}
+        />
+      ) : (
+        <ElectronicScoreForm match={match} sets={sets} rounds={rounds} tournamentId={tournamentId} />
+      )}
+
+      <div className="space-y-2">
+        <CallOrganizerButton tournamentId={tournamentId} matchId={match.id} />
+        {canDeclareForfeit && (
+          <ForfeitControl
+            tournamentId={tournamentId}
+            matchId={match.id}
+            player1Id={match.player1.id}
+            player1Name={match.player1.player_name}
+            player2Id={match.player2.id}
+            player2Name={match.player2.player_name}
+          />
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ─────────────────────────────────────────────

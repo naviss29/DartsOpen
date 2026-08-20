@@ -1397,6 +1397,79 @@ export async function dbConfirmWinner(
   });
 }
 
+/**
+ * DO-FIELD-INCIDENT-001 — déclare le forfait d'UN joueur du match, au profit de son adversaire.
+ * Réutilise le même cœur de finalisation que markWinnerDirectTx/dbArbitrateMatch
+ * (tryFinalizeMatch, ci-dessous) pour la libération de cible et le signal de progression DO-
+ * SPORT — jamais un second moteur. Jamais de score X01 fictif : les manches encore indécises
+ * sont directement désignées à l'adversaire (mêmes lignes MatchSetThrow qu'avant, aucune —
+ * voir markWinnerDirectTx pour ce même principe déjà établi en Cricket), et `forfeitedPlayerId`
+ * trace explicitement la nature du résultat pour que l'historique ne le confonde jamais avec
+ * une victoire sportive normale.
+ *
+ * Idempotente : un rejeu du MÊME forfait sur un match déjà décidé par CE forfait renvoie un
+ * succès sans nouvelle progression (jamais une seconde libération de cible/perte de vie).
+ *
+ * Mode rapide explicitement refusé ici — DO-FIELD-INCIDENT-001 (mission, Étape 7) : le code
+ * actuel ne permet pas de déduire sans ambiguïté si un forfait doit coûter une vie, toutes les
+ * vies, ou éliminer immédiatement le joueur en double élimination. Décision Product Owner
+ * requise avant toute implémentation automatique pour ce mode — voir le rapport de mission.
+ */
+export async function dbDeclareForfeit(
+  tournamentId: string,
+  matchId: string,
+  absentPlayerId: string,
+): Promise<{ error?: string; matchFinished?: boolean; match?: { id: string; tournamentId: string; bracketRound: number | null; quickMode: boolean } }> {
+  return withTournamentLock(tournamentId, async (tx) => {
+    const match = await tx.match.findFirst({
+      where: { id: matchId, tournamentId },
+      include: { sets: true, tournament: { select: { id: true, quickMode: true } } },
+    });
+    if (!match) return { error: "Match introuvable." };
+    if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
+    if (absentPlayerId !== match.player1Id && absentPlayerId !== match.player2Id) {
+      return { error: "Ce joueur ne participe pas à ce match." };
+    }
+
+    if (match.tournament.quickMode) {
+      return {
+        error:
+          "Le forfait n'est pas encore disponible en mode rapide : son impact (perte de vie, élimination immédiate...) doit être décidé par l'organisation du produit. Utilisez l'arbitrage existant en attendant.",
+      };
+    }
+
+    if (match.status === "FINISHED") {
+      // Idempotence : rejeu du MÊME forfait déjà appliqué → succès sans nouvelle conséquence.
+      if (match.forfeitedPlayerId === absentPlayerId) {
+        return { matchFinished: false };
+      }
+      return { error: "Ce match est déjà terminé — utilisez l'arbitrage organisateur pour le corriger." };
+    }
+
+    const opponentId = absentPlayerId === match.player1Id ? match.player2Id : match.player1Id;
+
+    const undecidedSetIds = match.sets.filter((s) => s.winnerId === null).map((s) => s.id);
+    for (const setId of undecidedSetIds) {
+      await tx.matchSet.update({
+        where: { id: setId },
+        data: { winnerId: opponentId, validatedP1: true, validatedP2: true },
+      });
+    }
+    const updatedSets = match.sets.map((s) =>
+      undecidedSetIds.includes(s.id) ? { ...s, winnerId: opponentId, validatedP1: true, validatedP2: true } : s
+    );
+
+    const outcome = await tryFinalizeMatch(tx, { ...match, sets: updatedSets });
+
+    // Trace explicite du forfait — même transaction que la finalisation ci-dessus, jamais une
+    // seconde écriture non liée : une victoire par forfait ne doit jamais ressembler à une
+    // victoire sportive normale dans l'historique (bracket, live, classement).
+    await tx.match.update({ where: { id: matchId }, data: { forfeitedPlayerId: absentPlayerId } });
+
+    return outcome;
+  });
+}
+
 export async function dbDisputeResult(matchSetId: string): Promise<{ error?: string }> {
   const set = await prisma.matchSet.findUnique({ where: { id: matchSetId } });
   if (!set) return { error: "Set introuvable." };

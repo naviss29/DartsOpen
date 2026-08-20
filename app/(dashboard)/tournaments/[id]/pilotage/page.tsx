@@ -21,6 +21,7 @@ import { TournamentStatusButton } from "@/components/tournament/TournamentStatus
 import { RefereeAccessButton } from "@/components/tournament/RefereeAccessButton";
 import { ReassignBoardsButton } from "@/components/ops/ReassignBoardsButton";
 import { ConsoleAutoRefresh } from "@/components/ops/ConsoleAutoRefresh";
+import { FieldIncidentCard } from "@/components/ops/FieldIncidentCard";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -74,7 +75,8 @@ export default async function TournamentPilotagePage({ params }: Props) {
   // loadTournamentConsoleData() journalise puis laisse l'erreur se propager jusqu'à error.tsx
   // (déjà en place) — un état d'erreur explicite, jamais une synthèse calculée sur un faux "zéro
   // élément" qui mentirait à l'organisateur sur l'état réel du tournoi.
-  const { registrations, pools, matches } = await loadTournamentConsoleData(id);
+  const { registrations, pools, matches, fieldIncidents } = await loadTournamentConsoleData(id);
+  const openFieldIncidents = fieldIncidents.filter((fi) => fi.status === "OPEN");
 
   const summary = buildConsoleSummary(tournament, registrations, matches);
   const checklist = buildReadinessChecklist(tournament, registrations, pools);
@@ -174,6 +176,18 @@ export default async function TournamentPilotagePage({ params }: Props) {
           </div>
         )}
       </Card>
+
+      {/* ── Interventions demandées (DO-FIELD-INCIDENT-001) ──────────────── */}
+      {openFieldIncidents.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-semibold text-brand-dark">Interventions demandées ({openFieldIncidents.length})</h2>
+          <div className="space-y-2">
+            {openFieldIncidents.map((fi) => (
+              <FieldIncidentCard key={fi.id} tournamentId={id} incident={fi} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── Incidents (§8) ───────────────────────────────────────────────── */}
       {incidents.length > 0 && (

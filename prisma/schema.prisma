@@ -135,6 +135,7 @@ model Tournament {
   matches       Match[]
   fieldSessions FieldSession[]
   fieldRefereeGrants FieldRefereeGrant[]
+  fieldIncidents FieldIncident[]
 
   @@unique([userId, idempotencyKey])
   @@index([userId])
@@ -186,6 +187,7 @@ model Registration {
   matchesAsP1 Match[]      @relation("MatchPlayer1")
   matchesAsP2 Match[]      @relation("MatchPlayer2")
   matchesWon  Match[]      @relation("MatchWinner")
+  matchesForfeited Match[] @relation("MatchForfeitedPlayer")
   setsWon     MatchSet[]
   x01Throws   MatchSetThrow[]
 
@@ -242,6 +244,13 @@ model Match {
    * lib/actions/bracket.ts::doAdvanceToNextRound).
    */
   quickAdvanceProcessedAt DateTime? @map("quick_advance_processed_at")
+  /**
+   * DO-FIELD-INCIDENT-001 — jamais un score X01 fictif pour représenter un forfait (voir
+   * dbDeclareForfeit(), lib/db/tournament.ts) : ce champ trace explicitement QUI a été déclaré
+   * forfait, pour que l'historique (bracket, live, classement) ne présente jamais cette victoire
+   * comme un résultat sportif normal. Null pour tout match décidé normalement.
+   */
+  forfeitedPlayerId String? @map("forfeited_player_id")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
   tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
@@ -249,9 +258,11 @@ model Match {
   player1    Registration  @relation("MatchPlayer1", fields: [player1Id], references: [id])
   player2    Registration? @relation("MatchPlayer2", fields: [player2Id], references: [id])
   winner     Registration? @relation("MatchWinner", fields: [winnerId], references: [id])
+  forfeitedPlayer Registration? @relation("MatchForfeitedPlayer", fields: [forfeitedPlayerId], references: [id])
   sets       MatchSet[]
   fieldSessions FieldSession[]
   fieldRefereeGrants FieldRefereeGrant[]
+  fieldIncidents FieldIncident[]
 
   @@index([tournamentId])
   @@index([tournamentId, bracketRound])
@@ -322,6 +333,52 @@ model FieldRefereeGrant {
   @@index([matchId])
   @@index([expiresAt])
   @@map("field_referee_grants")
+}
+
+enum FieldIncidentType {
+  PLAYER_ABSENT
+  RESULT_DISPUTED
+  OTHER
+}
+
+enum FieldIncidentStatus {
+  OPEN
+  RESOLVED
+}
+
+enum FieldIncidentReporterRole {
+  PLAYER
+  REFEREE
+  ORGANIZER
+}
+
+/// DO-FIELD-INCIDENT-001 — signalement léger d'un problème terrain (joueur absent, résultat
+/// contesté, autre), créé via l'accès déjà authentifié de l'appelant (authorizeScoring, DO-
+/// FIELD-ACCESS) — jamais un compte dédié, jamais le token terrain lui-même stocké ici (voir
+/// FieldSession/FieldRefereeGrant pour cette discipline déjà établie). Cette table ne fait que
+/// TRACER l'incident et son origine : la résolution sportive (forfait, arbitrage) est toujours
+/// déléguée aux primitives DO-SPORT existantes (dbDeclareForfeit, dbArbitrateMatch), jamais
+/// recalculée ici. Un index unique partiel (migration SQL manuscrite, même discipline que les
+/// deux contraintes partielles de Match) empêche qu'un double-clic/retry crée deux incidents
+/// OPEN identiques (même match, même type).
+model FieldIncident {
+  id           String                     @id @default(uuid())
+  tournamentId String                     @map("tournament_id")
+  matchId      String                     @map("match_id")
+  type         FieldIncidentType
+  status       FieldIncidentStatus        @default(OPEN)
+  reportedBy   FieldIncidentReporterRole  @map("reported_by")
+  /** Court, facultatif — jamais une messagerie : voir reportFieldIncident() pour la limite de longueur appliquée côté serveur. */
+  comment      String?
+  createdAt    DateTime                   @default(now()) @map("created_at")
+  resolvedAt   DateTime?                  @map("resolved_at")
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  match      Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([tournamentId, status])
+  @@index([matchId])
+  @@map("field_incidents")
 }
 
 model MatchSet {

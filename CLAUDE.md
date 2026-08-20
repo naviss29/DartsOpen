@@ -114,6 +114,54 @@ retirés.
 - Transitions de statut validées côté serveur par `lib/utils/tournamentStatus.ts` (`DRAFT → OPEN → IN_PROGRESS → FINISHED`, séquentiel, `FINISHED` terminal), appliqué dans `dbUpdateTournamentStatus`
 - Clôture automatique en fin de tournoi (mode standard et mode rapide) : voir « Garde-fous »
 
+## Incidents terrain (mission DO-FIELD-INCIDENT-001)
+
+Mécanisme unique — jamais un système de tickets générique — pour gérer deux situations
+terrain : joueur absent (forfait) et résultat contesté. Repose entièrement sur le modèle
+d'autorisation déjà établi par DO-FIELD-ACCESS (`authorizeScoring`, `lib/actions/
+fieldAccess.ts`) : organisateur OU session terrain PLAYER/REFEREE liée strictement au match.
+Un arbitre (session REFEREE, `FieldRefereeGrant`) n'a autorité que sur le match précis pour
+lequel sa session a été émise — jamais sur un autre match, jamais un droit organisateur.
+
+- **Modèle** (`FieldIncident`, `prisma/schema.prisma`) — `type` (`PLAYER_ABSENT` /
+  `RESULT_DISPUTED` / `OTHER`), `status` (`OPEN` / `RESOLVED`), `reportedBy` (`PLAYER` /
+  `REFEREE` / `ORGANIZER`), commentaire court facultatif. Ne stocke jamais le token terrain.
+  Un index unique partiel manuscrit (`field_incidents_open_dedup`, migration SQL) garantit au
+  plus un incident `OPEN` par `(match, type)` — un double-clic/retry ne crée jamais de doublon,
+  y compris sous concurrence réelle. `Match.forfeitedPlayerId` trace explicitement une victoire
+  par forfait, pour que l'historique ne la confonde jamais avec un résultat sportif normal.
+- **`reportFieldIncident`** (`lib/actions/fieldIncident.ts`) — "Appeler l'organisation",
+  accessible aux trois profils, ne modifie jamais un résultat sportif : crée uniquement un
+  incident `OPEN`.
+- **`declareForfeit`** — réservé à l'organisateur et à l'arbitre du match (jamais un joueur).
+  Délègue à `dbDeclareForfeit` (`lib/db/tournament.ts`), qui décide les manches encore
+  indécises en faveur de l'adversaire puis réutilise `tryFinalizeMatch` (même primitive que
+  `markWinnerDirect`/`dbArbitrateMatch`) pour la libération de cible et la progression —
+  jamais un second moteur. Idempotent (rejeu du même forfait sur un match déjà décidé par lui
+  → succès sans nouvelle progression). **Mode rapide explicitement refusé** : l'impact d'un
+  forfait sur les vies/l'élimination y est ambigu (perte d'une vie ? toutes ? élimination
+  immédiate ?) — décision Product Owner encore nécessaire avant toute implémentation.
+- **Résolution d'un résultat contesté** — aucune action dédiée : l'arbitre réutilise
+  `markWinnerDirect` (déjà accessible en session REFEREE), l'organisateur réutilise
+  l'arbitrage existant (`arbitrateMatch`/`ArbitrateMatchModal`, inchangés). `verifyFieldToken`
+  refuse déjà toute session dont le match n'est plus `IN_PROGRESS` : un résultat déjà propagé
+  est donc automatiquement protégé contre une session REFEREE, sans code supplémentaire.
+- **Auto-résolution paresseuse** (`dbListFieldIncidents`, `lib/db/fieldIncident.ts`) — un
+  incident sportif (`PLAYER_ABSENT`/`RESULT_DISPUTED`) encore `OPEN` dont le match a désormais
+  un vainqueur réel est marqué `RESOLVED` à la lecture, quel que soit le mécanisme qui a
+  tranché (forfait, arbitrage organisateur, désignation directe) — jamais recalculée par
+  chaque chemin de résolution séparément. Un incident `OTHER` ne s'auto-résout jamais : seule
+  `resolveOtherIncident` (organisateur/arbitre) le fait, sans mutation sportive.
+- **Pilotage** (`app/(dashboard)/tournaments/[id]/pilotage/page.tsx`) — section "Interventions
+  demandées" listant les incidents `OPEN` (`FieldIncidentCard`, `components/ops/`), avec
+  action dédiée par type : forfait (`ForfeitControl`, partagé avec le terrain), lien vers
+  l'arbitrage existant, ou résolution manuelle. Alimentée par `loadTournamentConsoleData` →
+  `dbListFieldIncidents`, rafraîchie par le même mécanisme Mercure/polling que le reste de la
+  console (`ConsoleAutoRefresh`) — aucune infrastructure temps réel nouvelle.
+- **Terrain** (`components/tournament/ScoreForm.tsx`) — `CallOrganizerButton` (tous profils) et
+  `ForfeitControl` (organisateur/arbitre uniquement) rendus une seule fois au niveau du
+  wrapper, communs aux modes de saisie traditionnel et électronique.
+
 ## Garde-fous contre les états cassés et les pertes de données
 
 - **Clôture automatique** : en mode standard, `doAdvanceToNextRound` (`lib/actions/bracket.ts`) passe le tournoi en `FINISHED` dès que le dernier match du bracket est joué (`bracketMatches.length === 1`), sans action manuelle de l'organisateur — miroir exact du comportement déjà en place en mode rapide (`doAdvanceQuickTournament`). Le classement (`lib/db/ranking.ts`, filtré sur `status: "FINISHED"`) est donc alimenté automatiquement. La transition manuelle *"Clôturer le tournoi"* (`TournamentStatusButton`) reste disponible en secours et exige désormais une confirmation explicite (case à cocher) car elle coupe immédiatement la saisie des scores en cours.

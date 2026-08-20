@@ -1,4 +1,5 @@
 import { dbListRegistrations, dbListPools, dbListMatches } from "@/lib/db/tournament";
+import { dbListFieldIncidents } from "@/lib/db/fieldIncident";
 
 /**
  * DO-OPS-002 — défaut 2 : DO-OPS-001 rattrapait chaque échec de lecture par un `.catch(() => [])`
@@ -12,12 +13,13 @@ import { dbListRegistrations, dbListPools, dbListMatches } from "@/lib/db/tourna
  */
 export async function loadTournamentConsoleData(tournamentId: string) {
   try {
-    const [registrations, pools, matches] = await Promise.all([
+    const [registrations, pools, matches, fieldIncidents] = await Promise.all([
       dbListRegistrations(tournamentId),
       dbListPools(tournamentId),
       dbListMatches(tournamentId),
+      dbListFieldIncidents(tournamentId),
     ]);
-    return { registrations, pools, matches };
+    return { registrations, pools, matches, fieldIncidents };
   } catch (err) {
     console.error("[loadTournamentConsoleData]", err);
     throw err;
