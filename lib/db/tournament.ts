@@ -1398,8 +1398,8 @@ export async function dbConfirmWinner(
 }
 
 /**
- * DO-FIELD-INCIDENT-001 — déclare le forfait d'UN joueur du match, au profit de son adversaire.
- * Réutilise le même cœur de finalisation que markWinnerDirectTx/dbArbitrateMatch
+ * DO-FIELD-INCIDENT-001/002 — déclare le forfait d'UN joueur du match, au profit de son
+ * adversaire. Réutilise le même cœur de finalisation que markWinnerDirectTx/dbArbitrateMatch
  * (tryFinalizeMatch, ci-dessous) pour la libération de cible et le signal de progression DO-
  * SPORT — jamais un second moteur. Jamais de score X01 fictif : les manches encore indécises
  * sont directement désignées à l'adversaire (mêmes lignes MatchSetThrow qu'avant, aucune —
@@ -1410,10 +1410,14 @@ export async function dbConfirmWinner(
  * Idempotente : un rejeu du MÊME forfait sur un match déjà décidé par CE forfait renvoie un
  * succès sans nouvelle progression (jamais une seconde libération de cible/perte de vie).
  *
- * Mode rapide explicitement refusé ici — DO-FIELD-INCIDENT-001 (mission, Étape 7) : le code
- * actuel ne permet pas de déduire sans ambiguïté si un forfait doit coûter une vie, toutes les
- * vies, ou éliminer immédiatement le joueur en double élimination. Décision Product Owner
- * requise avant toute implémentation automatique pour ce mode — voir le rapport de mission.
+ * DO-FIELD-INCIDENT-002 — décision Product Owner : « un forfait équivaut à une défaite
+ * normale ». Cette fonction ne fait donc RIEN de spécifique au mode rapide — elle finalise le
+ * match exactement comme en mode standard (même code, jamais une branche séparée). C'est
+ * l'appelant (declareForfeit, lib/actions/fieldIncident.ts), exactement comme pour
+ * markWinnerDirect/arbitrateMatch, qui déclenche ENSUITE doAdvanceQuickTournament() si
+ * `match.quickMode` — seul point qui décrémente une vie (dbDecrementLives) et fait progresser
+ * le bracket rapide (nouveaux matchs WB/LB, Grande Finale, clôture). Un seul chemin de vérité
+ * pour la perte de vie : cette fonction ne la touche jamais elle-même.
  */
 export async function dbDeclareForfeit(
   tournamentId: string,
@@ -1429,13 +1433,6 @@ export async function dbDeclareForfeit(
     if (!match.player1Id || !match.player2Id) return { error: "Match incomplet (joueur manquant)." };
     if (absentPlayerId !== match.player1Id && absentPlayerId !== match.player2Id) {
       return { error: "Ce joueur ne participe pas à ce match." };
-    }
-
-    if (match.tournament.quickMode) {
-      return {
-        error:
-          "Le forfait n'est pas encore disponible en mode rapide : son impact (perte de vie, élimination immédiate...) doit être décidé par l'organisation du produit. Utilisez l'arbitrage existant en attendant.",
-      };
     }
 
     if (match.status === "FINISHED") {

@@ -451,46 +451,7 @@ describe("DO-FIELD-INCIDENT-001 — gestion opérationnelle des incidents terrai
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mode rapide — décision PO explicitement en attente (mission DO-FIELD-INCIDENT-001, Étape 7) :
-// le forfait doit être refusé proprement, jamais inventer une règle de perte de vie.
+// Mode rapide — DO-FIELD-INCIDENT-002 a fermé la décision PO restée en attente ici (forfait =
+// défaite normale, perte d'une vie via le moteur rapide existant). Couverture déplacée vers
+// lib/actions/fieldIncidentQuickForfeit.concurrency.test.ts, dédié — jamais dupliquée ici.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("DO-FIELD-INCIDENT-001 — mode rapide : forfait explicitement refusé (décision PO en attente)", () => {
-  it("declareForfeit refuse proprement sur un tournoi en mode rapide", async () => {
-    asOrganizer();
-    const t = await dbCreateTournament(
-      OWNER_ID,
-      {
-        name: "Open Incidents — rapide", date: "2026-09-11", location: "Bar Le Domino",
-        max_players: 4, entry_fee: 0, nb_pools: 1, nb_boards: 1, advancement_per_pool: 1,
-        players_per_team: 1, registration_mode: "ONSITE", payment_mode: "ONSITE", scoring_mode: "ELECTRONIC",
-        quick_mode: true,
-      },
-      randomUUID(),
-    );
-    createdTournamentIds.push(t.id);
-
-    const quickPlayers: string[] = [];
-    for (let i = 1; i <= 4; i++) {
-      const p = await prisma.registration.create({
-        data: { tournamentId: t.id, playerName: `IncidentRapide${i}`, playerEmail: `rapide${i}-${randomUUID()}@example.com`, playerNames: [`IncidentRapide${i}`], status: "PAID" },
-      });
-      quickPlayers.push(p.id);
-    }
-
-    await updateTournamentStatus(t.id, "OPEN");
-    await updateTournamentStatus(t.id, "IN_PROGRESS");
-
-    const { generateQuickBracket } = await import("@/lib/actions/quickTournament");
-    await generateQuickBracket(t.id);
-
-    const active = await prisma.match.findFirstOrThrow({ where: { tournamentId: t.id, status: "IN_PROGRESS" } });
-
-    const result = await declareForfeit(t.id, active.id, active.player1Id!);
-    expect(result.error).toBeDefined();
-    expect(result.error).toMatch(/mode rapide/);
-
-    const stillActive = await prisma.match.findUniqueOrThrow({ where: { id: active.id } });
-    expect(stillActive.status).toBe("IN_PROGRESS"); // aucune conséquence, refus propre
-    expect(stillActive.forfeitedPlayerId).toBeNull();
-  });
-});

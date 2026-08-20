@@ -5,6 +5,7 @@ import { dbCreateFieldIncident, dbResolveOtherIncident } from "@/lib/db/fieldInc
 import { dbDeclareForfeit } from "@/lib/db/tournament";
 import { authorizeScoring, type ScoringAuthorization } from "@/lib/actions/fieldAccess";
 import { doAdvanceToNextRound } from "@/lib/actions/bracket";
+import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 import { publishMatchUpdate } from "@/lib/mercure";
 import type { FieldIncidentType, FieldIncidentReporterRole } from "@/lib/generated/prisma/client";
 
@@ -57,6 +58,14 @@ export async function reportFieldIncident(
  * ne délivre jamais un rôle REFEREE pour un autre match) et à l'organisateur. Un PLAYER ne peut
  * jamais atteindre cette action avec succès : authorizeScoring lui accorderait au mieux
  * `actor: "FIELD", role: "PLAYER"`, explicitement exclu ci-dessous.
+ *
+ * DO-FIELD-INCIDENT-002 — mode rapide : même bifurcation externe que markWinnerDirect
+ * (score.ts) et arbitrateMatch (admin.ts), jamais une troisième implémentation. dbDeclareForfeit
+ * finalise le match (identique au mode standard) ; c'est UNIQUEMENT ici, une fois cette
+ * transaction commitée, que doAdvanceQuickTournament() est déclenché — seul point qui
+ * décrémente une vie et fait progresser le bracket rapide. Un rejeu idempotent (Cas C, voir
+ * dbDeclareForfeit) renvoie `matchFinished: false` : cette branche n'est alors jamais réexécutée,
+ * jamais une seconde perte de vie déclenchée depuis ici.
  */
 export async function declareForfeit(
   tournamentId: string,
@@ -74,7 +83,11 @@ export async function declareForfeit(
   );
   if (result.error) return { error: result.error };
 
-  if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined && !result.match.quickMode) {
+  if (result.matchFinished && result.match?.quickMode) {
+    await doAdvanceQuickTournament(tournamentId, matchId).catch((err) =>
+      console.warn("[declareForfeit] doAdvanceQuickTournament:", err)
+    );
+  } else if (result.matchFinished && result.match?.bracketRound !== null && result.match?.bracketRound !== undefined) {
     await doAdvanceToNextRound(tournamentId, result.match.bracketRound).catch(() => null);
   }
 

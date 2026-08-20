@@ -138,9 +138,17 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   indécises en faveur de l'adversaire puis réutilise `tryFinalizeMatch` (même primitive que
   `markWinnerDirect`/`dbArbitrateMatch`) pour la libération de cible et la progression —
   jamais un second moteur. Idempotent (rejeu du même forfait sur un match déjà décidé par lui
-  → succès sans nouvelle progression). **Mode rapide explicitement refusé** : l'impact d'un
-  forfait sur les vies/l'élimination y est ambigu (perte d'une vie ? toutes ? élimination
-  immédiate ?) — décision Product Owner encore nécessaire avant toute implémentation.
+  → succès sans nouvelle progression).
+- **Mode rapide** (DO-FIELD-INCIDENT-002, décision Product Owner) — un forfait équivaut à une
+  défaite normale : `dbDeclareForfeit` ne traite jamais le mode rapide différemment (même code
+  que standard) ; c'est `declareForfeit` (`lib/actions/fieldIncident.ts`) qui, une fois le
+  match finalisé, déclenche `doAdvanceQuickTournament()` si `match.quickMode` — exactement la
+  même bifurcation externe que `markWinnerDirect`/`arbitrateMatch`, jamais une troisième
+  implémentation. Seul `doAdvanceQuickTournamentTx` décrémente une vie
+  (`dbDecrementLives`) et fait progresser le bracket rapide (WB/LB, Grande Finale, clôture) —
+  un seul chemin de vérité pour la perte de vie, jamais dupliqué dans `dbDeclareForfeit`.
+  Idempotence garantie par `Match.forfeitedPlayerId` (rejeu) et `Match.quickAdvanceProcessedAt`
+  (garde déjà existante contre une double perte de vie).
 - **Résolution d'un résultat contesté** — aucune action dédiée : l'arbitre réutilise
   `markWinnerDirect` (déjà accessible en session REFEREE), l'organisateur réutilise
   l'arbitrage existant (`arbitrateMatch`/`ArbitrateMatchModal`, inchangés). `verifyFieldToken`
