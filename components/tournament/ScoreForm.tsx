@@ -6,6 +6,7 @@ import { computeRemaining, computeActivePlayer, x01StartScore, type X01ThrowLike
 import type { ScoringAuthorization } from "@/lib/actions/fieldAccess";
 import { CallOrganizerButton } from "@/components/tournament/CallOrganizerButton";
 import { ForfeitControl } from "@/components/tournament/ForfeitControl";
+import { attemptBuildSkewRecovery } from "@/lib/utils/buildSkewRecovery";
 
 const DART_SEGMENTS = Array.from({ length: 20 }, (_, i) => i + 1);
 const BULL = 25;
@@ -133,8 +134,18 @@ function ElectronicScoreForm({ match, sets, rounds, tournamentId }: { match: Mat
     if (isPending) return;
     setError(null);
     startTransition(async () => {
-      const result = await action();
-      if (result.error) setError(result.error);
+      try {
+        const result = await action();
+        if (result.error) setError(result.error);
+      } catch (err) {
+        // DO-STABILIZATION-001 (Problème 3) — un rejet de la promesse (jamais un `{error}`
+        // renvoyé normalement) signale un échec au niveau du framework, pas une erreur métier :
+        // c'est exactement la forme que prend un "Server Action introuvable" après déploiement.
+        // Toute autre cause de rejet est rethrow telle quelle, jamais masquée sous un message
+        // générique — voir attemptBuildSkewRecovery().
+        if (!attemptBuildSkewRecovery(err)) throw err;
+        setError("Mise à jour disponible — actualisation en cours…");
+      }
     });
   }
 
@@ -363,7 +374,7 @@ function SetScoreTracker({
   // sans conséquence, contrairement à rp1/rp2/throws avant cette mission.
   const [inputP1, setInputP1] = useState("");
   const [inputP2, setInputP2] = useState("");
-  const [message, setMessage] = useState<{ tone: "error" | "warning"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: "error" | "warning" | "info"; text: string } | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   // DO-SCORING-002 (Étape 5) — fléchette de fermeture : ne sert qu'à guider l'affichage (le
@@ -407,45 +418,64 @@ function SetScoreTracker({
 
     setMessage(null);
     startTransition(async () => {
-      const result = await recordThrow(set.id, tournamentId, playerNum, voleeScore, requestIdRef.current, checkoutDart);
+      try {
+        const result = await recordThrow(set.id, tournamentId, playerNum, voleeScore, requestIdRef.current, checkoutDart);
 
-      if (result.error) {
-        // Ne jamais régénérer l'identifiant sur erreur : un nouveau clic sur OK avec la même
-        // saisie doit rejouer EXACTEMENT la même commande (retry après réponse ambiguë/perdue).
-        setMessage({ tone: "error", text: result.error });
-        return;
-      }
+        if (result.error) {
+          // Ne jamais régénérer l'identifiant sur erreur : un nouveau clic sur OK avec la même
+          // saisie doit rejouer EXACTEMENT la même commande (retry après réponse ambiguë/perdue).
+          setMessage({ tone: "error", text: result.error });
+          return;
+        }
 
-      // Volée confirmée par le serveur (bust ou non) — la prochaine sera une commande différente.
-      requestIdRef.current = crypto.randomUUID();
-      if (player === "p1") setInputP1(""); else setInputP2("");
-      setCheckoutSegment("20");
-      setCheckoutMultiplier(defaultMultiplier);
+        // Volée confirmée par le serveur (bust ou non) — la prochaine sera une commande différente.
+        requestIdRef.current = crypto.randomUUID();
+        if (player === "p1") setInputP1(""); else setInputP2("");
+        setCheckoutSegment("20");
+        setCheckoutMultiplier(defaultMultiplier);
 
-      if (result.bust) {
-        setMessage({ tone: "error", text: result.reason ?? "Bust !" });
-      } else if (result.impossibleCheckout) {
-        setMessage({ tone: "warning", text: "Fermeture impossible en une volée avec ce restant." });
+        if (result.bust) {
+          setMessage({ tone: "error", text: result.reason ?? "Bust !" });
+        } else if (result.impossibleCheckout) {
+          setMessage({ tone: "warning", text: "Fermeture impossible en une volée avec ce restant." });
+        }
+      } catch (err) {
+        // DO-STABILIZATION-001 (Problème 3) — voir runAction() ci-dessus pour le même principe.
+        if (!attemptBuildSkewRecovery(err)) throw err;
+        setMessage({ tone: "info", text: "Mise à jour disponible — actualisation en cours…" });
       }
     });
   }
 
   function forceWinner(winnerId: string) {
     if (isPending) return;
-    startTransition(() => void markWinnerDirect(set.id, winnerId, tournamentId));
+    startTransition(async () => {
+      try {
+        await markWinnerDirect(set.id, winnerId, tournamentId);
+      } catch (err) {
+        if (!attemptBuildSkewRecovery(err)) throw err;
+        setMessage({ tone: "info", text: "Mise à jour disponible — actualisation en cours…" });
+      }
+    });
   }
 
   function handleCancelLastThrow() {
     if (isPending) return;
     startTransition(async () => {
-      const result = await cancelLastThrow(set.id, tournamentId, cancelRequestId.current);
-      setShowCancelConfirm(false);
-      if (result.error) {
-        setMessage({ tone: "error", text: result.error });
-        return;
+      try {
+        const result = await cancelLastThrow(set.id, tournamentId, cancelRequestId.current);
+        setShowCancelConfirm(false);
+        if (result.error) {
+          setMessage({ tone: "error", text: result.error });
+          return;
+        }
+        cancelRequestId.current = crypto.randomUUID();
+        setMessage(null);
+      } catch (err) {
+        setShowCancelConfirm(false);
+        if (!attemptBuildSkewRecovery(err)) throw err;
+        setMessage({ tone: "info", text: "Mise à jour disponible — actualisation en cours…" });
       }
-      cancelRequestId.current = crypto.randomUUID();
-      setMessage(null);
     });
   }
 
@@ -471,7 +501,9 @@ function SetScoreTracker({
           className={`rounded-lg px-4 py-2 text-sm text-center border ${
             message.tone === "error"
               ? "bg-danger-solid/10 border-danger-solid/40 text-danger-solid"
-              : "bg-warning-solid/10 border-warning-solid/40 text-warning-solid"
+              : message.tone === "warning"
+                ? "bg-warning-solid/10 border-warning-solid/40 text-warning-solid"
+                : "bg-surface-secondary border-border-default text-text-secondary"
           }`}
         >
           {message.tone === "warning" && "⚠ "}{message.text}

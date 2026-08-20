@@ -4,7 +4,7 @@ import { useActionState, useState, useEffect, useRef } from "react";
 import { updateTournament } from "@/lib/actions/tournament";
 import { Alert, Card, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
-import { FREE_TIER_MAX_PLAYERS } from "@/lib/entitlements/constants";
+import { FREE_TIER_MAX_PLAYERS, PAID_TIER_MAX_PLAYERS, hasConfirmedTournamentSizeEntitlement } from "@/lib/entitlements/constants";
 import type { StripeConnectStatus } from "@/lib/payments/onlinePaymentGuard";
 
 interface Props {
@@ -64,14 +64,25 @@ export function EditTournamentForm({
     prevPending.current = isPending;
   }, [isPending, state]);
 
-  // Ne signale un besoin d'entitlement que pour une augmentation réelle au-delà de 10 par
-  // rapport à ce que le tournoi a déjà (mission §12/§15 — ne jamais alarmer sur une valeur déjà
-  // acquise, seule authorizeTournamentSize() côté serveur fait foi de toute façon).
-  const needsEntitlement =
-    Number(maxPlayers) > FREE_TIER_MAX_PLAYERS &&
-    Number(maxPlayers) > tournament.max_players &&
-    !hasActiveSubscription &&
-    availableCredits === 0;
+  // DO-STABILIZATION-001 (Problème 1) — même plafond que la création. `maxPlayersCap` borne la
+  // saisie à partir de MAINTENANT (handleMaxPlayersChange ci-dessous) ; la valeur CHARGÉE depuis
+  // un tournoi existant n'est jamais silencieusement réécrite (voir exceedsCapWithoutEntitlement).
+  const hasEntitlement = hasConfirmedTournamentSizeEntitlement(hasActiveSubscription, availableCredits);
+  const maxPlayersCap = hasEntitlement ? PAID_TIER_MAX_PLAYERS : FREE_TIER_MAX_PLAYERS;
+
+  function handleMaxPlayersChange(raw: string) {
+    if (raw === "") { setMaxPlayers(raw); return; }
+    const n = Number(raw);
+    setMaxPlayers(Number.isFinite(n) ? String(Math.min(n, maxPlayersCap)) : raw);
+  }
+
+  // DO-STABILIZATION-001 — état "correction nécessaire" (mission Problème 1, UI) : un tournoi
+  // créé AVANT cette mission (ou dont l'entitlement a expiré depuis) peut avoir max_players > 10
+  // déjà en base, sans qu'aucune saisie utilisateur n'en soit la cause. Jamais réécrit
+  // silencieusement — l'attribut `max` (ci-dessous) empêchera de toute façon la soumission tant
+  // que ce n'est pas corrigé (validation HTML5 native), mais l'organisateur doit comprendre
+  // pourquoi explicitement plutôt que de deviner face à un formulaire qui refuse de s'envoyer.
+  const exceedsCapWithoutEntitlement = !hasEntitlement && Number(maxPlayers) > maxPlayersCap;
 
   return (
     <div className="space-y-4">
@@ -131,17 +142,17 @@ export function EditTournamentForm({
           label="Joueurs max"
           id="edit_max_players"
           error={state?.errors?.max_players?.[0]}
-          hint={`Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
+          hint={hasEntitlement ? undefined : `Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
         >
           <Input
             id="edit_max_players"
             name="max_players"
             type="number"
             min="2"
-            max="512"
+            max={maxPlayersCap}
             required
             value={maxPlayers}
-            onChange={(e) => setMaxPlayers(e.target.value)}
+            onChange={(e) => handleMaxPlayersChange(e.target.value)}
           />
         </FormField>
 
@@ -162,7 +173,27 @@ export function EditTournamentForm({
         </FormField>
       </div>
 
-      {needsEntitlement && (
+      {exceedsCapWithoutEntitlement && (
+        <Alert tone="error">
+          <p className="font-medium">
+            Ce tournoi autorise {tournament.max_players} joueurs, au-delà de l&apos;accès gratuit
+            ({FREE_TIER_MAX_PLAYERS}) — votre organisation n&apos;a ni abonnement actif ni crédit
+            tournoi disponible.
+          </p>
+          <p className="mt-1">
+            Réduisez le nombre de joueurs max à {FREE_TIER_MAX_PLAYERS} ou moins pour enregistrer
+            d&apos;autres modifications, ou achetez un{" "}
+            <a href={creditPurchaseUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+              crédit tournoi (4,90€)
+            </a>{" "}
+            ou un{" "}
+            <a href={subscriptionUrl} target="_blank" rel="noreferrer" className="underline font-medium">
+              abonnement DartsOpen (6,90€/mois ou 69€/an)
+            </a>.
+          </p>
+        </Alert>
+      )}
+      {!hasEntitlement && !exceedsCapWithoutEntitlement && (
         <Alert tone="info">
           <p className="font-medium">Plus de {FREE_TIER_MAX_PLAYERS} joueurs nécessite un accès payant DartsOpen.</p>
           <p className="mt-1">
@@ -200,22 +231,15 @@ export function EditTournamentForm({
           </Card>
         ) : (
           <>
+            {/* DO-STABILIZATION-001 (Problème 2) — même traitement qu'à la création : aucun
+                faux choix, aucun bandeau anxiogène, ONLINE jamais conservé visuellement. */}
             <input type="hidden" name="payment_mode" value="ONSITE" />
-            {stripeConnectStatus === "INDETERMINATE" ? (
-              <Alert tone="info">
-                Statut Stripe Connect momentanément indisponible — les droits d&apos;inscription
-                seront réglés sur place pour l&apos;instant. Rechargez la page dans quelques
-                instants pour réessayer le paiement en ligne.
-              </Alert>
-            ) : (
-              <Alert tone="info">
-                Les droits d&apos;inscription seront réglés sur place.{" "}
-                <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                  Configurez Stripe Connect dans BApps Studio
-                </a>{" "}
-                pour proposer le paiement en ligne à l&apos;avenir.
-              </Alert>
-            )}
+            <p className="text-xs text-brand-text-secondary">
+              Paiement des inscriptions : sur place ·{" "}
+              <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline">
+                configurer Stripe Connect
+              </a>
+            </p>
           </>
         )
       )}

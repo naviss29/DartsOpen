@@ -29,14 +29,14 @@ describe("TournamentForm — droits d'inscription et mode de paiement (DARTSOPEN
     expect(entryFeeInput.value).toBe("5");
   });
 
-  it("sans Stripe opérationnel : un message discret indique un règlement sur place, jamais que le tournoi est bloqué (mission §6)", () => {
+  it("sans Stripe opérationnel : une information sobre indique un règlement sur place, jamais un bandeau anxiogène (DO-STABILIZATION-001, Problème 2)", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" />);
 
     const entryFeeInput = screen.getByLabelText(/droits d'inscription \(/i);
     fireEvent.change(entryFeeInput, { target: { value: "5" } });
 
-    expect(screen.getByText(/réglés sur place/i)).toBeInTheDocument();
-    const cta = screen.getByRole("link", { name: /configurez stripe connect dans bapps studio/i });
+    expect(screen.getByText(/paiement des inscriptions : sur place/i)).toBeInTheDocument();
+    const cta = screen.getByRole("link", { name: /configurer stripe connect/i });
     expect(cta).toHaveAttribute("href", STRIPE_URL);
   });
 
@@ -76,15 +76,15 @@ describe("TournamentForm — droits d'inscription et mode de paiement (DARTSOPEN
     expect(onlineRadio).not.toBeDisabled();
   });
 
-  it("DARTSOPEN-MONETIZATION-002 (audit priorité 4) : un statut indéterminé n'affiche jamais 'configurez Stripe Connect', ni aucun choix de mode de paiement", () => {
+  it("DO-STABILIZATION-001 (Problème 2) : un statut indéterminé est traité comme NOT_OPERATIONAL — aucun choix, aucun bandeau 'momentanément indisponible', la même information sobre", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="INDETERMINATE" />);
 
     const entryFeeInput = screen.getByLabelText(/droits d'inscription \(/i);
     fireEvent.change(entryFeeInput, { target: { value: "5" } });
 
     expect(screen.queryByText(/mode de paiement/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/configurez stripe connect/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/momentanément indisponible/i)).toBeInTheDocument();
+    expect(screen.queryByText(/momentanément indisponible/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/paiement des inscriptions : sur place/i)).toBeInTheDocument();
   });
 });
 
@@ -113,13 +113,30 @@ describe("TournamentForm — idempotence (DARTSOPEN-MONETIZATION-002, audit DO-A
   });
 });
 
-describe("TournamentForm — règle des 10 joueurs (DARTSOPEN-MONETIZATION-001/002, mission §3/§10)", () => {
-  it("propose 16 joueurs par défaut avec un rappel du palier gratuit à 10", () => {
+describe("TournamentForm — règle des 10 joueurs (DO-STABILIZATION-001, Problème 1)", () => {
+  it("sans entitlement confirmé : le défaut est plafonné à 10 (jamais 16), avec rappel du palier gratuit", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" />);
 
     const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement;
-    expect(maxPlayersInput.value).toBe("16");
+    expect(maxPlayersInput.value).toBe("10");
+    expect(maxPlayersInput.max).toBe("10");
     expect(screen.getByText(/jusqu'à 10 joueurs/i)).toBeInTheDocument();
+  });
+
+  it("avec un abonnement actif : le défaut reste 16, le plafond du champ passe à 512", () => {
+    render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" hasActiveSubscription={true} />);
+
+    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement;
+    expect(maxPlayersInput.value).toBe("16");
+    expect(maxPlayersInput.max).toBe("512");
+  });
+
+  it("avec un crédit tournoi disponible : le défaut reste 16, le plafond du champ passe à 512", () => {
+    render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" availableCredits={1} />);
+
+    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement;
+    expect(maxPlayersInput.value).toBe("16");
+    expect(maxPlayersInput.max).toBe("512");
   });
 
   it("propose 1 poule et 2 cibles par défaut", () => {
@@ -129,50 +146,49 @@ describe("TournamentForm — règle des 10 joueurs (DARTSOPEN-MONETIZATION-001/0
     expect((screen.getByLabelText(/nombre de cibles disponibles/i) as HTMLInputElement).value).toBe("2");
   });
 
-  it("propose aussi 16 joueurs et 2 cibles par défaut en mode rapide (audit DO-AUD-008)", () => {
+  it("propose aussi 10 joueurs (plafonné) et 2 cibles par défaut en mode rapide, sans entitlement", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" />);
 
     fireEvent.click(screen.getByRole("switch"));
 
-    expect((screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement).value).toBe("16");
+    expect((screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement).value).toBe("10");
     expect((screen.getByLabelText(/nombre de cibles disponibles/i) as HTMLInputElement).value).toBe("2");
   });
 
-  it("n'affiche aucune option payante tant que la valeur reste à 10 ou moins", () => {
+  it("impossible de saisir au-delà de 10 sans entitlement : la valeur est clampée en temps réel, jamais soumise telle quelle (DO-STABILIZATION-001)", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" />);
 
-    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i);
-    fireEvent.change(maxPlayersInput, { target: { value: "10" } });
+    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement;
+    fireEvent.change(maxPlayersInput, { target: { value: "16" } });
 
-    expect(screen.queryByText(/accès payant dartsopen/i)).not.toBeInTheDocument();
+    expect(maxPlayersInput.value).toBe("10"); // clampé, jamais 16
   });
 
-  it("affiche les options crédit/abonnement dès que la valeur dépasse 10 sans droit actif", () => {
+  it("l'incitation à l'accès payant reste visible même à la valeur plafond (10), jamais un simple texte réactif contournable", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" />);
-
-    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i);
-    fireEvent.change(maxPlayersInput, { target: { value: "16" } });
 
     expect(screen.getByText(/accès payant dartsopen/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /crédit tournoi/i })).toHaveAttribute("href", CREDIT_URL);
     expect(screen.getByRole("link", { name: /abonnement dartsopen/i })).toHaveAttribute("href", SUBSCRIPTION_URL);
   });
 
-  it("n'affiche aucune option payante au-delà de 10 quand un abonnement actif existe déjà", () => {
+  it("aucune option payante affichée, et aucun clamp appliqué, quand un abonnement actif existe déjà", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" hasActiveSubscription={true} />);
 
-    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i);
+    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement;
     fireEvent.change(maxPlayersInput, { target: { value: "32" } });
 
+    expect(maxPlayersInput.value).toBe("32"); // jamais clampé : entitlement confirmé
     expect(screen.queryByText(/accès payant dartsopen/i)).not.toBeInTheDocument();
   });
 
-  it("n'affiche aucune option payante au-delà de 10 quand un crédit est disponible", () => {
+  it("aucune option payante affichée, et aucun clamp appliqué, quand un crédit est disponible", () => {
     render(<TournamentForm {...defaultProps} stripeConnectStatus="NOT_OPERATIONAL" availableCredits={1} />);
 
-    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i);
+    const maxPlayersInput = screen.getByLabelText(/nombre de joueurs max/i) as HTMLInputElement;
     fireEvent.change(maxPlayersInput, { target: { value: "32" } });
 
+    expect(maxPlayersInput.value).toBe("32");
     expect(screen.queryByText(/accès payant dartsopen/i)).not.toBeInTheDocument();
   });
 });

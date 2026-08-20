@@ -307,6 +307,17 @@ describe("createTournament — DARTSOPEN-MONETIZATION-001/002 (règle des 10 jou
     expect(dbCreateTournament).not.toHaveBeenCalled();
   });
 
+  it("DO-STABILIZATION-001 — frontière exacte : 11 joueurs (juste au-dessus du palier gratuit) déclenche déjà la vérification d'entitlement, jamais un arrondi/une tolérance", async () => {
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "NONE", reason: "NO_ORGANIZATION" });
+    const fd = tournamentFormData({ max_players: "11" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(resolveTournamentSizeEntitlement).toHaveBeenCalledTimes(1);
+    expect(result?.error).toBeDefined();
+    expect(dbCreateTournament).not.toHaveBeenCalled();
+  });
+
   it("SUBSCRIPTION : plus de 10 joueurs accepté sans jamais consommer de crédit", async () => {
     vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
     const fd = tournamentFormData({ max_players: "32" });

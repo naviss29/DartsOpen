@@ -4,7 +4,7 @@ import { Fragment, useActionState, useState } from "react";
 import { createTournament } from "@/lib/actions/tournament";
 import { Alert, Card, FormField, Input } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
-import { FREE_TIER_MAX_PLAYERS } from "@/lib/entitlements/constants";
+import { FREE_TIER_MAX_PLAYERS, PAID_TIER_MAX_PLAYERS, hasConfirmedTournamentSizeEntitlement } from "@/lib/entitlements/constants";
 import { DEFAULT_MAX_PLAYERS, DEFAULT_NB_POOLS, DEFAULT_NB_BOARDS } from "@/lib/tournament/defaults";
 import type { StripeConnectStatus } from "@/lib/payments/onlinePaymentGuard";
 
@@ -35,7 +35,14 @@ export function TournamentForm({
 }: Props) {
   const [state, action, isPending] = useActionState(createTournament, undefined);
   const [quickMode, setQuickMode] = useState(state?.fields?.quick_mode === "true");
-  const [maxPlayers, setMaxPlayers] = useState(state?.fields?.max_players ?? String(DEFAULT_MAX_PLAYERS));
+  // DO-STABILIZATION-001 (Problème 1) — sans entitlement confirmé, le défaut ET le plafond du
+  // champ sont bornés à FREE_TIER_MAX_PLAYERS (10), jamais DEFAULT_MAX_PLAYERS (16) tel quel :
+  // c'est exactement l'incohérence constatée en recette (16 affiché à côté de "jusqu'à 10").
+  const hasEntitlement = hasConfirmedTournamentSizeEntitlement(hasActiveSubscription, availableCredits);
+  const maxPlayersCap = hasEntitlement ? PAID_TIER_MAX_PLAYERS : FREE_TIER_MAX_PLAYERS;
+  const [maxPlayers, setMaxPlayers] = useState(
+    state?.fields?.max_players ?? String(Math.min(DEFAULT_MAX_PLAYERS, maxPlayersCap))
+  );
   const [entryFee, setEntryFee] = useState(state?.fields?.entry_fee ?? "10");
   // DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — générée une seule fois à
   // l'instanciation du formulaire, jamais régénérée entre deux soumissions (double-clic, relance
@@ -44,8 +51,20 @@ export function TournamentForm({
   const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const today = new Date().toISOString().split("T")[0];
-  const needsEntitlement = Number(maxPlayers) > FREE_TIER_MAX_PLAYERS && !hasActiveSubscription && availableCredits === 0;
   const canReceivePayments = stripeConnectStatus === "OPERATIONAL";
+
+  /**
+   * DO-STABILIZATION-001 — clampe toute saisie/incrémentation au-delà du plafond réel : le
+   * champ HTML `max` (ci-dessous) bloque déjà la soumission native, mais un clic répété sur les
+   * flèches ou une saisie clavier rapide ne doit jamais afficher transitoirement une valeur >10
+   * sans entitlement. Jamais côté serveur — resolveTournamentSizeEntitlement()/
+   * requiresEntitlementCheck() (lib/actions/tournament.ts) restent l'unique source de vérité.
+   */
+  function handleMaxPlayersChange(raw: string) {
+    if (raw === "") { setMaxPlayers(raw); return; }
+    const n = Number(raw);
+    setMaxPlayers(Number.isFinite(n) ? String(Math.min(n, maxPlayersCap)) : raw);
+  }
 
   return (
     <form action={action} className="space-y-6">
@@ -119,16 +138,16 @@ export function TournamentForm({
                   label="Nombre de joueurs max"
                   id="max_players"
                   error={state?.errors?.max_players?.[0]}
-                  hint={`Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
+                  hint={hasEntitlement ? undefined : `Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
                 >
                   <Input
                     id="max_players"
                     name="max_players"
                     type="number"
                     min="2"
-                    max="512"
+                    max={maxPlayersCap}
                     value={maxPlayers}
-                    onChange={(e) => setMaxPlayers(e.target.value)}
+                    onChange={(e) => handleMaxPlayersChange(e.target.value)}
                     required
                   />
                 </FormField>
@@ -136,7 +155,7 @@ export function TournamentForm({
                   <Input id="nb_boards" name="nb_boards" type="number" min="1" max="32" defaultValue={state?.fields?.nb_boards ?? String(DEFAULT_NB_BOARDS)} required />
                 </FormField>
               </div>
-              {needsEntitlement && (
+              {!hasEntitlement && (
                 <Alert tone="info">
                   <p className="font-medium">Plus de {FREE_TIER_MAX_PLAYERS} joueurs nécessite un accès payant DartsOpen.</p>
                   <p className="mt-1">
@@ -172,16 +191,16 @@ export function TournamentForm({
                   label="Nombre de joueurs max"
                   id="max_players"
                   error={state?.errors?.max_players?.[0]}
-                  hint={`Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
+                  hint={hasEntitlement ? undefined : `Accès gratuit : jusqu'à ${FREE_TIER_MAX_PLAYERS} joueurs.`}
                 >
                   <Input
                     id="max_players"
                     name="max_players"
                     type="number"
                     min="2"
-                    max="512"
+                    max={maxPlayersCap}
                     value={maxPlayers}
-                    onChange={(e) => setMaxPlayers(e.target.value)}
+                    onChange={(e) => handleMaxPlayersChange(e.target.value)}
                     required
                   />
                 </FormField>
@@ -203,7 +222,7 @@ export function TournamentForm({
                 </FormField>
               </div>
 
-              {needsEntitlement && (
+              {!hasEntitlement && (
                 <Alert tone="info">
                   <p className="font-medium">Plus de {FREE_TIER_MAX_PLAYERS} joueurs nécessite un accès payant DartsOpen.</p>
                   <p className="mt-1">
@@ -241,22 +260,22 @@ export function TournamentForm({
                   </div>
                 ) : (
                   <>
+                    {/* DO-STABILIZATION-001 (Problème 2) — plus de "faux choix" : dès que Stripe
+                        n'est pas confirmé OPERATIONAL (absent, non opérationnel, ou état
+                        indéterminé — les trois cas traités identiquement ici), les radios
+                        disparaissent entièrement, ONLINE ne reste jamais sélectionné visuellement,
+                        et le grand bandeau d'avertissement disparaît au profit d'une simple
+                        information secondaire sobre. Le serveur (isOnlinePaymentAllowed) refuse de
+                        toute façon tout payload forgé avec ONLINE tant que Stripe n'est pas
+                        confirmé opérationnel — ce hidden input n'est qu'un confort, jamais la
+                        barrière de sécurité. */}
                     <input type="hidden" name="payment_mode" value="ONSITE" />
-                    {stripeConnectStatus === "INDETERMINATE" ? (
-                      <Alert tone="info">
-                        Statut Stripe Connect momentanément indisponible — les droits d&apos;inscription
-                        seront réglés sur place pour l&apos;instant. Rechargez la page dans quelques
-                        instants pour réessayer le paiement en ligne.
-                      </Alert>
-                    ) : (
-                      <Alert tone="info">
-                        Les droits d&apos;inscription seront réglés sur place.{" "}
-                        <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline font-medium">
-                          Configurez Stripe Connect dans BApps Studio
-                        </a>{" "}
-                        pour proposer le paiement en ligne à l&apos;avenir.
-                      </Alert>
-                    )}
+                    <p className="text-xs text-brand-text-secondary">
+                      Paiement des inscriptions : sur place ·{" "}
+                      <a href={stripeConnectUrl} target="_blank" rel="noreferrer" className="underline">
+                        configurer Stripe Connect
+                      </a>
+                    </p>
                   </>
                 )
               )}
