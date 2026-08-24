@@ -7,7 +7,7 @@
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6)
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)
-![Tests](https://img.shields.io/badge/tests-217%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-Vitest-brightgreen)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
 
 ---
@@ -154,6 +154,7 @@ npm run dev
 | Service | URL |
 |---|---|
 | Application | http://localhost:3000 |
+| PostgreSQL | localhost:5433 |
 
 ---
 
@@ -162,11 +163,12 @@ npm run dev
 ```bash
 npm test              # Vitest (watch mode)
 npm run test:run      # Vitest (one-shot, CI)
-npm run test:coverage # Couverture de code
 npm run seed:players  # Remplir un tournoi avec des équipes fictives (interactif)
+npm run audit:online-payment # Audit de cohérence des paiements en ligne (lecture seule)
 ```
 
-**217 tests passants** — utils (bracket, pools, scores 501, seeding) + actions (tournament, score, bracket, pools avec seeds, arbitrage, organisation) + API interne SterPlatform + webhook paiements
+La suite couvre notamment les utils (bracket, pools, scores 501, seeding), les actions,
+la concurrence PostgreSQL, l'API interne SterPlatform et le webhook de paiements.
 
 ---
 
@@ -181,6 +183,10 @@ npm run seed:players  # Remplir un tournoi avec des équipes fictives (interacti
 | `STER_PAYMENTS_CALLBACK_SECRET` | Secret de signature des notifications de paiement entrantes depuis SterPlatform (`/api/webhooks/sterplatform-payments`) |
 | `NEXT_PUBLIC_BSSITE_URL` | URL du portail BSsite (lien "Gérer Stripe Connect" depuis la page Paramètres) |
 | `NEXT_PUBLIC_APP_URL` | URL publique de l'application |
+| `STER_SSO_CLIENT_SECRET` | Secret du client SSO DartsOpen, identique à `SSO_CLIENT_SECRET_DARTSOPEN` côté SterPlatform |
+| `NEXT_PUBLIC_MERCURE_PUBLIC_URL` | URL Mercure accessible par le navigateur |
+| `MERCURE_PRIVATE_URL` | URL Mercure utilisée côté serveur |
+| `MERCURE_JWT_SECRET` | Secret JWT Mercure, identique à celui configuré sur le hub |
 
 DartsOpen ne dialogue plus jamais directement avec Stripe (mission DO-003) — les paiements
 passent exclusivement par l'API interne de SterPlatform.
@@ -191,7 +197,7 @@ passent exclusivement par l'API interne de SterPlatform.
 
 - [Documentation complète](./docs/DartsOpen_Documentation.md) — modèle de données, actions, roadmap
 - [Pense-bête / idées futures](./docs/pense-bete.md)
-- [Architecture écosystème](../docs/Architecture_Ecosysteme.md)
+- Architecture écosystème : dépôt `BApps-Studio`, dossier `04-Architecture/`
 
 ---
 
