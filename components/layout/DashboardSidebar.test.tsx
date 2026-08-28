@@ -45,3 +45,28 @@ describe("DashboardSidebar", () => {
     expect(screen.queryByRole("link", { name: "/dons" })).not.toBeInTheDocument();
   });
 });
+
+describe("BAPPS-UX-UNIFICATION-006-FIX-001 — en-tête de sidebar 64px, alignée avec AppHeader", () => {
+  it("l'en-tête de sidebar porte h-16 (64px, --layout-header-height d'AppHeader) et aucun padding vertical additionnel", () => {
+    const { container } = render(<DashboardSidebar />);
+    const aside = container.querySelector("aside") as HTMLElement;
+    const header = aside.firstElementChild as HTMLElement;
+
+    expect(header.className).toMatch(/(^|\s)h-16(\s|$)/);
+    // p-6/py-* ajouterait une hauteur réelle au-delà des 64px fixés par h-16 (régression du
+    // défaut ≈76px constaté par l'audit Codex) — seul un padding horizontal est autorisé ici.
+    expect(header.className).not.toMatch(/(^|\s)p-6(\s|$)/);
+    expect(header.className).not.toMatch(/(^|\s)py-\d/);
+  });
+});
+
+describe("BAPPS-UX-UNIFICATION-006-FIX-001 — sidebar réellement sticky sur la hauteur du viewport", () => {
+  it("porte sticky top-0 h-screen (jamais un simple className sans ancêtre overflow qui l'annulerait)", () => {
+    const { container } = render(<DashboardSidebar />);
+    const aside = container.querySelector("aside") as HTMLElement;
+
+    expect(aside.className).toMatch(/(^|\s)sticky(\s|$)/);
+    expect(aside.className).toMatch(/(^|\s)top-0(\s|$)/);
+    expect(aside.className).toMatch(/(^|\s)h-screen(\s|$)/);
+  });
+});

@@ -72,8 +72,27 @@ export default function DashboardSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden w-64 shrink-0 flex-col md:flex" style={{ backgroundColor: "var(--color-sidenav-surface)" }}>
-      <div className="p-6" style={{ backgroundColor: "var(--color-sidenav-header)" }}>
+    // BAPPS-UX-UNIFICATION-006-FIX-001 — `sticky top-0 h-screen overflow-y-auto` : la sidebar
+    // reste épinglée sur toute la hauteur du viewport pendant le défilement du contenu
+    // (charte §4.1 "sidebar sticky sur la hauteur du viewport"), jamais un simple className
+    // `sticky` sans effet — aucun ancêtre ici n'a d'`overflow` non-`visible` qui créerait un
+    // second conteneur de défilement concurrent, le scroll de référence reste le document
+    // (voir aussi app/(dashboard)/layout.tsx, `overflow-hidden`/`overflow-auto` retirés).
+    <aside
+      className="hidden w-64 shrink-0 flex-col sticky top-0 h-screen overflow-y-auto md:flex"
+      style={{ backgroundColor: "var(--color-sidenav-surface)" }}
+    >
+      {/* En-tête de sidebar : 64px exactement (`h-16`), aligné pixel pour pixel avec AppHeader
+          (`--layout-header-height: 64px`) — auparavant `p-6` (24px de padding vertical) autour
+          d'un wordmark `text-xl`, soit ≈76px de hauteur réelle, sans rapport avec le contrat de
+          la charte §4.1 "En-tête de sidebar : 64 px, aligné pixel pour pixel avec le header".
+          `shrink-0` : la sidebar est désormais `flex-col` de hauteur fixe (`h-screen`), cet
+          en-tête ne doit jamais être compressé sous 64px si `nav`/le footer prennent plus de
+          place que le viewport. */}
+      <div
+        className="flex h-16 shrink-0 items-center px-6"
+        style={{ backgroundColor: "var(--color-sidenav-header)" }}
+      >
         <Link href="/dashboard" className="text-xl font-bold tracking-tight text-white">
           DartsOpen
         </Link>

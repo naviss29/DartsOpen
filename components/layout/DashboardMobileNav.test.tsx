@@ -7,14 +7,16 @@ vi.mock("next/navigation", () => ({
 }));
 
 /**
- * DO-BETA-UX-001 — remplace l'ancienne barre horizontale à scroll par un menu hamburger
- * explicite (même grammaire que BSsite, UX-UI-Standards.md §3 "Navigation mobile") : le logo et
- * la navigation ne doivent plus jamais disparaître sans remplacement sur mobile.
+ * BAPPS-UX-UNIFICATION-006 LOT 2 — remplace la couverture de l'ancienne bande blanche
+ * (dropdown pleine largeur sous une seconde barre 64px) par celle du nouveau contrat : un
+ * wordmark + déclencheur persistants (destinés au slot `start` d'AppHeader) qui ouvrent un
+ * panneau latéral (drawer, pas une bande empilée) — charte BApps Studio §4.1 ("une seule barre
+ * de 64 px + drawer") / §11.3 ("Une seule barre structurelle mobile de 64 px").
  */
 describe("DashboardMobileNav", () => {
-  it("affiche le logo DartsOpen même en repli mobile", () => {
+  it("affiche le wordmark DartsOpen même en repli mobile (identité toujours visible)", () => {
     render(<DashboardMobileNav />);
-    expect(screen.getByRole("img", { name: "DartsOpen" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "DartsOpen" })).toHaveAttribute("href", "/dashboard");
   });
 
   it("le menu est fermé par défaut, ouvert par un bouton hamburger explicite (aria-expanded)", () => {
@@ -23,6 +25,7 @@ describe("DashboardMobileNav", () => {
     const toggle = screen.getByRole("button", { name: /ouvrir le menu/i });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("link", { name: /Mes tournois/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
 
     fireEvent.click(toggle);
 
@@ -30,7 +33,7 @@ describe("DashboardMobileNav", () => {
     expect(screen.getByRole("link", { name: /Mes tournois/ })).toBeInTheDocument();
   });
 
-  it("le menu liste les mêmes destinations que la sidebar desktop, y compris Contact", () => {
+  it("le drawer liste les mêmes destinations que la sidebar desktop, y compris Contact", () => {
     render(<DashboardMobileNav />);
     fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
 
@@ -40,12 +43,45 @@ describe("DashboardMobileNav", () => {
     expect(screen.getByRole("link", { name: /Contact/ })).toHaveAttribute("href", "/contact");
   });
 
-  it("cliquer un lien referme le menu (n'reste jamais ouvert après navigation)", () => {
+  it("cliquer un lien referme le drawer (ne reste jamais ouvert après navigation)", () => {
     render(<DashboardMobileNav />);
     fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
 
     fireEvent.click(screen.getByRole("link", { name: /Mes tournois/ }));
 
+    expect(screen.queryByRole("link", { name: /Mes tournois/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ouvrir le menu/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("le bouton de fermeture explicite referme le drawer", () => {
+    render(<DashboardMobileNav />);
+    fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Fermer" }));
+
+    expect(screen.queryByRole("link", { name: /Mes tournois/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ouvrir le menu/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("la touche Échap referme le drawer", () => {
+    render(<DashboardMobileNav />);
+    fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
+    expect(screen.getByRole("link", { name: /Mes tournois/ })).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("link", { name: /Mes tournois/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ouvrir le menu/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("un clic sur le fond (backdrop) referme le drawer, un clic dans le panneau ne le referme pas", () => {
+    render(<DashboardMobileNav />);
+    fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
+
+    fireEvent.mouseDown(screen.getByRole("navigation"));
+    expect(screen.getByRole("link", { name: /Mes tournois/ })).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByTestId("dashboard-mobile-nav-backdrop"));
     expect(screen.queryByRole("link", { name: /Mes tournois/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ouvrir le menu/i })).toHaveAttribute("aria-expanded", "false");
   });
