@@ -34,16 +34,16 @@ export default async function ClassementPage() {
             <Link
               key={entry.player_name}
               href={`/p/${encodeURIComponent(entry.player_name)}`}
-              className="flex items-center gap-4 rounded-xl bg-white border border-slate-200 px-5 py-4 hover:border-brand-turquoise/40 transition-colors group"
+              className="flex items-center gap-4 rounded-xl bg-surface border border-border-muted px-5 py-4 hover:border-brand-turquoise/40 transition-colors group"
             >
               <span
                 className={`w-8 text-center font-black text-lg shrink-0 ${
                   i === 0
-                    ? "text-amber-500"
+                    ? "text-warning"
                     : i === 1
                     ? "text-brand-dark"
                     : i === 2
-                    ? "text-amber-700"
+                    ? "text-warning"
                     : "text-brand-text-secondary"
                 }`}
               >

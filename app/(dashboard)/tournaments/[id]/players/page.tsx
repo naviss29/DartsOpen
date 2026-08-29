@@ -80,7 +80,7 @@ export default async function PlayersPage({ params }: Props) {
 
       {canEdit && !isFull && (
         <Card>
-          <h2 className="mb-4 font-medium text-brand-dark">
+          <h2 className="mb-4 text-h2 text-brand-dark">
             {isTeam ? "Ajouter une équipe" : "Ajouter un joueur"}
           </h2>
           <AddPlayerForm tournamentId={id} playersPerTeam={tournament.players_per_team} quickMode={isQuick} />
@@ -140,7 +140,7 @@ export default async function PlayersPage({ params }: Props) {
 
           <Card className="hidden overflow-x-auto p-0 md:block">
           <table className="w-full text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50">
+            <thead className="border-b border-border-muted bg-surface-secondary">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">#</th>
                 <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">
@@ -156,9 +156,9 @@ export default async function PlayersPage({ params }: Props) {
                 {canEdit && <th className="px-4 py-3" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-border-muted">
               {registrations.map((reg, i) => (
-                <tr key={reg.id} className="hover:bg-slate-50 align-top">
+                <tr key={reg.id} className="hover:bg-surface-secondary align-top">
                   <td className="px-4 py-3 text-brand-text-secondary">{i + 1}</td>
                   <td className="px-4 py-3 font-medium text-brand-dark">{reg.player_name}</td>
                   {isTeam && (

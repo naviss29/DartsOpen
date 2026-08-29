@@ -28,11 +28,11 @@ export function TournamentStatusButton({ tournamentId, nextStatus, label }: Prop
   return (
     <div className="flex flex-col items-end gap-2">
       {isFinishing && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 max-w-xs space-y-2">
-          <p className="text-sm text-red-700">
+        <div className="rounded-lg bg-danger-subtle border border-danger-border p-3 max-w-xs space-y-2">
+          <p className="text-sm text-danger">
             ⚠️ Clôturer le tournoi coupera immédiatement la saisie des scores pour tous les matchs en cours. Cette action est irréversible.
           </p>
-          <label className="flex items-start gap-2 text-sm text-red-700 cursor-pointer">
+          <label className="flex items-start gap-2 text-sm text-danger cursor-pointer">
             <input
               type="checkbox"
               checked={ackFinish}
@@ -46,12 +46,12 @@ export function TournamentStatusButton({ tournamentId, nextStatus, label }: Prop
       <button
         onClick={handleClick}
         disabled={isPending || (isFinishing && !ackFinish)}
-        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-brand-dark hover:bg-slate-50 disabled:opacity-50 transition-colors"
+        className="rounded-lg border border-border-default px-3 py-1.5 text-xs font-medium text-brand-dark hover:bg-surface-secondary disabled:opacity-50 transition-colors"
       >
         {isPending ? "…" : label}
       </button>
       {error && (
-        <p className="text-xs text-red-600 max-w-xs text-right">{error}</p>
+        <p className="text-xs text-danger-solid max-w-xs text-right">{error}</p>
       )}
     </div>
   );

@@ -48,7 +48,7 @@ export default async function TournamentsPage() {
               <Card className="transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <h2 className="truncate font-semibold text-brand-dark">{t.name}</h2>
+                    <h2 className="truncate text-h2 text-brand-dark">{t.name}</h2>
                     <p className="mt-1 text-sm text-brand-text-secondary">
                       📅 {new Date(t.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
                       📍 {t.location}

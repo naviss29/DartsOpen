@@ -26,11 +26,11 @@ export function RetryEntitlementButton({ tournamentId }: { tournamentId: string 
       <button
         onClick={handleClick}
         disabled={isPending}
-        className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+        className="rounded-lg border border-warning-border bg-warning-subtle px-3 py-1.5 text-xs font-medium text-warning hover:bg-warning-subtle disabled:opacity-50 transition-colors"
       >
         {isPending ? "Vérification…" : "Réessayer la confirmation"}
       </button>
-      {error && <p className="text-xs text-red-600 max-w-sm">{error}</p>}
+      {error && <p className="text-xs text-danger-solid max-w-sm">{error}</p>}
     </div>
   );
 }

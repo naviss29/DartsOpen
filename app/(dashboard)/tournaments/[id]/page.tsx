@@ -214,7 +214,7 @@ export default async function TournamentDetailPage({ params }: Props) {
       {!tournament.quick_mode && (
       <section>
         <Card className="space-y-4">
-          <h2 className="font-semibold text-brand-dark">
+          <h2 className="text-h2 text-brand-dark">
             Manches ({rounds.length})
           </h2>
 
@@ -223,7 +223,7 @@ export default async function TournamentDetailPage({ params }: Props) {
               {rounds.map((round) => (
                 <div
                   key={round.id}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3"
+                  className="flex items-center justify-between rounded-lg bg-surface-secondary px-4 py-3"
                 >
                   <div className="flex items-center gap-4">
                     <span className="w-6 text-sm font-medium text-brand-text-secondary">
@@ -245,7 +245,7 @@ export default async function TournamentDetailPage({ params }: Props) {
           )}
 
           {tournament.status === "DRAFT" && (
-            <div className="border-t border-slate-100 pt-4">
+            <div className="border-t border-border-muted pt-4">
               <p className="mb-3 text-xs text-brand-text-secondary">Ajouter une manche</p>
               <RoundForm tournamentId={id} />
             </div>

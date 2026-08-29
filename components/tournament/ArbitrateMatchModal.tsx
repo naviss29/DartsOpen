@@ -38,7 +38,7 @@ export function ArbitrateMatchButton({ match, tournamentId, laterMatchesCount = 
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-amber-700 hover:text-amber-600 transition-colors"
+        className="text-xs text-warning hover:text-warning/80 transition-colors"
         title="Arbitrer ce match"
       >
         Arbitrer
@@ -96,7 +96,7 @@ function ArbitrateModal({ open, match, tournamentId, laterMatchesCount = 0, onCl
           <button
             onClick={handleSubmit}
             disabled={isPending || (isDestructive && !ackDestructive)}
-            className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
+            className="rounded-lg bg-warning px-4 py-2 text-sm font-semibold text-white hover:bg-warning/90 transition-colors disabled:opacity-50"
           >
             {isPending ? "Enregistrement…" : "Valider la correction"}
           </button>
@@ -134,25 +134,25 @@ function ArbitrateModal({ open, match, tournamentId, laterMatchesCount = 0, onCl
         </div>
 
         {isDestructive && (
-          <div className="rounded-lg bg-red-50 border border-red-200 p-3 space-y-2">
-            <p className="text-sm text-red-700">
+          <div className="rounded-lg bg-danger-subtle border border-danger-border p-3 space-y-2">
+            <p className="text-sm text-danger">
               ⚠️ Si le vainqueur change, cette correction supprimera les{" "}
               <strong>{laterMatchesCount} match{laterMatchesCount > 1 ? "s" : ""} déjà généré{laterMatchesCount > 1 ? "s" : ""}</strong>{" "}
               dans les tours suivants (et leurs scores). Cette action est irréversible.
             </p>
-            <label className="flex items-start gap-2 text-sm text-red-700 cursor-pointer">
+            <label className="flex items-start gap-2 text-sm text-danger cursor-pointer">
               <input
                 type="checkbox"
                 checked={ackDestructive}
                 onChange={(e) => setAckDestructive(e.target.checked)}
-                className="mt-0.5 accent-red-600"
+                className="mt-0.5 accent-danger-solid"
               />
               Je comprends et je confirme la correction.
             </label>
           </div>
         )}
 
-        {error && <p className="text-sm text-red-700">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
       </div>
     </Dialog>
   );
@@ -166,7 +166,7 @@ function WinnerBtn({ label, active, onClick }: { label: string; active: boolean;
       className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors truncate ${
         active
           ? "border-brand-turquoise bg-brand-turquoise/10 text-brand-turquoise"
-          : "border-slate-200 bg-white text-brand-text-secondary hover:border-slate-400"
+          : "border-border-muted bg-surface text-brand-text-secondary hover:border-border-default"
       }`}
     >
       {label}

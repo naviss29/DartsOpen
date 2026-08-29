@@ -23,11 +23,11 @@ export function DeleteRoundButton({ roundId, tournamentId }: Props) {
           });
         }}
         disabled={isPending}
-        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50 transition-colors"
+        className="text-xs text-danger-solid hover:text-danger disabled:opacity-50 transition-colors"
       >
         {isPending ? "…" : "Supprimer"}
       </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-danger-solid">{error}</span>}
     </span>
   );
 }

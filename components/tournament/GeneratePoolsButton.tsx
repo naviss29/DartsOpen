@@ -45,16 +45,16 @@ export function GeneratePoolsButton({ tournamentId, hasPools, nbPoolsConfigured,
       )}
 
       {isRegeneration && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 max-w-xs space-y-2">
-          <p className="text-sm text-red-700">
+        <div className="rounded-lg bg-danger-subtle border border-danger-border p-3 max-w-xs space-y-2">
+          <p className="text-sm text-danger">
             ⚠️ Régénérer supprimera <strong>toutes les poules et matchs actuels</strong> (y compris les scores déjà saisis) et redistribuera les équipes aléatoirement. Cette action est irréversible.
           </p>
-          <label className="flex items-start gap-2 text-sm text-red-700 cursor-pointer">
+          <label className="flex items-start gap-2 text-sm text-danger cursor-pointer">
             <input
               type="checkbox"
               checked={ackDestructive}
               onChange={(e) => setAckDestructive(e.target.checked)}
-              className="mt-0.5 accent-red-600"
+              className="mt-0.5 accent-danger-solid"
             />
             Je comprends et je confirme la régénération.
           </label>

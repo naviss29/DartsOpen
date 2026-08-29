@@ -36,11 +36,11 @@ export function EraseRegistrationButton({ registrationId, tournamentId }: { regi
         type="button"
         onClick={() => setOpen(true)}
         disabled={isPending}
-        className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50 transition-colors"
+        className="text-xs text-danger-solid hover:text-danger disabled:opacity-50 transition-colors"
       >
         {isPending ? "…" : "Effacer les données"}
       </button>
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-danger-solid">{error}</span>}
 
       <ConfirmDialog
         open={open}

@@ -174,7 +174,7 @@ export default async function BracketPage({ params }: Props) {
                   </Button>
                 </form>
                 {poolsPending && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-warning">
                     Des matchs de poule sont encore en cours.
                   </p>
                 )}
@@ -195,10 +195,10 @@ export default async function BracketPage({ params }: Props) {
 
       {/* Bandeau vainqueur */}
       {tournamentFinished && winnerName && (
-        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-6 text-center space-y-2">
+        <div className="rounded-xl bg-success-subtle border border-success-border p-6 text-center space-y-2">
           <p className="text-4xl">🏆</p>
-          <h2 className="text-xl font-bold text-emerald-800">Vainqueur du tournoi</h2>
-          <p className="text-2xl font-bold text-emerald-800">{winnerName}</p>
+          <h2 className="text-xl font-bold text-success">Vainqueur du tournoi</h2>
+          <p className="text-2xl font-bold text-success">{winnerName}</p>
         </div>
       )}
 

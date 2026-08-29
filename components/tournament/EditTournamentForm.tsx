@@ -103,7 +103,7 @@ export function EditTournamentForm({
       {state?.error && <Alert tone="error">{state.error}</Alert>}
 
       {/* Mode rapide */}
-      <div className="rounded-lg border border-slate-200 p-4">
+      <div className="rounded-lg border border-border-muted p-4">
         <div className="flex items-start justify-between gap-6">
           <div>
             <p className="text-sm font-semibold text-brand-dark">Mode tournoi rapide</p>
@@ -114,10 +114,10 @@ export function EditTournamentForm({
             role="switch"
             aria-checked={quickMode}
             onClick={() => setQuickMode((v) => !v)}
-            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:ring-offset-2 ${quickMode ? "bg-brand-turquoise" : "bg-slate-300"}`}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:ring-offset-2 ${quickMode ? "bg-brand-turquoise" : "bg-border-default"}`}
           >
             <span
-              className={`block h-5 w-5 translate-y-0.5 rounded-full bg-white shadow transition-transform ${quickMode ? "translate-x-5.5" : "translate-x-0.5"}`}
+              className={`block h-5 w-5 translate-y-0.5 rounded-full bg-surface shadow transition-transform ${quickMode ? "translate-x-5.5" : "translate-x-0.5"}`}
             />
           </button>
         </div>
@@ -250,7 +250,7 @@ export function EditTournamentForm({
         {quickMode ? (
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-text-secondary">Nombre de poules</label>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-brand-text-secondary">
+            <div className="flex items-center gap-2 rounded-lg border border-border-default bg-surface-secondary px-3 py-2.5 text-sm text-brand-text-secondary">
               <span>1</span>
               <span className="text-xs">(mode rapide)</span>
             </div>
@@ -274,7 +274,7 @@ export function EditTournamentForm({
         {quickMode ? (
           <div>
             <label className="mb-1 block text-sm font-medium text-brand-text-secondary">Joueurs par équipe</label>
-            <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-brand-text-secondary">
+            <div className="flex items-center gap-2 rounded-lg border border-border-default bg-surface-secondary px-3 py-2.5 text-sm text-brand-text-secondary">
               <span>1</span>
               <span className="text-xs">(mode rapide)</span>
             </div>

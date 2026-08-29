@@ -23,7 +23,7 @@ export function RefereeAccessButton({ tournamentId, board }: { tournamentId: str
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-xl border border-warning-border bg-warning-subtle p-4 text-center">
       <p className="font-semibold text-brand-dark">Cible {board}</p>
 
       {result?.qrDataUrl ? (
@@ -45,7 +45,7 @@ export function RefereeAccessButton({ tournamentId, board }: { tournamentId: str
           type="button"
           disabled={isPending}
           onClick={handleClick}
-          className="rounded-lg border border-amber-400 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-60 transition-colors"
+          className="rounded-lg border border-warning-border px-3 py-2 text-xs font-semibold text-warning hover:bg-warning-subtle disabled:opacity-60 transition-colors"
         >
           {isPending ? "Génération…" : "Générer l'accès arbitre"}
         </button>

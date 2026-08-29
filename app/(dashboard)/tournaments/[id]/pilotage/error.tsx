@@ -21,21 +21,21 @@ export default function PilotageError({ error, reset }: { error: Error & { diges
 
   if (recovering) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-2">
+      <div className="rounded-xl border border-border-muted bg-surface-secondary p-6 text-center space-y-2">
         <p className="font-medium text-brand-dark">Mise à jour disponible — actualisation…</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center space-y-3">
+    <div className="rounded-xl border border-danger-border bg-danger-subtle p-6 text-center space-y-3">
       <p className="text-3xl" aria-hidden>⚠️</p>
-      <p className="font-semibold text-red-700">La console n&apos;a pas pu s&apos;afficher.</p>
-      <p className="text-sm text-red-700/80">Les données du tournoi sont temporairement indisponibles.</p>
+      <p className="font-semibold text-danger">La console n&apos;a pas pu s&apos;afficher.</p>
+      <p className="text-sm text-danger/80">Les données du tournoi sont temporairement indisponibles.</p>
       <button
         type="button"
         onClick={reset}
-        className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+        className="rounded-lg border border-danger-border bg-surface px-4 py-2 text-sm font-medium text-danger hover:bg-danger-subtle"
       >
         Réessayer
       </button>

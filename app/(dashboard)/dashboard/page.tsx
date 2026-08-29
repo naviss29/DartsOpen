@@ -62,7 +62,7 @@ export default async function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold text-brand-dark">Tous les opens</h2>
+        <h2 className="mb-4 text-h2 text-brand-dark">Tous les opens</h2>
 
         {sorted.length === 0 ? (
           <EmptyState

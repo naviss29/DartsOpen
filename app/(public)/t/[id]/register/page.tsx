@@ -51,13 +51,13 @@ export default async function RegisterPage({ params, searchParams }: Props) {
         </div>
 
         {cancelled && (
-          <div className="rounded-lg bg-amber-600/10 border border-amber-600/30 p-3 text-sm text-amber-600 text-center">
+          <div className="rounded-lg border border-warning-solid/30 bg-warning-solid/10 p-3 text-sm text-warning text-center">
             Paiement annulé. Vous pouvez réessayer.
           </div>
         )}
 
         {tournament.registration_mode === "ONSITE" ? (
-          <div className="rounded-xl bg-white border border-slate-200 p-8 text-center space-y-3">
+          <div className="rounded-xl bg-surface border border-border-muted p-8 text-center space-y-3">
             <p className="text-3xl">📍</p>
             <p className="font-semibold text-brand-dark">Inscriptions sur place uniquement</p>
             <p className="text-sm text-brand-text-secondary">
@@ -70,15 +70,15 @@ export default async function RegisterPage({ params, searchParams }: Props) {
             </p>
           </div>
         ) : isFull ? (
-          <div className="rounded-xl bg-white border border-slate-200 p-8 text-center space-y-2">
+          <div className="rounded-xl bg-surface border border-border-muted p-8 text-center space-y-2">
             <p className="text-2xl">😔</p>
             <p className="font-semibold text-brand-dark">Tournoi complet</p>
             <p className="text-brand-text-secondary text-sm">Toutes les places sont prises.</p>
           </div>
         ) : (
-          <div className="rounded-xl bg-white border border-slate-200 p-6 space-y-5">
+          <div className="rounded-xl bg-surface border border-border-muted p-6 space-y-5">
             <div>
-              <h2 className="font-semibold text-brand-dark">Inscription de votre équipe</h2>
+              <h2 className="text-h2 text-brand-dark">Inscription de votre équipe</h2>
               {tournament.entry_fee > 0 && (
                 <p className="text-brand-turquoise font-medium mt-1">
                   {(tournament.entry_fee / 100).toFixed(2)} € / joueur &nbsp;·&nbsp;{" "}

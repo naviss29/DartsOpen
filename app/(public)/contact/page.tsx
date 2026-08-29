@@ -16,7 +16,7 @@ export default function ContactPage() {
           </p>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-6">
+        <div className="rounded-xl bg-surface border border-border-muted p-6">
           <ContactForm />
         </div>
       </div>

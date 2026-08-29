@@ -109,7 +109,7 @@ export default function DashboardSidebar() {
               className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white transition-colors ${
                 current ? "font-semibold" : "font-medium hover:bg-white/10"
               }`}
-              style={current ? { backgroundColor: "rgba(7, 128, 153, 0.35)" } : undefined}
+              style={current ? { backgroundColor: "color-mix(in srgb, var(--color-accent) 35%, transparent)" } : undefined}
             >
               {current && <span aria-hidden="true" className="absolute inset-y-1 left-0 w-1 rounded-r bg-brand-turquoise" />}
               <span className="h-5 w-5 shrink-0" style={{ color: "var(--color-sidenav-icon)" }}>

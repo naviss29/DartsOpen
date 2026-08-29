@@ -4,7 +4,7 @@ import { useTransition, useState } from "react";
 import { createRegistration } from "@/lib/actions/registration";
 
 const inputCn =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
+  "w-full rounded-lg border border-border-default px-3 py-2 text-sm text-brand-dark placeholder:text-text-disabled focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
 
 interface Props {
   tournamentId: string;
@@ -58,7 +58,7 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+        <div className="rounded-lg bg-danger-subtle border border-danger-border p-3 text-sm text-danger">
           {error}
         </div>
       )}

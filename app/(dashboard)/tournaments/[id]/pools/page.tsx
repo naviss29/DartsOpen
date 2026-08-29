@@ -124,7 +124,7 @@ export default async function PoolsPage({ params }: Props) {
         <section><Card className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-semibold text-brand-dark">QR Codes — Saisie des scores</h2>
+              <h2 className="text-h2 text-brand-dark">QR Codes — Saisie des scores</h2>
               <p className="text-sm text-brand-text-secondary mt-0.5">
                 Scannez-les ou imprimez-les pour les coller sur chaque fléchier avant le tournoi.
               </p>
@@ -135,7 +135,7 @@ export default async function PoolsPage({ params }: Props) {
             {boardQRCodes.map(({ board, dataUrl }) => (
               <div
                 key={board}
-                className="flex flex-col items-center gap-2 rounded-xl border border-slate-100 p-4 text-center"
+                className="flex flex-col items-center gap-2 rounded-xl border border-border-muted p-4 text-center"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={dataUrl} alt={`QR Cible ${board}`} width={140} height={140} />
@@ -161,7 +161,7 @@ export default async function PoolsPage({ params }: Props) {
       {showQRCodes && (
         <section><Card className="space-y-4">
           <div>
-            <h2 className="font-semibold text-brand-dark">Accès arbitre (réservé à l&apos;organisateur)</h2>
+            <h2 className="text-h2 text-brand-dark">Accès arbitre (réservé à l&apos;organisateur)</h2>
             <p className="text-sm text-brand-text-secondary mt-0.5">
               À ne pas coller sur le fléchier ni diffuser aux joueurs. Générez un QR arbitre juste
               avant de le remettre à la personne concernée : il n&apos;est valable que 15 minutes,
@@ -203,8 +203,8 @@ export default async function PoolsPage({ params }: Props) {
         <div className="space-y-6">
           {pools.map((pool) => (
             <Card key={pool.id} className="overflow-hidden p-0">
-              <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="font-semibold text-brand-dark">{pool.name}</h2>
+              <div className="px-5 py-3 bg-surface-secondary border-b border-border-muted flex items-center justify-between">
+                <h2 className="text-h2 text-brand-dark">{pool.name}</h2>
                 <span className="text-xs text-brand-text-secondary">
                   {tournament.players_per_team > 1
                     ? `${pool.players.length} équipes (${pool.players.length * tournament.players_per_team} joueurs)`
@@ -251,9 +251,9 @@ export default async function PoolsPage({ params }: Props) {
 
 function StatusDot({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    PENDING: "bg-slate-300",
+    PENDING: "bg-border-default",
     IN_PROGRESS: "bg-brand-turquoise animate-pulse",
-    FINISHED: "bg-blue-400",
+    FINISHED: "bg-neutral-solid",
   };
-  return <span className={`w-2 h-2 rounded-full ${colors[status] ?? "bg-slate-300"}`} />;
+  return <span className={`w-2 h-2 rounded-full ${colors[status] ?? "bg-border-default"}`} />;
 }

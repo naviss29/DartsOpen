@@ -50,7 +50,7 @@ export function CallOrganizerButton({ tournamentId, matchId }: { tournamentId: s
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="w-full rounded-xl border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+        className="w-full rounded-xl border border-warning-border bg-warning-subtle px-4 py-3 text-sm font-semibold text-warning hover:bg-warning-subtle"
       >
         📣 Appeler l&apos;organisation
       </button>
@@ -58,8 +58,8 @@ export function CallOrganizerButton({ tournamentId, matchId }: { tournamentId: s
   }
 
   return (
-    <div className="rounded-xl border border-amber-400 bg-amber-50 p-4 space-y-3">
-      <p className="text-sm font-semibold text-amber-800">Quel est le problème ?</p>
+    <div className="rounded-xl border border-warning-border bg-warning-subtle p-4 space-y-3">
+      <p className="text-sm font-semibold text-warning">Quel est le problème ?</p>
       <div className="flex flex-col gap-2">
         {REPORT_OPTIONS.map((opt) => (
           <button
@@ -67,7 +67,7 @@ export function CallOrganizerButton({ tournamentId, matchId }: { tournamentId: s
             type="button"
             disabled={isPending}
             onClick={() => handleReport(opt.type)}
-            className="w-full rounded-lg border border-amber-400 bg-white px-4 py-3 text-left text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+            className="w-full rounded-lg border border-warning-border bg-surface px-4 py-3 text-left text-sm font-medium text-warning hover:bg-warning-subtle disabled:opacity-60"
           >
             {opt.label}
           </button>
@@ -79,12 +79,12 @@ export function CallOrganizerButton({ tournamentId, matchId }: { tournamentId: s
         maxLength={280}
         rows={2}
         placeholder="Précision (facultatif)"
-        className="w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-warning-border bg-surface px-3 py-2 text-sm"
       />
-      <button type="button" onClick={() => setExpanded(false)} className="text-xs text-amber-800 underline">
+      <button type="button" onClick={() => setExpanded(false)} className="text-xs text-warning underline">
         Annuler
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-danger-solid">{error}</p>}
     </div>
   );
 }

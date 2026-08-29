@@ -26,7 +26,7 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
       <input type="hidden" name="tournament_id" value={tournamentId} />
 
       {state?.error && (
-        <div className="col-span-3 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+        <div className="col-span-3 rounded-lg bg-danger-subtle border border-danger-border p-3 text-sm text-danger">
           {state.error}
         </div>
       )}
@@ -75,4 +75,4 @@ export function RoundForm({ tournamentId }: RoundFormProps) {
 }
 
 const selectCn =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent";
+  "w-full rounded-lg border border-border-default px-3 py-2 text-sm text-brand-dark shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent";

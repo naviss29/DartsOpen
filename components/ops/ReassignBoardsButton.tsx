@@ -32,7 +32,7 @@ export function ReassignBoardsButton({ tournamentId }: { tournamentId: string })
       <Button type="button" variant="secondary" onClick={handleClick} disabled={isPending}>
         {isPending ? "Réaffectation…" : "Réaffecter les cibles libres"}
       </Button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-danger-solid">{error}</p>}
       {done && !error && <p className="text-xs text-brand-turquoise">Cibles réaffectées.</p>}
     </div>
   );

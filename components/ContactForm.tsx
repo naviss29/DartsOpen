@@ -11,7 +11,7 @@ const SUBJECTS = [
 ];
 
 const inputCn =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
+  "w-full rounded-lg border border-border-default px-3 py-2 text-sm text-brand-dark placeholder:text-text-disabled focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:border-transparent transition-shadow";
 
 const CONTACT_EMAIL = "contact@bapps-studio.com";
 

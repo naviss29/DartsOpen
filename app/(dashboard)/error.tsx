@@ -23,21 +23,21 @@ export default function DashboardError({ error, reset }: { error: Error; reset: 
 
   if (recovering) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center space-y-2">
+      <div className="rounded-xl border border-border-muted bg-surface-secondary p-8 text-center space-y-2">
         <p className="text-brand-dark font-medium">Mise à jour disponible — actualisation…</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center space-y-4">
-      <p className="text-red-700 font-medium">Une erreur est survenue.</p>
+    <div className="rounded-xl border border-danger-border bg-danger-subtle p-8 text-center space-y-4">
+      <p className="text-danger font-medium">Une erreur est survenue.</p>
       {error?.message && (
-        <p className="text-sm text-red-600 font-mono">{error.message}</p>
+        <p className="text-sm text-danger-solid font-mono">{error.message}</p>
       )}
       <button
         onClick={reset}
-        className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-100 transition-colors"
+        className="rounded-lg border border-danger-border px-4 py-2 text-sm text-danger hover:bg-danger-subtle transition-colors"
       >
         Réessayer
       </button>

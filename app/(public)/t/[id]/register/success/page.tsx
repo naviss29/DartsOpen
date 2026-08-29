@@ -25,13 +25,13 @@ export default async function RegisterSuccessPage({ params, searchParams }: Prop
           </p>
         </div>
 
-        <div className="rounded-xl bg-white border border-slate-200 p-4 text-sm text-brand-dark space-y-1">
+        <div className="rounded-xl bg-surface border border-border-muted p-4 text-sm text-brand-dark space-y-1">
           <p>Le jour J, scannez le QR code affiché sur votre cible pour saisir vos scores directement depuis votre smartphone.</p>
         </div>
 
         <Link
           href={`/t/${id}/live`}
-          className="inline-block rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-brand-dark hover:bg-white transition-colors"
+          className="inline-block rounded-lg border border-border-muted px-4 py-2 text-sm font-medium text-brand-dark hover:bg-surface transition-colors"
         >
           Suivre le tournoi en direct →
         </Link>

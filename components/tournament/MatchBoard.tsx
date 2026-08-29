@@ -153,9 +153,9 @@ export function MatchBoard({ tournamentId, initialMatches, initialFinishedMatche
       )}
 
       {lastSetAlerts.map(({ board, next }) => (
-        <div key={board} className="rounded-xl border border-warning-solid/40 bg-warning-solid/10 px-4 py-3 flex items-center gap-3">
-          <span className="text-warning-solid text-lg">⚡</span>
-          <p className="text-sm text-warning-solid">
+        <div key={board} className="rounded-xl border border-warning-solid/40 bg-warning-solid/5 px-4 py-3 flex items-center gap-3">
+          <span className="text-warning text-lg">⚡</span>
+          <p className="text-sm text-warning">
             <span className="font-semibold">Cible {board} — Dernière manche en cours.</span>
             {" "}Prochain match :{" "}
             <span className="font-semibold text-text-primary">{next!.player1.player_name} vs {next!.player2.player_name}</span>
@@ -252,15 +252,15 @@ function MatchCard({
   // ── TERMINÉ ──────────────────────────────────────────────────────────────────
   if (match.status === "FINISHED") {
     return (
-      <div className="rounded-xl bg-blue-950/30 border border-blue-700/40 px-5 py-4">
+      <div className="rounded-xl bg-surface-secondary/60 border border-border-default/60 px-5 py-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-blue-400">✓ Cible {match.board_number}</span>
-          <span className="text-xs font-mono text-blue-300/70">{p1SetsWon} — {p2SetsWon}</span>
+          <span className="text-xs text-text-secondary">✓ Cible {match.board_number}</span>
+          <span className="text-xs font-mono text-text-secondary/70">{p1SetsWon} — {p2SetsWon}</span>
         </div>
         <div className="font-semibold text-base flex items-center gap-2">
-          <span className={p1Won ? "text-blue-300" : "text-text-secondary"}>{match.player1.player_name}</span>
+          <span className={p1Won ? "text-text-primary" : "text-text-secondary"}>{match.player1.player_name}</span>
           <span className="text-text-secondary text-sm">vs</span>
-          <span className={p2Won ? "text-blue-300" : "text-text-secondary"}>{match.player2.player_name}</span>
+          <span className={p2Won ? "text-text-primary" : "text-text-secondary"}>{match.player2.player_name}</span>
         </div>
       </div>
     );
@@ -289,18 +289,18 @@ function MatchCard({
     );
   }
 
-  // ── À VENIR — prochains sur cible (vert clair) ────────────────────────────────
+  // ── À VENIR — prochains sur cible (mis en avant) ───────────────────────────────
   if (nextUp) {
     return (
-      <div className={`rounded-xl bg-emerald-950/30 border border-emerald-700/40 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
+      <div className={`rounded-xl border border-warning-solid/40 bg-warning-solid/10 ${compact ? "px-4 py-3" : "px-5 py-4"}`}>
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-emerald-500 font-medium">{position ? `#${position}` : ""}</span>
-          {totalSets > 0 && <span className="text-xs text-emerald-600/70">Manche 0/{totalSets}</span>}
+          <span className="text-xs text-warning font-medium">{position ? `#${position}` : ""}</span>
+          {totalSets > 0 && <span className="text-xs text-warning/70">Manche 0/{totalSets}</span>}
         </div>
         <div className={`font-semibold ${compact ? "text-sm" : "text-base"}`}>
-          <span className="text-emerald-100">{match.player1.player_name}</span>
-          <span className="text-emerald-800 mx-2">vs</span>
-          <span className="text-emerald-100">{match.player2.player_name}</span>
+          <span className="text-text-primary">{match.player1.player_name}</span>
+          <span className="text-text-secondary mx-2">vs</span>
+          <span className="text-text-primary">{match.player2.player_name}</span>
         </div>
       </div>
     );

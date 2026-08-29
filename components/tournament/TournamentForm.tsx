@@ -86,10 +86,10 @@ export function TournamentForm({
               role="switch"
               aria-checked={quickMode}
               onClick={() => setQuickMode((v) => !v)}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:ring-offset-2 ${quickMode ? "bg-brand-turquoise" : "bg-slate-300"}`}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-turquoise focus:ring-offset-2 ${quickMode ? "bg-brand-turquoise" : "bg-border-default"}`}
             >
               <span
-                className={`block h-5 w-5 translate-y-0.5 rounded-full bg-white shadow transition-transform ${quickMode ? "translate-x-5.5" : "translate-x-0.5"}`}
+                className={`block h-5 w-5 translate-y-0.5 rounded-full bg-surface shadow transition-transform ${quickMode ? "translate-x-5.5" : "translate-x-0.5"}`}
               />
             </button>
           </div>
@@ -101,7 +101,7 @@ export function TournamentForm({
       {/* Infos générales */}
       <section>
         <Card className="space-y-4">
-          <h2 className="font-semibold text-brand-dark">Informations générales</h2>
+          <h2 className="text-h2 text-brand-dark">Informations générales</h2>
 
           <FormField label="Nom du tournoi" id="name" error={state?.errors?.name?.[0]}>
             <Input
@@ -128,7 +128,7 @@ export function TournamentForm({
       {/* Configuration tournoi */}
       <section>
         <Card className="space-y-4">
-          <h2 className="font-semibold text-brand-dark">Configuration</h2>
+          <h2 className="text-h2 text-brand-dark">Configuration</h2>
 
           {quickMode ? (
             /* Mode rapide : seulement nb joueurs et nb cibles */
@@ -241,7 +241,7 @@ export function TournamentForm({
 
               {Number(entryFee) > 0 && (
                 canReceivePayments ? (
-                  <div className="space-y-2 rounded-lg border border-slate-200 p-4">
+                  <div className="space-y-2 rounded-lg border border-border-muted p-4">
                     <p className="text-sm font-medium text-brand-dark">Mode de paiement</p>
                     <label className="flex cursor-pointer items-start gap-3">
                       <input type="radio" name="payment_mode" value="ONLINE" defaultChecked={(state?.fields?.payment_mode ?? "ONLINE") === "ONLINE"} className="mt-0.5 accent-brand-turquoise" />
@@ -299,7 +299,7 @@ export function TournamentForm({
                 </FormField>
               </div>
 
-              <div className="space-y-2 rounded-lg border border-slate-200 p-4">
+              <div className="space-y-2 rounded-lg border border-border-muted p-4">
                 <p className="text-sm font-medium text-brand-dark">Mode d&apos;inscription</p>
                 <label className="flex cursor-pointer items-start gap-3">
                   <input type="radio" name="registration_mode" value="ONLINE" defaultChecked={(state?.fields?.registration_mode ?? "ONLINE") === "ONLINE"} className="mt-0.5 accent-brand-turquoise" />
@@ -317,7 +317,7 @@ export function TournamentForm({
                 </label>
               </div>
 
-              <div className="space-y-2 rounded-lg border border-slate-200 p-4">
+              <div className="space-y-2 rounded-lg border border-border-muted p-4">
                 <p className="text-sm font-medium text-brand-dark">Mode de saisie des scores</p>
                 <label className="flex cursor-pointer items-start gap-3">
                   <input type="radio" name="scoring_mode" value="ELECTRONIC" defaultChecked={(state?.fields?.scoring_mode ?? "ELECTRONIC") !== "TRADITIONAL"} className="mt-0.5 accent-brand-turquoise" />

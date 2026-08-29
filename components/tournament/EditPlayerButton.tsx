@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { updateRegistration } from "@/lib/actions/player";
 
 const inputCn =
-  "w-full rounded-md border border-slate-300 px-2 py-1 text-xs text-brand-dark focus:outline-none focus:ring-1 focus:ring-brand-turquoise";
+  "w-full rounded-md border border-border-default px-2 py-1 text-xs text-brand-dark focus:outline-none focus:ring-1 focus:ring-brand-turquoise";
 
 interface Props {
   registrationId: string;
@@ -67,7 +67,7 @@ export function EditPlayerButton({
 
   return (
     <div className="flex flex-col gap-1 py-2 min-w-[180px]">
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error && <span className="text-xs text-danger-solid">{error}</span>}
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}

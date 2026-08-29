@@ -27,7 +27,7 @@ export default function NavPills({ items }: { items: Item[] }) {
           <span
             key={item.href}
             title={item.disabledReason}
-            className="cursor-not-allowed rounded-lg border border-slate-100 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-400"
+            className="cursor-not-allowed rounded-lg border border-border-muted bg-surface-secondary px-4 py-2 text-sm font-medium text-text-disabled"
           >
             {item.label}
           </span>
@@ -48,7 +48,7 @@ export default function NavPills({ items }: { items: Item[] }) {
               <span
                 className={cn(
                   "ml-2 rounded-full px-2 py-0.5 text-xs",
-                  item.current ? "bg-white/20" : "bg-slate-100 text-brand-text-secondary",
+                  item.current ? "bg-white/20" : "bg-surface-secondary text-brand-text-secondary",
                 )}
               >
                 {item.badge}

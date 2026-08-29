@@ -28,7 +28,7 @@ export default async function SettingsPage() {
 
       <section>
         <Card className="space-y-3">
-          <h2 className="font-semibold text-brand-dark">Mon compte</h2>
+          <h2 className="text-h2 text-brand-dark">Mon compte</h2>
           <div className="text-sm text-brand-dark space-y-1">
             <p><span className="text-brand-text-secondary">Email :</span> {user.email}</p>
           </div>
@@ -37,7 +37,7 @@ export default async function SettingsPage() {
 
       <section>
         <Card className="space-y-4">
-          <h2 className="font-semibold text-brand-dark">Paiements</h2>
+          <h2 className="text-h2 text-brand-dark">Paiements</h2>
 
           {!slug ? (
             <OrganizationSection />

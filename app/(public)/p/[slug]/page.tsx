@@ -17,8 +17,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 const RESULT_LABELS = {
-  champion: { label: "Champion", color: "text-amber-600", icon: "👑" },
-  bracket: { label: "Bracket", color: "text-blue-600", icon: "🎯" },
+  champion: { label: "Champion", color: "text-warning", icon: "👑" },
+  bracket: { label: "Bracket", color: "text-accent", icon: "🎯" },
   poules: { label: "Poules", color: "text-brand-text-secondary", icon: "" },
 } as const;
 
@@ -40,7 +40,7 @@ export default async function PlayerProfilePage({ params }: Props) {
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-2xl font-black text-brand-dark shrink-0">
+        <div className="w-14 h-14 rounded-full bg-surface-secondary border border-border-muted flex items-center justify-center text-2xl font-black text-brand-dark shrink-0">
           {profile.player_name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
@@ -68,7 +68,7 @@ export default async function PlayerProfilePage({ params }: Props) {
         ].map(({ label, value, accent }) => (
           <div
             key={label}
-            className="rounded-xl bg-white border border-slate-200 p-4 text-center"
+            className="rounded-xl bg-surface border border-border-muted p-4 text-center"
           >
             <p className={`tabular-score text-3xl font-black ${accent ? "text-brand-dark" : "text-brand-text-secondary"}`}>
               {value}
@@ -80,12 +80,12 @@ export default async function PlayerProfilePage({ params }: Props) {
 
       {/* Détail wins */}
       {stats.wins > 0 && (
-        <div className="rounded-xl bg-white border border-slate-200 px-5 py-4 flex gap-6">
+        <div className="rounded-xl bg-surface border border-border-muted px-5 py-4 flex gap-6">
           <div className="text-center">
             <p className="text-xl font-bold text-brand-dark">{stats.pool_wins}</p>
             <p className="text-xs text-brand-text-secondary mt-0.5">poule</p>
           </div>
-          <div className="w-px bg-slate-200" />
+          <div className="w-px bg-border-muted" />
           <div className="text-center">
             <p className="text-xl font-bold text-brand-dark">{stats.bracket_wins}</p>
             <p className="text-xs text-brand-text-secondary mt-0.5">bracket</p>
@@ -104,7 +104,7 @@ export default async function PlayerProfilePage({ params }: Props) {
             return (
               <div
                 key={t.tournament_id}
-                className="flex items-center gap-4 rounded-xl bg-white border border-slate-200 px-5 py-4"
+                className="flex items-center gap-4 rounded-xl bg-surface border border-border-muted px-5 py-4"
               >
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-brand-dark truncate">{t.tournament_name}</p>

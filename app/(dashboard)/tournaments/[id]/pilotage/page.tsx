@@ -54,14 +54,14 @@ const NEXT_STATUS_LABEL: Record<string, string> = {
 
 const CHECKLIST_STYLES: Record<ChecklistLevel, { icon: string; text: string }> = {
   ok: { icon: "✅", text: "text-brand-text-secondary" },
-  warning: { icon: "⚠️", text: "text-amber-700" },
-  blocking: { icon: "⛔", text: "text-red-700" },
+  warning: { icon: "⚠️", text: "text-warning" },
+  blocking: { icon: "⛔", text: "text-danger" },
 };
 
 const BOARD_STYLES: Record<BoardStatus, string> = {
-  free: "border-slate-200 bg-slate-50",
+  free: "border-border-muted bg-surface-secondary",
   active: "border-brand-turquoise/40 bg-brand-turquoise/5",
-  anomaly: "border-red-300 bg-red-50",
+  anomaly: "border-danger-border bg-danger-subtle",
 };
 
 export default async function TournamentPilotagePage({ params }: Props) {
@@ -146,7 +146,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
         </div>
 
         {summary.totalMatches > 0 && (
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-surface-secondary">
             <div
               className="h-full rounded-full bg-brand-turquoise transition-all"
               style={{ width: `${summary.progressPercent}%` }}
@@ -159,7 +159,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       <Card
         className={
           nextAction.tone === "warning"
-            ? "border-amber-300 bg-amber-50"
+            ? "border-warning-border bg-warning-subtle"
             : nextAction.tone === "action"
               ? "border-brand-turquoise/40 bg-brand-turquoise/5"
               : ""
@@ -180,7 +180,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       {/* ── Interventions demandées (DO-FIELD-INCIDENT-001) ──────────────── */}
       {openFieldIncidents.length > 0 && (
         <section className="space-y-2">
-          <h2 className="font-semibold text-brand-dark">Interventions demandées ({openFieldIncidents.length})</h2>
+          <h2 className="text-h2 text-brand-dark">Interventions demandées ({openFieldIncidents.length})</h2>
           <div className="space-y-2">
             {openFieldIncidents.map((fi) => (
               <FieldIncidentCard key={fi.id} tournamentId={id} incident={fi} />
@@ -192,7 +192,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       {/* ── Incidents (§8) ───────────────────────────────────────────────── */}
       {incidents.length > 0 && (
         <section className="space-y-2">
-          <h2 className="font-semibold text-brand-dark">Incidents détectés</h2>
+          <h2 className="text-h2 text-brand-dark">Incidents détectés</h2>
           {incidents.map((incident) => (
             <Alert key={incident.id} tone={incident.severity === "critical" ? "error" : "warning"}>
               <p>{incident.message}</p>
@@ -210,7 +210,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       {isPreStart && (
         <section>
           <Card className="space-y-3">
-            <h2 className="font-semibold text-brand-dark">Checklist de préparation</h2>
+            <h2 className="text-h2 text-brand-dark">Checklist de préparation</h2>
             <ul className="space-y-2">
               {checklist.map((item) => {
                 const style = CHECKLIST_STYLES[item.level];
@@ -232,7 +232,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       {/* ── Cibles (§6) ──────────────────────────────────────────────────── */}
       {(isRunning || isFinished) && (
         <section className="space-y-2">
-          <h2 className="font-semibold text-brand-dark">Cibles</h2>
+          <h2 className="text-h2 text-brand-dark">Cibles</h2>
           {boards.length === 0 ? (
             <EmptyState icon={<span aria-hidden>🎯</span>} title="Aucune cible configurée" />
           ) : boards.every((b) => b.status === "free") && !isFinished ? (
@@ -280,7 +280,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       {/* ── Matchs en attente (§7) ───────────────────────────────────────── */}
       {isRunning && (
         <section className="space-y-2">
-          <h2 className="font-semibold text-brand-dark">Matchs en attente ({queue.length})</h2>
+          <h2 className="text-h2 text-brand-dark">Matchs en attente ({queue.length})</h2>
           {queue.length === 0 ? (
             <EmptyState icon={<span aria-hidden>⏳</span>} title="Aucun match en attente" />
           ) : (
@@ -289,7 +289,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
                   (dbPromoteUnassignedMatches) promeut par id de création, pas par cet ordre de
                   lecture — aucune promesse d'ordre de passage ici, voir buildMatchQueue(). */}
               {queue.map((m) => (
-                <div key={m.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-sm">
+                <div key={m.id} className="flex items-center justify-between rounded-lg bg-surface-secondary px-4 py-3 text-sm">
                   <div>
                     <p className="font-medium text-brand-dark">
                       {m.player1?.player_name ?? "?"} <span className="text-brand-text-secondary">vs</span> {m.player2?.player_name ?? "?"}
@@ -308,7 +308,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
       {/* ── Participants (§9) ────────────────────────────────────────────── */}
       <section>
         <Card className="space-y-3">
-          <h2 className="font-semibold text-brand-dark">Participants</h2>
+          <h2 className="text-h2 text-brand-dark">Participants</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Inscrits" value={`${participants.totalRegistrations}`} />
             <Stat label="Payés" value={`${participants.paidRegistrations}`} />
@@ -325,7 +325,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
 
       {/* ── Actions rapides (§10) ────────────────────────────────────────── */}
       <section className="space-y-2">
-        <h2 className="font-semibold text-brand-dark">Actions rapides</h2>
+        <h2 className="text-h2 text-brand-dark">Actions rapides</h2>
         <div className="flex flex-wrap gap-2">
           <Button href={`/tournaments/${id}/players`} variant="secondary">👥 Participants</Button>
           {!tournament.quick_mode && <Button href={`/tournaments/${id}/pools`} variant="secondary">🏆 Poules & QR</Button>}
@@ -344,7 +344,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-3 py-2 text-center">
+    <div className="rounded-lg bg-surface-secondary px-3 py-2 text-center">
       <p className="text-lg font-bold text-brand-dark">
         {value}
         {sub && <span className="ml-1 text-xs font-normal text-brand-text-secondary">{sub}</span>}
