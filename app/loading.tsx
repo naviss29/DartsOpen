@@ -1,22 +1,20 @@
+import Image from "next/image";
+
 export default function Loading() {
   return (
     <main
       role="status"
       aria-live="polite"
-      style={{
-        minHeight: "100dvh",
-        display: "grid",
-        placeItems: "center",
-        padding: "24px",
-        background: "#f8fafc",
-        color: "#334155",
-      }}
+      className="grid min-h-[calc(100dvh-64px)] place-items-center bg-surface p-6 text-secondary"
     >
-      <div style={{ display: "grid", justifyItems: "center", gap: "20px" }}>
-        <img
+      <div className="grid justify-items-center gap-5">
+        <Image
           src="/brand/dartsopen-logo-vertical.svg"
           alt="DartsOpen"
-          style={{ width: "min(220px, 64vw)", height: "auto" }}
+          width={220}
+          height={220}
+          className="h-auto w-full max-w-[220px]"
+          priority
         />
         <span>Chargement…</span>
       </div>
