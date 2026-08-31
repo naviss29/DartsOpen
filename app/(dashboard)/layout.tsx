@@ -29,7 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           à celui du document, empêchant tout `sticky` posé sur AppHeader/la sidebar de produire
           un effet réel (aucun ancêtre scrollable entre eux et le viewport). Le scroll de
           référence redevient le document, comme dans BSsite (même shell, même contrat). */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {/* BAPPS-SHELL-001 — AppHeader (DS) : continuité visuelle avec la sidebar sombre,
             jamais de bande blanche entre les deux (UX-UI-Standards.md §3ter). Toujours visible
             (desktop ET mobile). L'email porte son propre min-w-0/truncate ; le bouton de
@@ -63,8 +63,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
             appliquait déjà 32px vertical dès 640px, soit 384px trop tôt sur toute la plage
             tablette 640-1023px. Le padding horizontal (`px-4 sm:px-6`) est inchangé — hors
             périmètre de cette correction. */}
-        <main className="flex-1">
-          <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 lg:py-8">{children}</div>
+        <main className="min-w-0 flex-1 overflow-x-hidden">
+          <div className="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6 lg:py-8">{children}</div>
         </main>
       </div>
     </div>
