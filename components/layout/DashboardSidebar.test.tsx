@@ -63,13 +63,16 @@ describe("BAPPS-UX-UNIFICATION-006-FIX-001 — en-tête de sidebar 64px, aligné
   });
 });
 
-describe("BAPPS-UX-UNIFICATION-006-FIX-001 — sidebar réellement sticky sur la hauteur du viewport", () => {
-  it("porte sticky top-0 h-screen (jamais un simple className sans ancêtre overflow qui l'annulerait)", () => {
+describe("BAPPS-UX-UNIFICATION-006-FIX-002 — sidebar réellement sticky sur la hauteur dynamique du viewport", () => {
+  it("porte sticky top-0 h-dvh et garde la signature collée en bas", () => {
     const { container } = render(<DashboardSidebar />);
     const aside = container.querySelector("aside") as HTMLElement;
 
     expect(aside.className).toMatch(/(^|\s)sticky(\s|$)/);
     expect(aside.className).toMatch(/(^|\s)top-0(\s|$)/);
-    expect(aside.className).toMatch(/(^|\s)h-screen(\s|$)/);
+    expect(aside.className).toMatch(/(^|\s)h-dvh(\s|$)/);
+    const signature = screen.getByRole("link", { name: /by BApps Studio/i }).parentElement as HTMLElement;
+    expect(signature.className).toMatch(/(^|\s)sticky(\s|$)/);
+    expect(signature.className).toMatch(/(^|\s)bottom-0(\s|$)/);
   });
 });
