@@ -14,10 +14,12 @@ describe("DashboardSidebar", () => {
     expect(screen.getByRole("link", { name: /Tableau de bord/ })).not.toHaveAttribute("aria-current");
   });
 
-  it("BAPPS-SHELL-001 — affiche un wordmark texte DartsOpen (jamais le logo image, illisible sur fond sombre)", () => {
-    render(<DashboardSidebar />);
-    expect(screen.queryByRole("img", { name: "DartsOpen" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "DartsOpen" })).toHaveAttribute("href", "/dashboard");
+  it("BAPPS-SHELL-001 — affiche le symbole DartsOpen devant le nom du produit", () => {
+    const { container } = render(<DashboardSidebar />);
+    const brandLink = screen.getByRole("link", { name: "DartsOpen" });
+    expect(brandLink).toHaveAttribute("href", "/dashboard");
+    expect(brandLink.querySelector("img")).toHaveAttribute("src", expect.stringContaining("dartsopen-symbol.svg"));
+    expect(container.querySelector("aside")).toContainElement(brandLink);
   });
 
   it("DO-BETA-UX-001 — porte la signature de l'écosystème sous forme de lien cliquable vers BSsite (UX-UI-Standards §3bis)", () => {
