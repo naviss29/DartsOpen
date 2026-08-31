@@ -6,7 +6,7 @@
 
 ## Modèle économique
 
-- **Frais plateforme (0,10 €/joueur), inscriptions en ligne uniquement** : prélevé automatiquement via Stripe Connect (SterPlatform). Au-delà de la limite gratuite de joueurs, le modèle actuel (abonnement/crédit tournoi SterPlatform, voir DARTSOPEN-MONETIZATION) couvre déjà ce seuil — DO-PAYPAL-REMOVAL-001 a supprimé le palier PayPal manuel qui existait avant cette architecture.
+- **Aucun frais plateforme sur les inscriptions** (décision Product Owner — `PLATFORM_FEE_CENTS = 0`, `lib/platformFee.ts`) : le modèle économique repose exclusivement sur la limite gratuite de joueurs, au-delà de laquelle le crédit tournoi/abonnement SterPlatform (voir DARTSOPEN-MONETIZATION) prend le relais — DO-PAYPAL-REMOVAL-001 a supprimé le palier PayPal manuel qui existait avant cette architecture.
 
 ## Dépendances SterPlatform (à implémenter après SterPlatform)
 

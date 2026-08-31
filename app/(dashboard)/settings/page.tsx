@@ -96,8 +96,8 @@ async function StripeConnectSection({ slug }: { slug: string }) {
           <Pill tone="success">Paiements activés</Pill>
         </div>
         <p className="text-sm text-brand-text-secondary">
-          Les droits d&apos;inscription sont reversés sur le compte bancaire de votre organisation.
-          La plateforme retient <strong>0,10 € par inscription</strong> comme frais de service.
+          Les droits d&apos;inscription sont intégralement reversés sur le compte bancaire de
+          votre organisation — DartsOpen ne prélève aucun frais par inscription.
         </p>
         <div className="flex items-center gap-4">
           <Button href={stripeUrl} variant="secondary">
