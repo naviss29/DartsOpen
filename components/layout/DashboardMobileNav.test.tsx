@@ -16,7 +16,9 @@ vi.mock("next/navigation", () => ({
 describe("DashboardMobileNav", () => {
   it("affiche le wordmark DartsOpen même en repli mobile (identité toujours visible)", () => {
     render(<DashboardMobileNav />);
-    expect(screen.getByRole("link", { name: "DartsOpen" })).toHaveAttribute("href", "/dashboard");
+    const brandLink = screen.getByRole("link", { name: "DartsOpen" });
+    expect(brandLink).toHaveAttribute("href", "/dashboard");
+    expect(brandLink.querySelector("img")).toHaveAttribute("src", expect.stringContaining("dartsopen-symbol.svg"));
   });
 
   it("le menu est fermé par défaut, ouvert par un bouton hamburger explicite (aria-expanded)", () => {
