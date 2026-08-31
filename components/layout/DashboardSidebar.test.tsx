@@ -28,10 +28,6 @@ describe("DashboardSidebar", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
-  it("DO-BETA-UX-001 — expose Contact comme entrée de navigation normale (mission §2)", () => {
-    render(<DashboardSidebar />);
-    expect(screen.getByRole("link", { name: /Contact/ })).toHaveAttribute("href", "/contact");
-  });
 
   it("BAPPS-SHELL-002 — la sidebar utilise le même token que le header (AppHeader, DS) : --color-sidenav-surface, jamais une couleur hardcodée localement", () => {
     render(<DashboardSidebar />);
@@ -43,6 +39,7 @@ describe("DashboardSidebar", () => {
     render(<DashboardSidebar />);
     expect(screen.queryByRole("link", { name: /soutenir/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "/dons" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Contact/ })).not.toBeInTheDocument();
   });
 });
 
