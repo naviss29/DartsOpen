@@ -4,6 +4,8 @@ import { AppHeader } from "@naviss29/design-system";
 import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import DashboardMobileNav from "@/components/layout/DashboardMobileNav";
 import LogoutButton from "@/components/LogoutButton";
+import DashboardApplicationSwitcher from "@/components/layout/DashboardApplicationSwitcher";
+import { getMyOrganizationsProducts } from "@/lib/api/organizations";
 
 /**
  * DO-OPS-001 — `LandscapeGuard` (overlay bloquant "Tournez votre téléphone") enveloppait
@@ -17,6 +19,7 @@ import LogoutButton from "@/components/LogoutButton";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getUser();
   if (!user) redirect('/login');
+  const organizations = await getMyOrganizationsProducts();
 
   return (
     <div className="flex min-h-screen bg-brand-light">
@@ -46,6 +49,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           className="sticky top-0 z-10"
           end={
             <>
+              <DashboardApplicationSwitcher organizations={organizations} />
               <span className="hidden min-w-0 truncate text-sm text-white/80 sm:block">{user.email}</span>
               <span className="shrink-0">
                 <LogoutButton className="text-white/90 hover:text-white" />

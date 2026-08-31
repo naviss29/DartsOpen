@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Marketplace" color="#0B1220">
+  <title>Marketplace — zones organisées autour d'une place centrale</title>
+  <defs>
+    <linearGradient id="brand-gradient" gradientUnits="userSpaceOnUse" x1="68" y1="68" x2="444" y2="444">
+      <stop offset="0" stop-color="#078099"/>
+      <stop offset="1" stop-color="#2ED9B4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Quatre zones ouvertes vers une place centrale. -->
+  <path d="M80 198V114q0-34 34-34h84M314 80h84q34 0 34 34v84M432 314v84q0 34-34 34h-84M198 432h-84q-34 0-34-34v-84"
+        fill="none" stroke="url(#brand-gradient)" stroke-width="46" stroke-linecap="round"/>
+
+  <!-- Circulations reliant chaque zone au point de coordination. -->
+  <path d="M118 256h83M311 256h83M256 118v83M256 311v83"
+        fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"/>
+
+  <!-- Place centrale : un repère commun, pas un stand littéral. -->
+  <rect x="215" y="215" width="82" height="82" rx="24" transform="rotate(45 256 256)"
+        fill="url(#brand-gradient)" stroke="currentColor" stroke-width="13"/>
+  <circle cx="256" cy="256" r="15" fill="currentColor"/>
+</svg>

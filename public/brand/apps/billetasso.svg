@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="BilletAsso" color="#0B1220">
+  <title>BilletAsso — billet pour associations</title>
+  <defs>
+    <linearGradient id="brand-gradient" gradientUnits="userSpaceOnUse" x1="48" y1="100" x2="464" y2="412">
+      <stop offset="0" stop-color="#078099"/><stop offset="1" stop-color="#2ED9B4"/>
+    </linearGradient>
+    <mask id="ticket-notches" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="white"/>
+      <circle cx="52" cy="256" r="38" fill="black"/>
+      <circle cx="460" cy="256" r="38" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- Silhouette de billet avec deux encoches franches : impossible à confondre avec un drapeau. -->
+  <rect x="52" y="116" width="408" height="280" rx="38" fill="none" stroke="url(#brand-gradient)" stroke-width="26" mask="url(#ticket-notches)"/>
+  <path d="M350 137v238" fill="none" stroke="url(#brand-gradient)" stroke-width="16" stroke-linecap="round" stroke-dasharray="18 20"/>
+
+  <!-- Collectif relié : trois acteurs contenus à l'intérieur du billet. -->
+  <path d="M158 278 224 216l66 62" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="158" cy="278" r="25" fill="url(#brand-gradient)" stroke="currentColor" stroke-width="11"/>
+  <circle cx="224" cy="216" r="29" fill="url(#brand-gradient)" stroke="currentColor" stroke-width="11"/>
+  <circle cx="290" cy="278" r="25" fill="url(#brand-gradient)" stroke="currentColor" stroke-width="11"/>
+  <path d="M132 333c8-31 39-49 66-39 10 4 19 10 26 19 7-9 16-15 26-19 27-10 58 8 66 39" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- Souche du billet, volontairement simple. -->
+  <circle cx="405" cy="226" r="18" fill="url(#brand-gradient)"/>
+  <path d="M385 276h40M385 316h40" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round"/>
+</svg>
