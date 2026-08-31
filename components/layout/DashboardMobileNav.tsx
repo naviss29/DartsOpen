@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { dashboardNavLinks, navIcons } from "@/components/layout/DashboardSidebar";
 import Button from "@/components/ui/Button";
@@ -17,9 +18,8 @@ import Button from "@/components/ui/Button";
  * (`app/(dashboard)/layout.tsx`) — ordre imposé par la charte §10.1 ("ouverture du menu mobile
  * si nécessaire" en premier, identité ensuite). L'identité DartsOpen reste toujours visible sur
  * mobile (repris de l'ancienne bande) mais vit désormais DANS l'unique barre 64px d'AppHeader,
- * jamais dans une seconde barre — wordmark texte (comme `DashboardSidebar.tsx`), pas le logo SVG
- * de l'ancienne bande, qui suppose un fond clair : aucune variante inversée n'existe pour ce
- * produit, voir le docblock de `DashboardSidebar.tsx`. Et un panneau latéral (drawer), monté
+ * jamais dans une seconde barre. Le symbole DartsOpen validé accompagne le nom, comme sur desktop.
+ * Le panneau latéral (drawer) est monté
  * uniquement à l'ouverture : largeur `min(320px, viewport − 48px)` (formule exacte de la charte
  * §4.1), fond `--color-sidenav-surface` (même ton que la sidebar desktop/AppHeader, jamais blanc
  * pour un élément de nav structurel) — le wordmark n'y est pas répété (déjà visible en
@@ -46,8 +46,9 @@ export default function DashboardMobileNav() {
   return (
     <>
       <div className="flex items-center gap-2 md:hidden">
-        <Link href="/dashboard" className="text-lg font-bold tracking-tight text-white">
-          DartsOpen
+        <Link href="/dashboard" className="flex items-center gap-2 text-lg font-bold tracking-tight text-white">
+          <Image src="/brand/dartsopen-symbol.svg" alt="" width={24} height={24} className="h-6 w-6 shrink-0 object-contain" priority />
+          <span>DartsOpen</span>
         </Link>
         <Button
           type="button"
