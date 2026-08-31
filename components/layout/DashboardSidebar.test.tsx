@@ -39,6 +39,10 @@ describe("DashboardSidebar", () => {
     render(<DashboardSidebar />);
     expect(screen.queryByRole("link", { name: /soutenir/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "/dons" })).not.toBeInTheDocument();
+  });
+
+  it("n’affiche plus l’écran Contact obsolète dans la navigation produit", () => {
+    render(<DashboardSidebar />);
     expect(screen.queryByRole("link", { name: /Contact/ })).not.toBeInTheDocument();
   });
 });
