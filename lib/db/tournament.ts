@@ -15,7 +15,7 @@ import {
 } from "../utils/x01";
 import { seedBracket } from "../utils/bracket";
 import { computePoolStandings } from "../utils/pools";
-import { pairPlayers, getQuickModeGameFormat } from "../utils/doubleElimination";
+import { pairPlayers, shufflePlayers, getQuickModeGameFormat } from "../utils/doubleElimination";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — vérifie qu'une erreur P2002
@@ -2508,9 +2508,17 @@ export async function doAdvanceQuickTournamentTx(
     activeMatches.flatMap((m) => [m.player1_id, m.player2_id].filter(Boolean) as string[]),
   );
 
-  // Joueurs disponibles par bracket
-  const availableWB = activePlayers.filter((p) => p.lives === 2 && !inMatchIds.has(p.id));
-  const availableLB = activePlayers.filter((p) => p.lives === 1 && !inMatchIds.has(p.id));
+  // Joueurs disponibles par bracket — mélangés (DO-SPORT-002 bis) : allPlayers est trié par
+  // createdAt (ordre d'inscription, dbGetQuickTournamentState), et sans ce mélange, un nombre
+  // impair de joueurs disponibles laissait TOUJOURS le même joueur (dernier de cet ordre fixe)
+  // en attente à chaque appel. Sur un tournoi où les cibles finissent leurs matchs à des
+  // vitesses différentes, ce joueur pouvait rester non ré-apparié pendant plusieurs cycles
+  // pendant que les autres s'affrontaient et perdaient des vies entre eux — jusqu'à devenir
+  // "dernier survivant winners" (déclenchant la Grande Finale) après avoir joué beaucoup moins
+  // de matchs que ses adversaires. Mélanger à chaque appel donne à chaque joueur disponible une
+  // chance égale d'être celui qui attend, au lieu d'un biais déterministe sur le même joueur.
+  const availableWB = shufflePlayers(activePlayers.filter((p) => p.lives === 2 && !inMatchIds.has(p.id)));
+  const availableLB = shufflePlayers(activePlayers.filter((p) => p.lives === 1 && !inMatchIds.has(p.id)));
 
   // ── Fin de tournoi ─────────────────────────────────────────────────────────
   if (totalActive <= 1 && activeMatches.length === 0) {
