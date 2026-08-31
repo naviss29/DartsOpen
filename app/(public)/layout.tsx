@@ -6,7 +6,6 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         <a href="/mentions-legales" className="hover:text-brand-dark">Mentions légales</a>
         <a href="/confidentialite" className="hover:text-brand-dark">Confidentialité</a>
         <a href="/cgu" className="hover:text-brand-dark">CGU</a>
-        <a href="/contact" className="hover:text-brand-dark">Contact</a>
       </footer>
     </div>
   );

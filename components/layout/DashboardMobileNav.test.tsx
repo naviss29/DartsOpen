@@ -33,14 +33,14 @@ describe("DashboardMobileNav", () => {
     expect(screen.getByRole("link", { name: /Mes tournois/ })).toBeInTheDocument();
   });
 
-  it("le drawer liste les mêmes destinations que la sidebar desktop, y compris Contact", () => {
+  it("le drawer liste les mêmes destinations que la sidebar desktop", () => {
     render(<DashboardMobileNav />);
     fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
 
     expect(screen.getByRole("link", { name: /Tableau de bord/ })).toHaveAttribute("href", "/dashboard");
     expect(screen.getByRole("link", { name: /Mes tournois/ })).toHaveAttribute("href", "/tournaments");
     expect(screen.getByRole("link", { name: /Paramètres/ })).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("link", { name: /Contact/ })).toHaveAttribute("href", "/contact");
+    expect(screen.queryByRole("link", { name: /Contact/ })).not.toBeInTheDocument();
   });
 
   it("cliquer un lien referme le drawer (ne reste jamais ouvert après navigation)", () => {

@@ -49,13 +49,13 @@ export default async function DashboardPage() {
   const sorted = [...allTournaments].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 space-y-6 sm:space-y-8">
       <PageHeader title="Tableau de bord" actions={<Button href="/tournaments/new">+ Nouveau tournoi</Button>} />
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         {stats.map((stat) => (
-          <div key={stat.label} className={`rounded-xl p-4 ${stat.color}`}>
-            <p className="text-3xl font-bold">{stat.value}</p>
+          <div key={stat.label} className={`min-w-0 rounded-xl p-3 sm:p-4 ${stat.color}`}>
+            <p className="text-2xl font-bold sm:text-3xl">{stat.value}</p>
             <p className="mt-1 text-sm">{stat.label}</p>
           </div>
         ))}
@@ -71,7 +71,7 @@ export default async function DashboardPage() {
             action={<Button href="/tournaments/new">Créer mon premier tournoi</Button>}
           />
         ) : (
-          <div className="grid gap-3">
+          <div className="grid min-w-0 gap-3">
             {sorted.map((t) => {
               const href = t.is_mine
                 ? `/tournaments/${t.id}`
@@ -83,7 +83,7 @@ export default async function DashboardPage() {
 
               return isClickable ? (
                 <Link key={t.id} href={href} className="block">
-                  <Card className="transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
+                  <Card className="min-w-0 overflow-hidden transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
                     <TournamentRow t={t} />
                   </Card>
                 </Link>
@@ -102,9 +102,9 @@ export default async function DashboardPage() {
 
 function TournamentRow({ t }: { t: Tournament }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="truncate font-semibold text-brand-dark">{t.name}</p>
           {t.is_mine && (
             <Pill tone="brand" className="shrink-0">Mon tournoi</Pill>
@@ -121,7 +121,7 @@ function TournamentRow({ t }: { t: Tournament }) {
           <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
         </div>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:flex-col sm:items-end">
         <StatusBadge status={t.status} />
         {!t.is_mine && t.status === "OPEN" && (
           <span className="text-xs font-semibold text-brand-turquoise">S&apos;inscrire →</span>

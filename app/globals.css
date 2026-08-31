@@ -41,3 +41,28 @@ body {
 .tabular-score {
   font-variant-numeric: tabular-nums;
 }
+
+
+/* Repli local du correctif mobile ApplicationSwitcher 0.8.1. */
+@media (max-width: 639px) {
+  .bapps-application-switcher > [role="dialog"] {
+    position: fixed;
+    inset-inline: 1rem;
+    top: calc(var(--layout-header-height) + 0.5rem);
+    display: flex;
+    width: auto;
+    max-height: calc(100dvh - var(--layout-header-height) - 1rem);
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .bapps-application-switcher > [role="dialog"] > div:first-of-type {
+    min-height: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .bapps-application-switcher [role="dialog"] .text-small {
+    display: none;
+  }
+}

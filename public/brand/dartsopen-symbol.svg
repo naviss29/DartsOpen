@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DartsOpen" color="#0B1220">
+  <title>DartsOpen — cible avec trois fléchettes</title>
+  <defs>
+    <linearGradient id="brand-gradient" gradientUnits="userSpaceOnUse" x1="55" y1="65" x2="455" y2="445">
+      <stop offset="0" stop-color="#078099"/>
+      <stop offset="1" stop-color="#2ED9B4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cible : anneaux nets, sans référence au tir à l'arc. -->
+  <circle cx="218" cy="278" r="170" fill="none" stroke="url(#brand-gradient)" stroke-width="28"/>
+  <circle cx="218" cy="278" r="122" fill="none" stroke="url(#brand-gradient)" stroke-width="18" opacity=".82"/>
+  <circle cx="218" cy="278" r="76" fill="none" stroke="url(#brand-gradient)" stroke-width="18" opacity=".64"/>
+  <circle cx="218" cy="278" r="25" fill="url(#brand-gradient)"/>
+
+  <!-- Trois darts : pointe courte, barrel épais, tige et ailettes compactes. -->
+  <g fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(-5 -28) rotate(-37 218 278)">
+      <path d="M218 278 255 265v26Z" stroke="none"/>
+      <rect x="251" y="266" width="72" height="24" rx="10" stroke="none"/>
+      <path d="M318 278h113" fill="none" stroke-width="10"/>
+      <path d="M410 278 472 231 454 278Z" stroke="none"/>
+      <path d="M410 278 472 325 454 278Z" stroke="none"/>
+      <path d="M411 278 464 260 480 278 464 296Z" fill="url(#brand-gradient)" stroke="none"/>
+    </g>
+    <g transform="translate(0 0) rotate(-17 218 278)">
+      <path d="M218 278 255 265v26Z" stroke="none"/>
+      <rect x="251" y="266" width="72" height="24" rx="10" stroke="none"/>
+      <path d="M318 278h113" fill="none" stroke-width="10"/>
+      <path d="M410 278 472 231 454 278Z" stroke="none"/>
+      <path d="M410 278 472 325 454 278Z" stroke="none"/>
+      <path d="M411 278 464 260 480 278 464 296Z" fill="url(#brand-gradient)" stroke="none"/>
+    </g>
+    <g transform="translate(5 28) rotate(3 218 278)">
+      <path d="M218 278 255 265v26Z" stroke="none"/>
+      <rect x="251" y="266" width="72" height="24" rx="10" stroke="none"/>
+      <path d="M318 278h113" fill="none" stroke-width="10"/>
+      <path d="M410 278 472 231 454 278Z" stroke="none"/>
+      <path d="M410 278 472 325 454 278Z" stroke="none"/>
+      <path d="M411 278 464 260 480 278 464 296Z" fill="url(#brand-gradient)" stroke="none"/>
+    </g>
+  </g>
+</svg>

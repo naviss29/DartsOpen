@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="EventManager" color="#0B1220">
+  <title>EventManager — planning opérationnel d'un événement</title>
+  <defs>
+    <linearGradient id="brand-gradient" gradientUnits="userSpaceOnUse" x1="60" y1="55" x2="452" y2="455">
+      <stop offset="0" stop-color="#078099"/><stop offset="1" stop-color="#2ED9B4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Fiche calendrier complète. -->
+  <rect x="67" y="82" width="378" height="362" rx="44" fill="none" stroke="url(#brand-gradient)" stroke-width="24"/>
+  <path d="M79 169h354" fill="none" stroke="url(#brand-gradient)" stroke-width="20"/>
+  <path d="M151 60v60m210-60v60" fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round"/>
+
+  <!-- Ligne temporelle et trois étapes opérationnelles. -->
+  <path d="M143 218v154" fill="none" stroke="url(#brand-gradient)" stroke-width="15" stroke-linecap="round"/>
+  <g fill="url(#brand-gradient)" stroke="currentColor" stroke-width="10">
+    <circle cx="143" cy="220" r="20"/>
+    <circle cx="143" cy="296" r="20"/>
+    <circle cx="143" cy="372" r="20"/>
+  </g>
+
+  <!-- Tâches et validations : gestion, pas simple date. -->
+  <path d="M190 220h112M190 296h112M190 372h112" fill="none" stroke="currentColor" stroke-width="17" stroke-linecap="round"/>
+  <g fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="338" y="198" width="48" height="48" rx="10"/>
+    <path d="m348 220 10 10 20-25"/>
+    <rect x="338" y="274" width="48" height="48" rx="10"/>
+    <path d="m348 296 10 10 20-25"/>
+    <rect x="338" y="350" width="48" height="48" rx="10"/>
+  </g>
+</svg>
