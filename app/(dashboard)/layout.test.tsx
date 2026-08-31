@@ -3,16 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
 
 vi.mock("@/lib/api/auth", () => ({ getUser: vi.fn() }));
+vi.mock("@/lib/api/organizations", () => ({ getMyOrganizationsProducts: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn(), usePathname: () => "/tournaments" }));
 
 import DashboardLayout from "./layout";
 import { getUser } from "@/lib/api/auth";
+import { getMyOrganizationsProducts } from "@/lib/api/organizations";
 
 const mockedGetUser = vi.mocked(getUser);
+const mockedGetOrganizations = vi.mocked(getMyOrganizationsProducts);
 
 beforeEach(() => {
   mockedGetUser.mockReset();
   mockedGetUser.mockResolvedValue({ id: "u1", email: "alan@example.com", roles: [], isVerified: true });
+  mockedGetOrganizations.mockResolvedValue([{ activeProducts: [{ product: "DARTSOPEN" }] }]);
 });
 
 /**

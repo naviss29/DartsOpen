@@ -16,7 +16,9 @@ vi.mock("next/navigation", () => ({
 describe("DashboardMobileNav", () => {
   it("affiche le wordmark DartsOpen même en repli mobile (identité toujours visible)", () => {
     render(<DashboardMobileNav />);
-    expect(screen.getByRole("link", { name: "DartsOpen" })).toHaveAttribute("href", "/dashboard");
+    const brandLink = screen.getByRole("link", { name: "DartsOpen" });
+    expect(brandLink).toHaveAttribute("href", "/dashboard");
+    expect(brandLink.querySelector("img")).toHaveAttribute("src", expect.stringContaining("dartsopen-symbol.svg"));
   });
 
   it("le menu est fermé par défaut, ouvert par un bouton hamburger explicite (aria-expanded)", () => {
@@ -33,14 +35,14 @@ describe("DashboardMobileNav", () => {
     expect(screen.getByRole("link", { name: /Mes tournois/ })).toBeInTheDocument();
   });
 
-  it("le drawer liste les mêmes destinations que la sidebar desktop, y compris Contact", () => {
+  it("le drawer liste les mêmes destinations que la sidebar desktop", () => {
     render(<DashboardMobileNav />);
     fireEvent.click(screen.getByRole("button", { name: /ouvrir le menu/i }));
 
     expect(screen.getByRole("link", { name: /Tableau de bord/ })).toHaveAttribute("href", "/dashboard");
     expect(screen.getByRole("link", { name: /Mes tournois/ })).toHaveAttribute("href", "/tournaments");
     expect(screen.getByRole("link", { name: /Paramètres/ })).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("link", { name: /Contact/ })).toHaveAttribute("href", "/contact");
+    expect(screen.queryByRole("link", { name: /Contact/ })).not.toBeInTheDocument();
   });
 
   it("cliquer un lien referme le drawer (ne reste jamais ouvert après navigation)", () => {

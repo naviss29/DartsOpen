@@ -114,3 +114,25 @@ export async function hasOptionalSubscriptionAccess(slug: string, productKey: st
     return false;
   }
 }
+
+
+export type OrganizationProductsSummary = {
+  activeProducts: Array<{ product: string }>;
+};
+
+/**
+ * Résumé des produits actifs pour alimenter le switcher transverse.
+ * SterPlatform reste l'unique source de vérité des droits.
+ */
+export async function getMyOrganizationsProducts(): Promise<OrganizationProductsSummary[] | null> {
+  const token = await getServerToken();
+  if (!token) return null;
+
+  try {
+    const res = await apiFetch('/api/me/organizations/summary', {}, token);
+    if (!res.ok) return null;
+    return await res.json() as OrganizationProductsSummary[];
+  } catch {
+    return null;
+  }
+}

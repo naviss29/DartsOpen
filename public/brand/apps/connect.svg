@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Connect — monogramme C" color="#0B1220">
+  <title>Connect — double C relié</title>
+  <defs>
+    <linearGradient id="brand-gradient" gradientUnits="userSpaceOnUse" x1="65" y1="65" x2="447" y2="447">
+      <stop offset="0" stop-color="#078099"/><stop offset="1" stop-color="#2ED9B4"/>
+    </linearGradient>
+  </defs>
+  <!-- Un C unique, plus net en petite taille et immédiatement rattaché au nom Connect. -->
+  <path d="M365 112a176 176 0 1 0 0 288" fill="none" stroke="url(#brand-gradient)" stroke-width="54" stroke-linecap="round"/>
+  <!-- Trois points reliés traversent l'ouverture : connexion et rappel des circuits BApps. -->
+  <path d="M174 256h228" fill="none" stroke="currentColor" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="190" cy="256" r="23" fill="url(#brand-gradient)" stroke="currentColor" stroke-width="12"/>
+  <circle cx="278" cy="256" r="23" fill="url(#brand-gradient)" stroke="currentColor" stroke-width="12"/>
+  <circle cx="366" cy="256" r="23" fill="url(#brand-gradient)" stroke="currentColor" stroke-width="12"/>
+</svg>

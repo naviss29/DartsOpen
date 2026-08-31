@@ -14,10 +14,12 @@ describe("DashboardSidebar", () => {
     expect(screen.getByRole("link", { name: /Tableau de bord/ })).not.toHaveAttribute("aria-current");
   });
 
-  it("BAPPS-SHELL-001 — affiche un wordmark texte DartsOpen (jamais le logo image, illisible sur fond sombre)", () => {
-    render(<DashboardSidebar />);
-    expect(screen.queryByRole("img", { name: "DartsOpen" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "DartsOpen" })).toHaveAttribute("href", "/dashboard");
+  it("BAPPS-SHELL-001 — affiche le symbole DartsOpen devant le nom du produit", () => {
+    const { container } = render(<DashboardSidebar />);
+    const brandLink = screen.getByRole("link", { name: "DartsOpen" });
+    expect(brandLink).toHaveAttribute("href", "/dashboard");
+    expect(brandLink.querySelector("img")).toHaveAttribute("src", expect.stringContaining("dartsopen-symbol.svg"));
+    expect(container.querySelector("aside")).toContainElement(brandLink);
   });
 
   it("DO-BETA-UX-001 — porte la signature de l'écosystème sous forme de lien cliquable vers BSsite (UX-UI-Standards §3bis)", () => {
@@ -28,10 +30,6 @@ describe("DashboardSidebar", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
-  it("DO-BETA-UX-001 — expose Contact comme entrée de navigation normale (mission §2)", () => {
-    render(<DashboardSidebar />);
-    expect(screen.getByRole("link", { name: /Contact/ })).toHaveAttribute("href", "/contact");
-  });
 
   it("BAPPS-SHELL-002 — la sidebar utilise le même token que le header (AppHeader, DS) : --color-sidenav-surface, jamais une couleur hardcodée localement", () => {
     render(<DashboardSidebar />);
@@ -43,6 +41,11 @@ describe("DashboardSidebar", () => {
     render(<DashboardSidebar />);
     expect(screen.queryByRole("link", { name: /soutenir/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "/dons" })).not.toBeInTheDocument();
+  });
+
+  it("n’affiche plus l’écran Contact obsolète dans la navigation produit", () => {
+    render(<DashboardSidebar />);
+    expect(screen.queryByRole("link", { name: /Contact/ })).not.toBeInTheDocument();
   });
 });
 
@@ -60,13 +63,16 @@ describe("BAPPS-UX-UNIFICATION-006-FIX-001 — en-tête de sidebar 64px, aligné
   });
 });
 
-describe("BAPPS-UX-UNIFICATION-006-FIX-001 — sidebar réellement sticky sur la hauteur du viewport", () => {
-  it("porte sticky top-0 h-screen (jamais un simple className sans ancêtre overflow qui l'annulerait)", () => {
+describe("BAPPS-UX-UNIFICATION-006-FIX-002 — sidebar réellement sticky sur la hauteur dynamique du viewport", () => {
+  it("porte sticky top-0 h-dvh et garde la signature collée en bas", () => {
     const { container } = render(<DashboardSidebar />);
     const aside = container.querySelector("aside") as HTMLElement;
 
     expect(aside.className).toMatch(/(^|\s)sticky(\s|$)/);
     expect(aside.className).toMatch(/(^|\s)top-0(\s|$)/);
-    expect(aside.className).toMatch(/(^|\s)h-screen(\s|$)/);
+    expect(aside.className).toMatch(/(^|\s)h-dvh(\s|$)/);
+    const signature = screen.getByRole("link", { name: /by BApps Studio/i }).parentElement as HTMLElement;
+    expect(signature.className).toMatch(/(^|\s)sticky(\s|$)/);
+    expect(signature.className).toMatch(/(^|\s)bottom-0(\s|$)/);
   });
 });
