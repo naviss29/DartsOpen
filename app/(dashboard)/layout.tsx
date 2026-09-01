@@ -49,8 +49,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           className="sticky top-0 z-10"
           end={
             <>
-              <DashboardApplicationSwitcher organizations={organizations} />
               <span className="hidden min-w-0 truncate text-sm text-white/80 sm:block">{user.email}</span>
+              <DashboardApplicationSwitcher organizations={organizations} />
               <span className="shrink-0">
                 <LogoutButton className="text-white/90 hover:text-white" />
               </span>
