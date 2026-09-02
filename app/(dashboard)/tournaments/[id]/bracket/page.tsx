@@ -113,7 +113,6 @@ export default async function BracketPage({ params }: Props) {
   }
 
   return (
-    <LandscapeGuard>
     <div className="space-y-6">
       <div className="space-y-3">
         <Link href={`/tournaments/${id}`} className="text-sm text-brand-text-secondary hover:text-brand-dark">
@@ -205,13 +204,21 @@ export default async function BracketPage({ params }: Props) {
       {hasBracket ? (
         <Card>
           {tournament.quick_mode ? (
+            // DO-QUICK-UX-001 — grille de cartes empilables (grid-cols-1 sur mobile,
+            // QuickBracketView), jamais un arbre large : contrairement à BracketView
+            // ci-dessous, cette vue est déjà utilisable en portrait, l'arbitrage ne doit
+            // donc jamais être bloqué par LandscapeGuard.
             <QuickBracketView matches={bracketMatches} tournamentId={id} />
           ) : (
-            <BracketView
-              matches={bracketMatches}
-              maxRound={maxRound}
-              tournamentId={id}
-            />
+            // Arbre à largeur fixe (CARD_W/CONN_W, overflow-x-auto) — seule vue
+            // effectivement optimisée pour le paysage, voir mobile.test.ts.
+            <LandscapeGuard>
+              <BracketView
+                matches={bracketMatches}
+                maxRound={maxRound}
+                tournamentId={id}
+              />
+            </LandscapeGuard>
           )}
         </Card>
       ) : (
@@ -231,6 +238,5 @@ export default async function BracketPage({ params }: Props) {
         />
       )}
     </div>
-    </LandscapeGuard>
   );
 }
