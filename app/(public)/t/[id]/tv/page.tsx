@@ -38,11 +38,14 @@ export default async function TvPage({ params }: Props) {
 
   return (
     <LandscapeGuard>
-    <div data-theme="dark" className="h-screen bg-surface text-text-primary flex flex-col overflow-hidden p-6 gap-5">
+    {/* Espacement et titre en clamp(vmin) — voir le même commentaire dans TvBoard.tsx : ce mode
+        doit rester lisible aussi bien sur une TV que sur un téléphone en paysage (viewport très
+        court), sans laisser le header fixe grignoter l'espace disponible pour les cibles. */}
+    <div data-theme="dark" className="h-screen bg-surface text-text-primary flex flex-col overflow-hidden p-[clamp(0.75rem,3vmin,1.5rem)] gap-[clamp(0.5rem,2vmin,1.25rem)]">
       {/* Header compact */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">🎯 {tournament.name}</h1>
+          <h1 className="text-[clamp(1.25rem,4.5vmin,1.875rem)] font-black tracking-tight truncate">🎯 {tournament.name}</h1>
           <p className="text-text-secondary text-xs tracking-widest uppercase mt-0.5">
             Affichage temps réel · actualisation toutes les 5 s
           </p>

@@ -34,6 +34,15 @@ describe("(dashboard)/error.tsx", () => {
     expect(screen.queryByText(/mise à jour disponible/i)).not.toBeInTheDocument();
   });
 
+  it("erreur réseau (fetch échoué, ex. hors ligne) : jamais le message technique brut du navigateur, un message compréhensible à la place", () => {
+    const error = Object.assign(new Error("Failed to fetch"), { digest: "w" });
+    render(<DashboardError error={error} reset={() => {}} />);
+
+    expect(screen.queryByText(/failed to fetch/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/connexion impossible/i)).toBeInTheDocument();
+    expect(screen.getByText(/vérifiez votre connexion internet/i)).toBeInTheDocument();
+  });
+
   it("le bouton Réessayer appelle reset()", () => {
     const error = Object.assign(new Error("Erreur normale."), { digest: "z" });
     const reset = vi.fn();

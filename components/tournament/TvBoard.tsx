@@ -85,9 +85,9 @@ export function TvBoard({ tournamentId, initialMatches, nbBoards }: Props) {
                      "grid-cols-4";
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-4">
+    <div className="flex-1 min-h-0 flex flex-col gap-[clamp(0.5rem,2vmin,1rem)]">
       {/* Grille des cibles — occupe tout l'espace disponible */}
-      <div className={`flex-1 min-h-0 grid ${gridCols} gap-4`}>
+      <div className={`flex-1 min-h-0 grid ${gridCols} gap-[clamp(0.5rem,2vmin,1rem)]`}>
         {boards.map(({ n, active, next, last }) => (
           <BoardCard key={n} boardNum={n} active={active} next={next} last={last} />
         ))}
@@ -132,12 +132,16 @@ function BoardCard({
   next: Match | null;
   last: Match | null;
 }) {
-  // Toutes les cartes prennent h-full pour remplir la cellule de grille
+  // Toutes les cartes prennent h-full pour remplir la cellule de grille. Tailles de texte en
+  // `clamp(..., vmin, ...)` plutôt que des tailles Tailwind fixes (text-4xl/6xl) : un mode TV
+  // s'affiche aussi bien sur une TV 1080p que sur un téléphone en paysage (hauteur de viewport
+  // très réduite) — `vmin` (le plus petit des deux côtés) évite que le contenu déborde de la
+  // carte et soit tronqué sur un écran court, tout en restant grand sur un vrai écran large.
   if (active) {
     const p1s = active.sets.filter((s) => s.winner_id === active.player1.id).length;
     const p2s = active.sets.filter((s) => s.winner_id === active.player2.id).length;
     return (
-      <div className="h-full rounded-2xl border border-success-solid/40 bg-success-solid/10 p-6 relative overflow-hidden flex flex-col justify-between">
+      <div className="h-full rounded-2xl border border-success-solid/40 bg-success-solid/10 p-[clamp(0.75rem,3vmin,1.5rem)] relative overflow-hidden flex flex-col justify-between">
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-success-solid rounded-t-2xl" />
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold uppercase tracking-widest text-success-solid">Cible {boardNum}</span>
@@ -146,10 +150,10 @@ function BoardCard({
             En cours
           </span>
         </div>
-        <div className="text-center flex flex-col items-center gap-3">
-          <p className="text-4xl font-black text-text-primary leading-tight truncate w-full">{active.player1.player_name}</p>
-          <p className="tabular-score text-6xl font-black text-success-solid tabular-nums tracking-widest">{p1s} — {p2s}</p>
-          <p className="text-4xl font-black text-text-primary leading-tight truncate w-full">{active.player2.player_name}</p>
+        <div className="text-center flex flex-col items-center gap-[clamp(0.375rem,1.5vmin,0.75rem)] min-h-0">
+          <p className="text-[clamp(1.1rem,4.5vmin,2.25rem)] font-black text-text-primary leading-tight truncate w-full">{active.player1.player_name}</p>
+          <p className="tabular-score text-[clamp(1.75rem,8vmin,3.75rem)] font-black text-success-solid tabular-nums tracking-widest">{p1s} — {p2s}</p>
+          <p className="text-[clamp(1.1rem,4.5vmin,2.25rem)] font-black text-text-primary leading-tight truncate w-full">{active.player2.player_name}</p>
         </div>
         <div />
       </div>
@@ -158,15 +162,15 @@ function BoardCard({
 
   if (next) {
     return (
-      <div className="h-full rounded-2xl border border-warning-solid/30 bg-warning-solid/10 p-6 flex flex-col justify-between">
+      <div className="h-full rounded-2xl border border-warning-solid/30 bg-warning-solid/10 p-[clamp(0.75rem,3vmin,1.5rem)] flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold uppercase tracking-widest text-warning-solid">Cible {boardNum}</span>
           <span className="text-sm text-warning font-medium">Prochain</span>
         </div>
-        <div className="text-center flex flex-col items-center gap-4">
-          <p className="text-3xl font-bold text-text-primary truncate w-full">{next.player1.player_name}</p>
-          <p className="text-text-secondary text-xl font-medium">vs</p>
-          <p className="text-3xl font-bold text-text-primary truncate w-full">{next.player2.player_name}</p>
+        <div className="text-center flex flex-col items-center gap-[clamp(0.5rem,2vmin,1rem)] min-h-0">
+          <p className="text-[clamp(0.95rem,3.8vmin,1.875rem)] font-bold text-text-primary truncate w-full">{next.player1.player_name}</p>
+          <p className="text-text-secondary text-[clamp(0.75rem,2vmin,1.25rem)] font-medium">vs</p>
+          <p className="text-[clamp(0.95rem,3.8vmin,1.875rem)] font-bold text-text-primary truncate w-full">{next.player2.player_name}</p>
         </div>
         <div />
       </div>
@@ -179,15 +183,15 @@ function BoardCard({
     const p1s   = last.sets.filter((s) => s.winner_id === last.player1.id).length;
     const p2s   = last.sets.filter((s) => s.winner_id === last.player2.id).length;
     return (
-      <div className="h-full rounded-2xl border border-border-default/60 bg-surface-secondary/30 p-6 flex flex-col justify-between">
+      <div className="h-full rounded-2xl border border-border-default/60 bg-surface-secondary/30 p-[clamp(0.75rem,3vmin,1.5rem)] flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold uppercase tracking-widest text-text-secondary">Cible {boardNum}</span>
           <span className="text-sm text-text-secondary font-medium">Libre</span>
         </div>
-        <div className="text-center flex flex-col items-center gap-3">
-          <p className={`text-3xl font-bold truncate w-full ${p1Won ? "text-text-secondary" : "text-text-secondary/70"}`}>{last.player1.player_name}</p>
-          <p className="tabular-score text-5xl font-black text-text-secondary tabular-nums tracking-widest">{p1s} — {p2s}</p>
-          <p className={`text-3xl font-bold truncate w-full ${p2Won ? "text-text-secondary" : "text-text-secondary/70"}`}>{last.player2.player_name}</p>
+        <div className="text-center flex flex-col items-center gap-[clamp(0.375rem,1.5vmin,0.75rem)] min-h-0">
+          <p className={`text-[clamp(0.95rem,3.8vmin,1.875rem)] font-bold truncate w-full ${p1Won ? "text-text-secondary" : "text-text-secondary/70"}`}>{last.player1.player_name}</p>
+          <p className="tabular-score text-[clamp(1.5rem,6.5vmin,3rem)] font-black text-text-secondary tabular-nums tracking-widest">{p1s} — {p2s}</p>
+          <p className={`text-[clamp(0.95rem,3.8vmin,1.875rem)] font-bold truncate w-full ${p2Won ? "text-text-secondary" : "text-text-secondary/70"}`}>{last.player2.player_name}</p>
         </div>
         <div />
       </div>
@@ -195,9 +199,9 @@ function BoardCard({
   }
 
   return (
-    <div className="h-full rounded-2xl border border-border-default bg-surface/50 p-6 flex flex-col justify-between">
+    <div className="h-full rounded-2xl border border-border-default bg-surface/50 p-[clamp(0.75rem,3vmin,1.5rem)] flex flex-col justify-between">
       <span className="text-sm font-bold uppercase tracking-widest text-text-secondary">Cible {boardNum}</span>
-      <p className="text-center text-text-secondary text-lg">En attente</p>
+      <p className="text-center text-text-secondary text-[clamp(0.9rem,2.5vmin,1.125rem)]">En attente</p>
       <div />
     </div>
   );
