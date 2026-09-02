@@ -251,6 +251,15 @@ model Match {
    * comme un résultat sportif normal. Null pour tout match décidé normalement.
    */
   forfeitedPlayerId String? @map("forfeited_player_id")
+  /**
+   * DO-SPORT-003 — seul champ fiable pour ordonner les matchs par ancienneté réelle : `id` est
+   * un `uuid()` (v4, aléatoire), jamais chronologiquement trié. `dbPromoteUnassignedMatches()`/
+   * `tryFinalizeMatch()` (lib/db/tournament.ts) triaient jusqu'ici les matchs PENDING par
+   * `orderBy: { id: "asc" }`, ce qui promouvait une cible libérée vers un match choisi
+   * essentiellement au hasard plutôt que le plus ancien — un match tout juste créé pouvait donc
+   * devenir arbitrable avant un match en attente depuis plus longtemps.
+   */
+  createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
   tournament Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)

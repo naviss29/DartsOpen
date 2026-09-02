@@ -433,13 +433,15 @@ export function buildBoardsView(tournament: ConsoleTournament, matches: ConsoleM
 /**
  * DO-OPS-002 (défaut 5) — regroupement de LECTURE uniquement (poules avant bracket, puis
  * round/position croissants, pour qu'un humain retrouve facilement un match dans la liste),
- * jamais un ordre de passage garanti : le moteur réel (dbPromoteUnassignedMatches(),
- * lib/db/tournament.ts) promeut les matchs PENDING par `orderBy: { id: "asc" }` — un simple
- * ordre technique de création, sans rapport avec round/position, qu'afficher tel quel serait
- * illisible pour l'organisateur. Le tri ci-dessous ne pilote AUCUNE décision d'affectation de
- * cible (jamais un nouveau moteur de scheduling) ; l'UI (pilotage/page.tsx) ne doit jamais lui
- * associer de numérotation ("#1", "#2"...) qui laisserait croire à un ordre de passage garanti —
- * voir la mission DO-OPS-002 §5, option retenue : présentation sans promesse d'ordre.
+ * jamais un ordre de passage garanti : le moteur réel (dbPromoteUnassignedMatches()/
+ * tryFinalizeMatch(), lib/db/tournament.ts) promeut les matchs PENDING par `orderBy: {
+ * createdAt: "asc" }` (DO-SPORT-003 — le plus ancien en premier, jamais `id`, un `uuid()`
+ * aléatoire sans rapport avec l'ordre de création), sans rapport avec round/position, qu'afficher
+ * tel quel serait illisible pour l'organisateur. Le tri ci-dessous ne pilote AUCUNE décision
+ * d'affectation de cible (jamais un nouveau moteur de scheduling) ; l'UI (pilotage/page.tsx) ne
+ * doit jamais lui associer de numérotation ("#1", "#2"...) qui laisserait croire à un ordre de
+ * passage garanti — voir la mission DO-OPS-002 §5, option retenue : présentation sans promesse
+ * d'ordre.
  */
 export function buildMatchQueue(matches: ConsoleMatch[]): ConsoleMatch[] {
   return matches

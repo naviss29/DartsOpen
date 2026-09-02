@@ -1591,7 +1591,7 @@ async function tryFinalizeMatch(tx: Prisma.TransactionClient, match: {
   if (match.boardNumber > 0) {
     const next = await tx.match.findFirst({
       where: { tournamentId: match.tournament.id, boardNumber: 0, status: "PENDING" },
-      orderBy: { id: "asc" },
+      orderBy: { createdAt: "asc" },
     });
     if (next) {
       await tx.match.update({
@@ -2403,7 +2403,9 @@ export async function dbGetQuickTournamentRoundIds(
 }
 
 /**
- * Promeut les matchs PENDING (board=0) vers les cibles libres après création dynamique.
+ * Promeut les matchs PENDING (board=0) vers les cibles libres après création dynamique, les
+ * plus anciens (`createdAt` — voir DO-SPORT-003) en premier, pour qu'un match qui vient d'être
+ * créé (fin d'un autre match) ne devienne jamais arbitrable avant un match déjà en attente.
  * Appelé après chaque génération de matchs en mode rapide pour éviter les cibles vides.
  *
  * DO-SPORT-001 (Étape 4) — paramétré par `tx`, toujours appelé depuis l'intérieur d'une
@@ -2431,7 +2433,7 @@ export async function dbPromoteUnassignedMatches(
   const pending = await tx.match.findMany({
     where: { tournamentId, status: "PENDING", boardNumber: 0 },
     select: { id: true },
-    orderBy: { id: "asc" },
+    orderBy: { createdAt: "asc" },
     take: freeBoards.length,
   });
 
