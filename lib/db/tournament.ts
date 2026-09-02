@@ -1219,7 +1219,7 @@ export async function dbDeleteBracketMatches(tournamentId: string, client: Prism
  *
  * DO-SPORT-002 — règle minimale sûre pour le mode rapide : une fois qu'un match a été propagé
  * par doAdvanceQuickTournament (`quickAdvanceProcessedAt != null` — perte de vie déjà appliquée,
- * matchs suivants WB/LB/Grande Finale déjà créés à partir de CE résultat), son vainqueur ne peut
+ * matchs suivants du bassin unique déjà créés à partir de CE résultat), son vainqueur ne peut
  * plus être modifié par l'arbitrage standard : reconstruire rétroactivement la perte de vie et
  * les matchs descendants déjà créés est hors périmètre de cette mission (aucun mécanisme de
  * rollback n'existe). Refus explicite, avant toute écriture — aucune donnée n'est modifiée. Un
@@ -1416,7 +1416,7 @@ export async function dbConfirmWinner(
  * l'appelant (declareForfeit, lib/actions/fieldIncident.ts), exactement comme pour
  * markWinnerDirect/arbitrateMatch, qui déclenche ENSUITE doAdvanceQuickTournament() si
  * `match.quickMode` — seul point qui décrémente une vie (dbDecrementLives) et fait progresser
- * le bracket rapide (nouveaux matchs WB/LB, Grande Finale, clôture). Un seul chemin de vérité
+ * le bassin unique du mode rapide (nouveaux matchs, clôture). Un seul chemin de vérité
  * pour la perte de vie : cette fonction ne la touche jamais elle-même.
  */
 export async function dbDeclareForfeit(
@@ -1591,7 +1591,11 @@ async function tryFinalizeMatch(tx: Prisma.TransactionClient, match: {
   if (match.boardNumber > 0) {
     const next = await tx.match.findFirst({
       where: { tournamentId: match.tournament.id, boardNumber: 0, status: "PENDING" },
-      orderBy: { createdAt: "asc" },
+      // `id` en second critère : deux matchs créés dans la même transaction (même vague de
+      // création) partagent le même `createdAt` (now() Postgres = horodatage de la transaction,
+      // identique pour tout l'insert par lot) — sans ce départage, l'ordre entre eux serait
+      // laissé à la discrétion du plan d'exécution SQL plutôt que déterministe.
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     if (next) {
       await tx.match.update({
@@ -2259,7 +2263,7 @@ export async function dbCancelLastThrow(
   });
 }
 
-// ── Mode rapide — double élimination ─────────────────────────────────────────
+// ── Mode rapide — bassin unique, 2 vies (DO-QUICK-POOL-001) ──────────────────
 
 /**
  * Retourne toutes les inscriptions PAID d'un tournoi avec leurs vies restantes.
@@ -2317,6 +2321,12 @@ export async function dbResetAllLives(tx: Prisma.TransactionClient, tournamentId
 /**
  * Retourne les matchs de bracket encore actifs (non FINISHED) en mode rapide.
  * Exclut les matchs de poule (poolId non null).
+ *
+ * DO-QUICK-POOL-001 — plus de filtre sur `bracketType` (WINNERS/LOSERS/GRAND_FINAL ont disparu,
+ * les matchs de mode rapide utilisent désormais SINGLE comme le mode standard) : un tournoi est
+ * exclusivement l'un ou l'autre (`Tournament.quickMode`), jamais les deux — cette fonction n'est
+ * appelée que pour un tournoi déjà connu comme quick mode par l'appelant, donc `tournamentId` +
+ * `poolId: null` suffisent à isoler ses matchs de bracket, sans ambiguïté avec le mode standard.
  */
 export async function dbGetActiveQuickBracketMatches(tx: Prisma.TransactionClient, tournamentId: string) {
   const rows = await tx.match.findMany({
@@ -2324,13 +2334,11 @@ export async function dbGetActiveQuickBracketMatches(tx: Prisma.TransactionClien
       tournamentId,
       poolId: null,
       status: { not: "FINISHED" },
-      bracketType: { in: ["WINNERS", "LOSERS", "GRAND_FINAL"] },
     },
     select: {
       id: true,
       player1Id: true,
       player2Id: true,
-      bracketType: true,
       bracketRound: true,
     },
   });
@@ -2338,22 +2346,18 @@ export async function dbGetActiveQuickBracketMatches(tx: Prisma.TransactionClien
     id: m.id,
     player1_id: m.player1Id,
     player2_id: m.player2Id,
-    bracket_type: m.bracketType,
     bracket_round: m.bracketRound,
   }));
 }
 
 /**
- * Supprime tous les matchs de bracket quickMode (WINNERS, LOSERS, GRAND_FINAL)
- * et les rounds associés. Appelé lors de la régénération du bracket rapide.
+ * Supprime tous les matchs de bracket du mode rapide et les rounds associés. Appelé lors de la
+ * régénération du bracket rapide. Voir le docblock de dbGetActiveQuickBracketMatches ci-dessus
+ * pour pourquoi `tournamentId` + `poolId: null` suffisent, sans filtre `bracketType`.
  */
 export async function dbDeleteQuickBracketMatchesAndRounds(tx: Prisma.TransactionClient, tournamentId: string): Promise<void> {
   await tx.match.deleteMany({
-    where: {
-      tournamentId,
-      poolId: null,
-      bracketType: { in: ["WINNERS", "LOSERS", "GRAND_FINAL"] },
-    },
+    where: { tournamentId, poolId: null },
   });
   await tx.round.deleteMany({ where: { tournamentId } });
 }
@@ -2433,7 +2437,9 @@ export async function dbPromoteUnassignedMatches(
   const pending = await tx.match.findMany({
     where: { tournamentId, status: "PENDING", boardNumber: 0 },
     select: { id: true },
-    orderBy: { createdAt: "asc" },
+    // `id` en second critère : voir le commentaire équivalent dans tryFinalizeMatch ci-dessus —
+    // deux matchs de la même vague de création partagent le même `createdAt`.
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: freeBoards.length,
   });
 
@@ -2456,16 +2462,29 @@ export function selectRoundId(
 }
 
 /**
- * DO-SPORT-001, déplacé et rendu tx-first par DO-SCORING-002 — même logique que
- * doAdvanceToNextRoundTx() ci-dessus, pour le mode rapide : perte de vie, calcul des joueurs
- * disponibles, création Grande Finale/nouveaux matchs WB/LB, promotion des cibles libres, et
- * clôture du tournoi si c'était le dernier match actif — le tout sous le `tx` fourni par
- * l'appelant, jamais un second verrou. Appelée par lib/actions/quickTournament.ts::
+ * DO-SPORT-001, déplacé et rendu tx-first par DO-SCORING-002, bassin unique depuis
+ * DO-QUICK-POOL-001 — même logique que doAdvanceToNextRoundTx() ci-dessus, pour le mode rapide :
+ * perte de vie, calcul des joueurs disponibles, création des nouveaux matchs, promotion des
+ * cibles libres, et clôture du tournoi si c'était le dernier match actif — le tout sous le `tx`
+ * fourni par l'appelant, jamais un second verrou. Appelée par lib/actions/quickTournament.ts::
  * doAdvanceQuickTournament() (son propre withTournamentLock()) ET par dbRecordThrow()
  * ci-dessous (bien que la saisie X01 volée-par-volée ne concerne en pratique jamais le mode
  * rapide — le tournoi rapide reste toujours arbitré directement, voir CLAUDE.md — ce branchement
  * est conservé par symétrie avec dbConfirmWinner/dbMarkWinnerDirect qui gèrent déjà les deux
  * modes de façon générique).
+ *
+ * DO-QUICK-POOL-001 — un joueur encore à 2 vies et un joueur à 1 vie ne sont plus deux files
+ * d'appariement séparées (winners/losers) : dès qu'une cible se libère, TOUS les joueurs encore
+ * en vie et non engagés dans un autre match forment un seul bassin, apparié sans tenir compte du
+ * nombre de vies restant, jusqu'à ce qu'il n'en reste plus qu'un. L'ancien découpage WB/LB avait
+ * deux défauts signalés par l'organisateur : (1) un joueur qui venait de perdre sa première vie
+ * restait bloqué en attente tant qu'un SECOND joueur n'avait pas aussi perdu une vie (seuil
+ * `>= 2` par bracket), même si des joueurs à 2 vies étaient disponibles au même instant ; (2) une
+ * nouvelle manche losers pouvait démarrer et occuper une cible pendant que d'anciens matchs
+ * winners tournaient encore ailleurs, ce qui donnait l'impression d'un ordre de passage faussé.
+ * Le dernier match d'un tournoi (2 joueurs restants) est donc simplement le dernier appariement
+ * de ce bassin unique — jamais un type de match ni un traitement dédié (voir resolveChampions,
+ * lib/db/ranking.ts, qui détecte déjà le vainqueur via le round SINGLE le plus élevé).
  */
 export async function doAdvanceQuickTournamentTx(
   tx: Prisma.TransactionClient,
@@ -2510,17 +2529,12 @@ export async function doAdvanceQuickTournamentTx(
     activeMatches.flatMap((m) => [m.player1_id, m.player2_id].filter(Boolean) as string[]),
   );
 
-  // Joueurs disponibles par bracket — mélangés (DO-SPORT-002 bis) : allPlayers est trié par
-  // createdAt (ordre d'inscription, dbGetQuickTournamentState), et sans ce mélange, un nombre
-  // impair de joueurs disponibles laissait TOUJOURS le même joueur (dernier de cet ordre fixe)
-  // en attente à chaque appel. Sur un tournoi où les cibles finissent leurs matchs à des
-  // vitesses différentes, ce joueur pouvait rester non ré-apparié pendant plusieurs cycles
-  // pendant que les autres s'affrontaient et perdaient des vies entre eux — jusqu'à devenir
-  // "dernier survivant winners" (déclenchant la Grande Finale) après avoir joué beaucoup moins
-  // de matchs que ses adversaires. Mélanger à chaque appel donne à chaque joueur disponible une
-  // chance égale d'être celui qui attend, au lieu d'un biais déterministe sur le même joueur.
-  const availableWB = shufflePlayers(activePlayers.filter((p) => p.lives === 2 && !inMatchIds.has(p.id)));
-  const availableLB = shufflePlayers(activePlayers.filter((p) => p.lives === 1 && !inMatchIds.has(p.id)));
+  // Bassin unique, mélangé (DO-QUICK-POOL-001, hérite du mélange DO-SPORT-002 bis) : allPlayers
+  // est trié par createdAt (ordre d'inscription, dbGetQuickTournamentState), et sans ce mélange,
+  // un nombre impair de joueurs disponibles laisserait TOUJOURS le même joueur (dernier de cet
+  // ordre fixe) en attente à chaque appel. Mélanger à chaque appel donne à chaque joueur
+  // disponible une chance égale d'être celui qui attend, au lieu d'un biais déterministe.
+  const available = shufflePlayers(activePlayers.filter((p) => !inMatchIds.has(p.id)));
 
   // ── Fin de tournoi ─────────────────────────────────────────────────────────
   if (totalActive <= 1 && activeMatches.length === 0) {
@@ -2530,90 +2544,28 @@ export async function doAdvanceQuickTournamentTx(
     return { finished: true };
   }
 
-  // ── Grande Finale ─────────────────────────────────────────────────────────
-  // Condition : exactement 1 WB + 1 LB disponibles, aucun autre match actif
-  if (
-    availableWB.length === 1 &&
-    availableLB.length === 1 &&
-    totalActive === 2 &&
-    activeMatches.length === 0
-  ) {
-    const maxGFRound = await tx.match.aggregate({
-      where: { tournamentId, bracketType: "GRAND_FINAL" },
+  // ── Nouveaux matchs ────────────────────────────────────────────────────────
+  if (available.length >= 2) {
+    const pairs = pairPlayers(available.map((p) => p.id));
+    const maxRound = await tx.match.aggregate({
+      where: { tournamentId, poolId: null },
       _max: { bracketRound: true },
     });
-    const gfRound = (maxGFRound._max.bracketRound ?? 0) + 1;
-    const format = getQuickModeGameFormat(totalActive, "GRAND_FINAL");
+    const nextRound = (maxRound._max.bracketRound ?? 0) + 1;
+    const format = getQuickModeGameFormat(totalActive);
     const roundId = selectRoundId(roundIds, format.game_type);
 
-    await bulkCreateMatchesTx(tx, tournamentId, [{
-      player1Id: availableWB[0].id,
-      player2Id: availableLB[0].id,
-      bracketRound: gfRound,
-      bracketPosition: 0,
+    const newMatches: Parameters<typeof bulkCreateMatchesTx>[2] = pairs.map((pair, i) => ({
+      player1Id: pair[0],
+      player2Id: pair[1],
+      bracketRound: nextRound,
+      bracketPosition: i,
       boardNumber: 0,
       status: "PENDING",
       roundIds: [roundId],
-      bracketType: "GRAND_FINAL" as BracketType,
-    }]);
+      bracketType: "SINGLE" as BracketType,
+    }));
 
-    await dbPromoteUnassignedMatches(tx, tournamentId, tournament.nb_boards);
-    return {};
-  }
-
-  // ── Nouveaux matchs WB ────────────────────────────────────────────────────
-  const newMatches: Parameters<typeof bulkCreateMatchesTx>[2] = [];
-
-  if (availableWB.length >= 2) {
-    const wbPairs = pairPlayers(availableWB.map((p) => p.id));
-    const maxWBRound = await tx.match.aggregate({
-      where: { tournamentId, bracketType: "WINNERS" },
-      _max: { bracketRound: true },
-    });
-    const nextWBRound = (maxWBRound._max.bracketRound ?? 0) + 1;
-    const wbFormat = getQuickModeGameFormat(totalActive, "WINNERS");
-    const wbRoundId = selectRoundId(roundIds, wbFormat.game_type);
-
-    wbPairs.forEach((pair, i) => {
-      newMatches.push({
-        player1Id: pair[0],
-        player2Id: pair[1],
-        bracketRound: nextWBRound,
-        bracketPosition: i,
-        boardNumber: 0,
-        status: "PENDING",
-        roundIds: [wbRoundId],
-        bracketType: "WINNERS" as BracketType,
-      });
-    });
-  }
-
-  // ── Nouveaux matchs LB ────────────────────────────────────────────────────
-  if (availableLB.length >= 2) {
-    const lbPairs = pairPlayers(availableLB.map((p) => p.id));
-    const maxLBRound = await tx.match.aggregate({
-      where: { tournamentId, bracketType: "LOSERS" },
-      _max: { bracketRound: true },
-    });
-    const nextLBRound = (maxLBRound._max.bracketRound ?? 0) + 1;
-    const lbFormat = getQuickModeGameFormat(totalActive, "LOSERS");
-    const lbRoundId = selectRoundId(roundIds, lbFormat.game_type);
-
-    lbPairs.forEach((pair, i) => {
-      newMatches.push({
-        player1Id: pair[0],
-        player2Id: pair[1],
-        bracketRound: nextLBRound,
-        bracketPosition: i,
-        boardNumber: 0,
-        status: "PENDING",
-        roundIds: [lbRoundId],
-        bracketType: "LOSERS" as BracketType,
-      });
-    });
-  }
-
-  if (newMatches.length > 0) {
     await bulkCreateMatchesTx(tx, tournamentId, newMatches);
   }
 

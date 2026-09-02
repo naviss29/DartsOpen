@@ -82,7 +82,7 @@ export function buildConsoleSummary(
   const totalMatches = matches.length;
 
   const formatLabel = tournament.quick_mode
-    ? "Mode rapide (double élimination)"
+    ? "Mode rapide (2 vies, appariement dynamique)"
     : tournament.nb_pools > 1
       ? "Poules puis phases finales"
       : "Phases finales directes";

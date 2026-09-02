@@ -237,10 +237,14 @@ export async function dbGetPlayerProfile(playerName: string): Promise<PlayerProf
  * la finale est l'unique match du round le plus élevé (doAdvanceToNextRound s'arrête
  * dès qu'il ne reste qu'un match, garantissant cette unicité).
  *
- * Mode rapide (WINNERS/LOSERS/GRAND_FINAL) : WB, LB et la Grande Finale ont chacun leur
- * propre compteur de round indépendant (voir doAdvanceQuickTournament) — le round le plus
- * élevé tous types confondus ne désigne donc pas forcément la Grande Finale. Le champion
- * est explicitement le vainqueur du dernier match GRAND_FINAL.
+ * Mode rapide, depuis DO-QUICK-POOL-001 (bassin unique) : utilise également bracketType
+ * SINGLE et un seul compteur de round (voir doAdvanceQuickTournamentTx) — quand il ne
+ * reste plus que 2 joueurs dans tout le tournoi, la dernière vague créée ne contient par
+ * construction qu'un seul match (les deux derniers survivants), donc le même calcul que
+ * le mode standard (round le plus élevé) désigne déjà correctement la finale, sans code
+ * dédié. La branche GRAND_FINAL ci-dessous reste nécessaire pour les tournois rapides
+ * joués avant cette mission (WINNERS/LOSERS/GRAND_FINAL, compteurs de round indépendants
+ * par bracket) — jamais retirée pour ne pas casser leur classement historique.
  */
 function resolveChampions(
   matches: { tournamentId: string; bracketRound: number | null; bracketType: string; winnerId: string | null }[]

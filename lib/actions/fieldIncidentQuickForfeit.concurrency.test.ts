@@ -207,15 +207,17 @@ describe("DO-FIELD-INCIDENT-002 — forfait en mode rapide (perte d'une vie = d�
     const incidents = await dbListFieldIncidents(tournamentId);
     expect(incidents.find((fi) => fi.match_id === matchAId && fi.type === "PLAYER_ABSENT")!.status).toBe("RESOLVED");
 
-    // matchAP2 (1 vie) est désormais "disponible" côté losers bracket, mais le moteur rapide
-    // n'apparie une nouvelle manche LB qu'à partir de DEUX joueurs disponibles à ce niveau
-    // (doAdvanceQuickTournamentTx : `if (availableLB.length >= 2)`) — normal ici, aucun autre
-    // joueur n'a encore perdu sa première vie. La réapparition réelle (Cas G) est vérifiée après
-    // Cas D ci-dessous, une fois qu'un second joueur atteint aussi 1 vie.
-    const stillUnpaired = await prisma.match.findFirst({
+    // DO-QUICK-POOL-001 — bassin unique : matchAP1 (le vainqueur, 2 vies) ET matchAP2 (1 vie)
+    // deviennent TOUS DEUX disponibles au même instant dès que matchA se termine — le moteur les
+    // réapparie immédiatement l'un contre l'autre, peu importe leurs vies respectives, sans
+    // attendre qu'un second perdant existe (contrairement à l'ancien découpage WB/LB, qui
+    // n'appariait une nouvelle manche losers qu'à partir de deux joueurs à 1 vie disponibles).
+    const rematch = await prisma.match.findFirst({
       where: { tournamentId, status: { not: "FINISHED" }, OR: [{ player1Id: matchAP2 }, { player2Id: matchAP2 }] },
     });
-    expect(stillUnpaired).toBeNull();
+    expect(rematch).not.toBeNull();
+    expect([rematch!.player1Id, rematch!.player2Id]).toContain(matchAP1);
+    expect(rematch!.bracketType).toBe("SINGLE");
   });
 
   it("Cas C — rejouer le MÊME forfait est idempotent : aucune vie supplémentaire perdue, aucune nouvelle progression", async () => {
@@ -233,7 +235,7 @@ describe("DO-FIELD-INCIDENT-002 — forfait en mode rapide (perte d'une vie = d�
   it("vies génériques (illustration Cas A, '3 vies → 2') — le décompte ne suppose jamais un plafond à 2 en dur", async () => {
     // Situation jamais produite par le moteur réel (plafond produit à 2 vies, CLAUDE.md) : bump
     // manuel pour isoler UNIQUEMENT le comportement générique de dbDeclareForfeit/
-    // dbDecrementLives, sans prétendre à une catégorisation WB/LB cohérente pour ce joueur.
+    // dbDecrementLives, sans prétendre représenter un état de vies réellement atteignable.
     await prisma.registration.update({ where: { id: matchCP1 }, data: { lives: 3 } });
     asOrganizer();
 
@@ -266,9 +268,12 @@ describe("DO-FIELD-INCIDENT-002 — forfait en mode rapide (perte d'une vie = d�
     expect(boardTwoActive).toHaveLength(1);
   });
 
-  it("Cas G — les deux joueurs forfaits (encore vivants, 1 vie) réapparaissent normalement, appariés en losers bracket", async () => {
-    // Désormais DEUX joueurs disponibles à 1 vie (matchAP2 depuis Cas A, matchBP2 depuis Cas D) —
-    // le moteur rapide les apparie dès que ce seuil est atteint (`availableLB.length >= 2`).
+  it("Cas G — les joueurs qui viennent de perdre une vie sont réappariés chacun immédiatement, sans attendre un second perdant (DO-QUICK-POOL-001)", async () => {
+    // Sous l'ancien découpage WB/LB, matchAP2 (Cas A) et matchBP2 (Cas D) auraient dû tous deux
+    // attendre qu'un DEUXIÈME joueur à 1 vie soit disponible avant d'être réappariés. Le bassin
+    // unique n'a plus ce seuil : chacun a déjà été réapparié contre son propre vainqueur dès que
+    // celui-ci est redevenu disponible (voir Cas A ci-dessus) — jamais forcés l'un contre l'autre
+    // seulement parce qu'ils partagent le même nombre de vies.
     const matchAP2Match = await prisma.match.findFirst({
       where: { tournamentId, status: { not: "FINISHED" }, OR: [{ player1Id: matchAP2 }, { player2Id: matchAP2 }] },
     });
@@ -277,14 +282,15 @@ describe("DO-FIELD-INCIDENT-002 — forfait en mode rapide (perte d'une vie = d�
     });
     expect(matchAP2Match).not.toBeNull();
     expect(matchBP2Match).not.toBeNull();
-    expect(matchAP2Match!.id).toBe(matchBP2Match!.id); // seuls deux disponibles à ce niveau → appariés ensemble
-    expect(matchAP2Match!.bracketType).toBe("LOSERS");
+    expect([matchAP2Match!.player1Id, matchAP2Match!.player2Id]).toContain(matchAP1);
+    expect([matchBP2Match!.player1Id, matchBP2Match!.player2Id]).toContain(matchBP1);
+    expect(matchAP2Match!.bracketType).toBe("SINGLE");
   });
 
   it("Cas B — dernière vie : 1 → 0, élimination selon le moteur existant, progression normale", async () => {
-    // matchAP2 est à 1 vie depuis Cas A, réapparu en losers bracket (Cas G) ; retrouve son match
-    // actuel pour lui déclarer un second forfait — un événement DIFFÉRENT, sur un match
-    // DIFFÉRENT, légitimement testable indépendamment du premier.
+    // matchAP2 est à 1 vie et déjà réapparié contre matchAP1 depuis Cas A (confirmé par Cas G) ;
+    // retrouve son match actuel pour lui déclarer un second forfait — un événement DIFFÉRENT, sur
+    // un match DIFFÉRENT, légitimement testable indépendamment du premier.
     const currentMatch = await prisma.match.findFirstOrThrow({
       where: { tournamentId, status: { not: "FINISHED" }, OR: [{ player1Id: matchAP2 }, { player2Id: matchAP2 }] },
     });

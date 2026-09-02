@@ -99,36 +99,38 @@ export default async function LivePage({ params }: Props) {
     sets: m.sets,
   }));
 
-  // Bracket matches — mode standard (SINGLE) et mode rapide (WINNERS/LOSERS/GRAND_FINAL)
+  // Bracket matches — mode standard et mode rapide utilisent tous deux bracket_type SINGLE
+  // depuis DO-QUICK-POOL-001 (bassin unique, plus de WINNERS/LOSERS/GRAND_FINAL) : un tournoi
+  // est exclusivement l'un ou l'autre (tournament.quick_mode), jamais les deux à la fois, donc
+  // c'est ce flag — jamais bracket_type — qui distingue les deux vues ci-dessous.
   const bracketMatches = allMatches
     .filter((m) => m.pool_id === null && m.bracket_round !== null);
 
-  const standardBracketMatches = bracketMatches
-    .filter((m) => m.bracket_type === "SINGLE")
-    .map((m) => ({
-      id: m.id,
-      bracket_round: m.bracket_round as number,
-      bracket_position: m.bracket_position as number,
-      status: m.status,
-      winner_id: m.winner_id,
-      player1: m.player1,
-      player2: m.player2,
-    }));
+  const standardBracketMatches = tournament.quick_mode
+    ? []
+    : bracketMatches.map((m) => ({
+        id: m.id,
+        bracket_round: m.bracket_round as number,
+        bracket_position: m.bracket_position as number,
+        status: m.status,
+        winner_id: m.winner_id,
+        player1: m.player1,
+        player2: m.player2,
+      }));
 
-  const quickBracketMatches = bracketMatches
-    .filter((m) => m.bracket_type !== "SINGLE")
-    .map((m) => ({
-      id: m.id,
-      bracket_round: m.bracket_round as number,
-      bracket_position: m.bracket_position as number,
-      bracket_type: m.bracket_type,
-      board_number: m.board_number,
-      status: m.status,
-      winner_id: m.winner_id,
-      player1: m.player1,
-      player2: m.player2,
-      sets: m.sets,
-    }));
+  const quickBracketMatches = !tournament.quick_mode
+    ? []
+    : bracketMatches.map((m) => ({
+        id: m.id,
+        bracket_round: m.bracket_round as number,
+        bracket_position: m.bracket_position as number,
+        board_number: m.board_number,
+        status: m.status,
+        winner_id: m.winner_id,
+        player1: m.player1,
+        player2: m.player2,
+        sets: m.sets,
+      }));
 
   // Finished pool matches for scoreboard
   const finishedPoolMatches = allMatches
@@ -175,7 +177,7 @@ export default async function LivePage({ params }: Props) {
         nbBoards={tournament.nb_boards}
       />
 
-      {/* Bracket double élimination (mode rapide) */}
+      {/* Tournoi rapide — bassin unique à 2 vies */}
       {tournament.quick_mode && hasQuickBracket && (
         <QuickBracketLive
           tournamentId={id}

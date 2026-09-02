@@ -23,7 +23,8 @@ import type { BracketType } from "@/lib/generated/prisma/client";
  * 1. Supprime les matchs et rounds précédents.
  * 2. Remet les vies à 2 pour tous les joueurs PAID.
  * 3. Crée les 3 rounds (501, Cricket, 701).
- * 4. Mélange les joueurs et crée les matchs WB R1 sur les cibles disponibles.
+ * 4. Mélange les joueurs et crée les matchs de la manche 1 sur les cibles disponibles
+ *    (bassin unique, DO-QUICK-POOL-001 — jamais un bracket winners séparé).
  *
  * En cas de nombre impair, le dernier joueur « attend » automatiquement
  * (ses adversaires arriveront au fil des matchs).
@@ -47,7 +48,7 @@ export async function generateQuickBracket(tournamentId: string): Promise<{ erro
   const pairs = pairPlayers(playerIds);
   const totalActive = registrations.length;
 
-  const format = getQuickModeGameFormat(totalActive, "WINNERS");
+  const format = getQuickModeGameFormat(totalActive);
 
   try {
     await withTournamentLock(tournamentId, async (tx) => {
@@ -65,7 +66,7 @@ export async function generateQuickBracket(tournamentId: string): Promise<{ erro
         boardNumber: index < tournament.nb_boards ? index + 1 : 0,
         status: index < tournament.nb_boards ? "IN_PROGRESS" : "PENDING",
         roundIds: [roundId],
-        bracketType: "WINNERS" as BracketType,
+        bracketType: "SINGLE" as BracketType,
       }));
 
       await bulkCreateMatchesTx(tx, tournamentId, matches);

@@ -107,7 +107,7 @@ export function EditTournamentForm({
         <div className="flex items-start justify-between gap-6">
           <div>
             <p className="text-sm font-semibold text-brand-dark">Mode tournoi rapide</p>
-            <p className="mt-0.5 text-xs text-brand-text-secondary">Double élimination — 2 vies par joueur, bracket dynamique.</p>
+            <p className="mt-0.5 text-xs text-brand-text-secondary">2 vies par joueur, appariement dynamique entre tous les joueurs encore en vie.</p>
           </div>
           <button
             type="button"

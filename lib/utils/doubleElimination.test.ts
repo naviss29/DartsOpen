@@ -64,44 +64,34 @@ describe("shufflePlayers", () => {
 });
 
 // ── getQuickModeGameFormat ────────────────────────────────────────────────────
+// DO-QUICK-POOL-001 — bassin unique : plus de paramètre bracketType, le format ne dépend
+// plus que du nombre de joueurs encore en vie dans le tournoi.
 
 describe("getQuickModeGameFormat — sélection du format de jeu", () => {
-  it("Grande Finale → toujours 701 finish double", () => {
-    expect(getQuickModeGameFormat(20, "GRAND_FINAL")).toEqual(QUICK_ROUND_FORMATS.LATE);
-    expect(getQuickModeGameFormat(2, "GRAND_FINAL")).toEqual(QUICK_ROUND_FORMATS.LATE);
-  });
-
   it("≤ 4 joueurs actifs → 701 finish double (demi-finale / finale)", () => {
-    expect(getQuickModeGameFormat(4, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.LATE);
-    expect(getQuickModeGameFormat(3, "LOSERS")).toEqual(QUICK_ROUND_FORMATS.LATE);
-    expect(getQuickModeGameFormat(2, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.LATE);
+    expect(getQuickModeGameFormat(4)).toEqual(QUICK_ROUND_FORMATS.LATE);
+    expect(getQuickModeGameFormat(3)).toEqual(QUICK_ROUND_FORMATS.LATE);
+    expect(getQuickModeGameFormat(2)).toEqual(QUICK_ROUND_FORMATS.LATE);
   });
 
   it("5–8 joueurs actifs → Cricket (quarts / huitièmes)", () => {
-    expect(getQuickModeGameFormat(5, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.MID);
-    expect(getQuickModeGameFormat(8, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.MID);
-    expect(getQuickModeGameFormat(6, "LOSERS")).toEqual(QUICK_ROUND_FORMATS.MID);
+    expect(getQuickModeGameFormat(5)).toEqual(QUICK_ROUND_FORMATS.MID);
+    expect(getQuickModeGameFormat(8)).toEqual(QUICK_ROUND_FORMATS.MID);
+    expect(getQuickModeGameFormat(6)).toEqual(QUICK_ROUND_FORMATS.MID);
   });
 
-  it("> 8 joueurs, WB → 501 fermeture double (phase de groupes)", () => {
-    expect(getQuickModeGameFormat(9, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.EARLY);
-    expect(getQuickModeGameFormat(16, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.EARLY);
-  });
-
-  it("> 8 joueurs, LB → Cricket (les perdants jouent plus court)", () => {
-    expect(getQuickModeGameFormat(9, "LOSERS")).toEqual(QUICK_ROUND_FORMATS.MID);
-    expect(getQuickModeGameFormat(20, "LOSERS")).toEqual(QUICK_ROUND_FORMATS.MID);
+  it("> 8 joueurs → 501 fermeture double (phase de groupes)", () => {
+    expect(getQuickModeGameFormat(9)).toEqual(QUICK_ROUND_FORMATS.EARLY);
+    expect(getQuickModeGameFormat(16)).toEqual(QUICK_ROUND_FORMATS.EARLY);
   });
 
   it("limite basse 5 → MID, limite haute 8 → MID (bornes incluses)", () => {
-    expect(getQuickModeGameFormat(5, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.MID);
-    expect(getQuickModeGameFormat(8, "LOSERS")).toEqual(QUICK_ROUND_FORMATS.MID);
+    expect(getQuickModeGameFormat(5)).toEqual(QUICK_ROUND_FORMATS.MID);
+    expect(getQuickModeGameFormat(8)).toEqual(QUICK_ROUND_FORMATS.MID);
   });
 
-  it("limite basse 9 → format différent WB vs LB", () => {
-    // 9 joueurs : WB passe en EARLY, LB reste en MID
-    expect(getQuickModeGameFormat(9, "WINNERS")).toEqual(QUICK_ROUND_FORMATS.EARLY);
-    expect(getQuickModeGameFormat(9, "LOSERS")).toEqual(QUICK_ROUND_FORMATS.MID);
+  it("limite basse 9 → passe en EARLY", () => {
+    expect(getQuickModeGameFormat(9)).toEqual(QUICK_ROUND_FORMATS.EARLY);
   });
 });
 

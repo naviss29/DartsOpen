@@ -316,7 +316,7 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
 - Victoire en poule : +1 pt
 - Victoire en bracket : +2 pts
 - Champion du tournoi : +10 pts (attribué une seule fois par tournoi, jamais par match de bracket gagné)
-- Champion détecté par `resolveChampions` via `bracketType` : match `GRAND_FINAL` au round le plus élevé si le tournoi en a (mode rapide — WB/LB/Grande Finale ont chacun leur propre compteur de round indépendant), sinon match `SINGLE` au round le plus élevé (mode standard, un seul match possible par construction de `doAdvanceToNextRound`)
+- Champion détecté par `resolveChampions` : match `SINGLE` au round le plus élevé (mode standard — un seul match possible par construction de `doAdvanceToNextRound` ; mode rapide depuis DO-QUICK-POOL-001 — la dernière vague du bassin unique ne contient par construction que les deux derniers survivants). Pour un tournoi rapide joué avant DO-QUICK-POOL-001 (bracketType `GRAND_FINAL` encore en base), `resolveChampions` retombe sur le match `GRAND_FINAL` au round le plus élevé — jamais recalculé rétroactivement en `SINGLE`
 
 ## Variables d'environnement requises
 - `DATABASE_URL` — PostgreSQL
@@ -373,7 +373,24 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 ## Mode tournoi rapide
 
 ### Concept
-Double élimination pour bar/soirée. Chaque joueur a 2 vies. Pas de poules, pas de scoring électronique/traditionnel — le gagnant est désigné directement par l'organisateur via le bouton d'arbitrage.
+Élimination à vies pour bar/soirée, bassin unique (DO-QUICK-POOL-001). Chaque joueur a 2 vies.
+Dès qu'une cible se libère ou qu'un joueur redevient disponible, TOUS les joueurs encore en vie
+(1 ou 2) et non engagés dans un autre match forment un seul bassin, apparié sans tenir compte du
+nombre de vies restant — jamais deux files séparées par nombre de vies. Une défaite retire une
+vie (2 → 1 → 0 = éliminé). Le tournoi se termine quand il ne reste plus qu'un joueur en vie ; le
+dernier match joué est donc naturellement la finale, sans type de match ni traitement dédié. Pas
+de poules, pas de scoring électronique/traditionnel — le gagnant est désigné directement par
+l'organisateur via le bouton d'arbitrage.
+
+Avant DO-QUICK-POOL-001, le mode rapide était un double élimination classique avec deux files
+d'appariement séparées (winners/losers) et une Grande Finale dédiée. Deux défauts signalés par
+l'organisateur ont motivé le passage au bassin unique : (1) un joueur qui venait de perdre sa
+première vie restait bloqué en attente tant qu'un SECOND joueur n'avait pas aussi perdu une vie,
+même si des joueurs à 2 vies étaient disponibles au même instant ; (2) une nouvelle manche losers
+pouvait démarrer et occuper une cible pendant que d'anciens matchs winners tournaient encore
+ailleurs, donnant l'impression d'un ordre de passage faussé. Les tournois rapides joués avant
+cette mission gardent leurs matchs historiques `WINNERS`/`LOSERS`/`GRAND_FINAL` en base (jamais
+réécrits) — `resolveChampions` (`lib/db/ranking.ts`) sait encore lire les deux formats.
 
 ### Contraintes fixes (non modifiables)
 - Inscriptions : **sur place uniquement** (`registration_mode = ONSITE`)
@@ -383,7 +400,10 @@ Double élimination pour bar/soirée. Chaque joueur a 2 vies. Pas de poules, pas
 
 ### Champs Prisma
 - `Tournament.quickMode` — active le mode rapide
-- `Match.bracketType` — `SINGLE | WINNERS | LOSERS | GRAND_FINAL`
+- `Match.bracketType` — `SINGLE` pour tout nouveau match de mode rapide (comme le mode standard,
+  un tournoi étant toujours exclusivement l'un ou l'autre) ; `WINNERS`/`LOSERS`/`GRAND_FINAL`
+  restent valides pour l'historique des tournois joués avant DO-QUICK-POOL-001, mais plus jamais
+  écrits
 - `Registration.lives` — vies restantes (2 → 1 → 0 = éliminé)
 
 ### Fichiers clés
@@ -391,23 +411,24 @@ Double élimination pour bar/soirée. Chaque joueur a 2 vies. Pas de poules, pas
 - `lib/actions/quickTournament.ts` — `generateQuickBracket` + `doAdvanceQuickTournament`
 - `lib/actions/admin.ts` — `arbitrateMatch` : seul point d'entrée pour désigner un vainqueur en mode rapide (la page de saisie de score publique est désactivée dans ce mode)
 - `lib/actions/player.ts` — `addPlayer` : email optionnel (vide `""` si absent), email de confirmation sauté si pas d'email
-- `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`
+- `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`, `doAdvanceQuickTournamentTx` (le bassin unique)
 - `components/tournament/AddPlayerForm.tsx` — prop `quickMode` : masque les champs email et téléphone
-- `components/tournament/QuickBracketView.tsx` — vue statique WB / LB / Grande Finale avec bouton arbitrage
+- `components/tournament/QuickBracketView.tsx` — grille unique de cartes de match (jamais de sections winners/losers/finale), bouton arbitrage, déjà utilisable en portrait mobile (pas de `LandscapeGuard`)
 - `components/tournament/QuickBracketLive.tsx` — vue live (Mercure ou polling 5s)
 
 ### Format de jeu (automatique)
-- > 8 joueurs actifs : 501 fermeture double (WB) / Cricket (LB)
-- 5–8 joueurs : Cricket
-- ≤ 4 joueurs + Grande Finale : 701 finish double
+Fonction uniquement du nombre de joueurs encore en vie dans le tournoi, jamais d'un bracket :
+- > 8 joueurs actifs : 501 fermeture double
+- 5–8 joueurs actifs : Cricket
+- ≤ 4 joueurs actifs : 701 finish double
 
 ### Flow admin
 1. Créer le tournoi avec `quick_mode=true` → `nb_pools=1`, `players_per_team=1` verrouillés
 2. Passer en statut **OPEN** puis inscrire les joueurs sur place (nom/pseudo uniquement)
 3. Passer en statut **IN_PROGRESS** → aller sur **Phases finales**
-4. Cliquer **Générer le bracket rapide** → `generateQuickBracket` crée les matchs WB R1 sur les cibles
+4. Cliquer **Générer le bracket rapide** → `generateQuickBracket` crée les matchs de la manche 1 sur les cibles disponibles
 5. Désigner le gagnant via le bouton **Arbitrer** sur chaque match → `arbitrateMatch` (`lib/actions/admin.ts`) → `doAdvanceQuickTournament` déclenché automatiquement
-6. Les matchs suivants (WB/LB/Grande Finale) se créent et s'affectent aux cibles libres automatiquement
+6. Les matchs suivants (bassin unique) se créent et s'affectent aux cibles libres automatiquement, jusqu'à ce qu'il ne reste plus qu'un joueur en vie
 
 ## Conventions
 - Port DB local : 5433 (évite le conflit avec SterPlatform sur 5432)

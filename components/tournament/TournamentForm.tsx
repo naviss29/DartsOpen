@@ -78,7 +78,7 @@ export function TournamentForm({
             <div>
               <p className="text-sm font-semibold text-brand-dark">Mode tournoi rapide</p>
               <p className="mt-1 text-xs text-brand-text-secondary">
-                Double élimination bar / soirée. Chaque joueur a 2 vies. Le bracket se génère dynamiquement après chaque match.
+                Format bar / soirée. Chaque joueur a 2 vies et affronte n&apos;importe quel adversaire encore en vie ; les matchs se génèrent dynamiquement après chaque match, jusqu&apos;à ce qu&apos;il n&apos;en reste plus qu&apos;un.
               </p>
             </div>
             <button

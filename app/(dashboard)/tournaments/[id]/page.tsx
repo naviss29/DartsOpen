@@ -206,7 +206,7 @@ export default async function TournamentDetailPage({ params }: Props) {
         <div className="rounded-xl border border-brand-turquoise/30 bg-brand-turquoise/10 p-4">
           <p className="text-sm font-medium text-brand-turquoise">⚡ Mode tournoi rapide</p>
           <p className="mt-1 text-xs text-brand-turquoise/80">
-            Double élimination — 2 vies par joueur. Les manches (501 → Cricket → 701) sont générées automatiquement selon la phase.
+            2 vies par joueur, apparié dynamiquement dès qu&apos;une cible se libère. Les manches (501 → Cricket → 701) sont générées automatiquement selon la phase.
           </p>
         </div>
       )}

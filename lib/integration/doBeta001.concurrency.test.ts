@@ -729,11 +729,12 @@ describe("DO-BETA-001 — cas d'échec opérationnels", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Smoke test mode rapide (mission §13) — confirme qu'aucune intégration récente (DO-FIELD-
-// ACCESS/DO-OPS/le correctif de progression ci-dessus) n'a cassé ce mode, sans rejouer tout le
-// scénario standard : création, démarrage, progression, perte de vie, WB/LB/Grande Finale, fin.
+// ACCESS/DO-OPS/le correctif de progression ci-dessus/DO-QUICK-POOL-001) n'a cassé ce mode, sans
+// rejouer tout le scénario standard : création, démarrage, progression, perte de vie, appariement
+// en bassin unique sur plusieurs vagues, fin.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("DO-BETA-001 — smoke test mode rapide", () => {
-  it("création → démarrage → génération → progression complète WB/LB/Grande Finale → fin", async () => {
+  it("création → démarrage → génération → progression complète sur plusieurs vagues → fin", async () => {
     asOrganizer();
     const t = await dbCreateTournament(
       OWNER_ID,
@@ -763,7 +764,7 @@ describe("DO-BETA-001 — smoke test mode rapide", () => {
     expect(genResult.error).toBeUndefined();
 
     const initialMatches = await prisma.match.findMany({ where: { tournamentId: t.id } });
-    expect(initialMatches.some((m) => m.bracketType === "WINNERS")).toBe(true);
+    expect(initialMatches.some((m) => m.bracketType === "SINGLE" && m.bracketRound === 1)).toBe(true);
 
     // Résout tout match actif jusqu'à la clôture — organisateur, via arbitrateMatch (le seul
     // point d'entrée prévu pour désigner un vainqueur en mode rapide, CLAUDE.md).
@@ -790,10 +791,11 @@ describe("DO-BETA-001 — smoke test mode rapide", () => {
     const finalRegistrations = await prisma.registration.findMany({ where: { id: { in: quickPlayers } } });
     expect(finalRegistrations.some((r) => r.lives < 2)).toBe(true);
 
-    // Structure WB/LB/Grande Finale bien créée par le moteur au fil de la progression.
+    // Plusieurs vagues d'appariement créées par le moteur au fil de la progression (bassin
+    // unique, DO-QUICK-POOL-001 — un seul compteur de round, plus de WB/LB/Grande Finale).
     const allQuickMatches = await prisma.match.findMany({ where: { tournamentId: t.id } });
-    const bracketTypes = new Set(allQuickMatches.map((m) => m.bracketType));
-    expect(bracketTypes.has("WINNERS")).toBe(true);
-    expect(bracketTypes.has("GRAND_FINAL")).toBe(true);
+    expect(allQuickMatches.every((m) => m.bracketType === "SINGLE")).toBe(true);
+    const maxRound = Math.max(...allQuickMatches.map((m) => m.bracketRound ?? 0));
+    expect(maxRound).toBeGreaterThan(1);
   });
 });

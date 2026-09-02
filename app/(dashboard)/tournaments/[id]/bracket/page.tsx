@@ -83,11 +83,11 @@ export default async function BracketPage({ params }: Props) {
 
   const tournamentFinished = tournament.status === "FINISHED";
 
-  // Vainqueur : Grande Finale (quickMode) ou dernier match (standard)
+  // Vainqueur : dernier match joué du bassin unique (quickMode, DO-QUICK-POOL-001) ou dernier
+  // match du tour final (standard)
   const winnerMatch = tournamentFinished
     ? tournament.quick_mode
-      ? (bracketMatches.find((m) => m.bracket_type === "GRAND_FINAL" && m.winner_id) ??
-         bracketMatches.filter((m) => m.winner_id).sort((a, b) => (b.bracket_round ?? 0) - (a.bracket_round ?? 0))[0])
+      ? bracketMatches.filter((m) => m.winner_id).sort((a, b) => (b.bracket_round ?? 0) - (a.bracket_round ?? 0))[0]
       : (currentRoundMatches.length === 1 ? currentRoundMatches[0] : null)
     : null;
 
@@ -142,7 +142,7 @@ export default async function BracketPage({ params }: Props) {
           {tournament.quick_mode ? (
             <>
               <h1 className="text-2xl font-bold text-brand-dark">Tournoi rapide ⚡</h1>
-              <p className="text-sm text-brand-text-secondary mt-1">Double élimination — 2 vies par joueur</p>
+              <p className="text-sm text-brand-text-secondary mt-1">2 vies par joueur, appariement dynamique</p>
             </>
           ) : (
             <>

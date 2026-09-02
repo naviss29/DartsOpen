@@ -9,7 +9,6 @@ interface QuickMatch {
   id: string;
   bracket_round: number;
   bracket_position: number;
-  bracket_type: string;
   board_number: number;
   status: string;
   winner_id: string | null;
@@ -23,12 +22,18 @@ interface Props {
   initialMatches: QuickMatch[];
 }
 
+/**
+ * DO-QUICK-POOL-001 — plus de filtre sur bracket_type (les matchs de mode rapide utilisent
+ * désormais SINGLE, comme le mode standard) : ce composant n'est monté que pour un tournoi déjà
+ * connu comme quick mode par l'appelant (voir app/(public)/t/[id]/live/page.tsx), donc
+ * `pool_id === null && bracket_round !== null` suffit à isoler ses matchs de bracket.
+ */
 async function fetchQuickMatches(tournamentId: string): Promise<QuickMatch[]> {
   const res = await fetch(`/api/public/tournaments/${tournamentId}/matches`);
   if (!res.ok) return [];
   const all = await res.json() as (QuickMatch & { pool_id: string | null })[];
   return all
-    .filter((m) => m.pool_id === null && m.bracket_round !== null && m.bracket_type !== "SINGLE")
+    .filter((m) => m.pool_id === null && m.bracket_round !== null)
     .map(({ pool_id: _p, ...m }) => m);
 }
 
@@ -74,7 +79,7 @@ export function QuickBracketLive({ tournamentId, initialMatches }: Props) {
   return (
     <div className="space-y-2">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-        Bracket double élimination
+        Tournoi rapide — 2 vies
       </h2>
       <div className="rounded-xl bg-surface-secondary border border-border-default p-4">
         <QuickBracketView matches={matches} />

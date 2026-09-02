@@ -4,7 +4,6 @@ interface QuickMatch {
   id: string;
   bracket_round: number;
   bracket_position: number;
-  bracket_type: string;
   board_number: number;
   status: string;
   winner_id: string | null;
@@ -20,6 +19,13 @@ interface Props {
 }
 
 /**
+ * DO-QUICK-POOL-001 — bassin unique : plus de séparation Winners/Losers/Grande Finale (un joueur
+ * à 2 vies et un joueur à 1 vie peuvent désormais s'affronter, voir doAdvanceQuickTournamentTx,
+ * lib/db/tournament.ts), donc plus de sections par type de bracket ici — une seule grille de
+ * matchs, triée par vague de création (bracket_round) puis position au sein de la vague. Le
+ * nombre de vies restant reste affiché par joueur (Lives) : c'est une information sur le joueur,
+ * jamais sur une structure de bracket qui n'existe plus.
+ *
  * Utilise exclusivement les tokens sémantiques du design-system (bg-surface, text-text-*,
  * border-border-*, accent/success/warning) plutôt que des couleurs littérales — ce composant
  * est partagé entre le tableau de bord organisateur (thème clair) et la vue live publique
@@ -27,94 +33,17 @@ interface Props {
  * posé par l'ancêtre, sans prop ni variante à gérer ici.
  */
 export function QuickBracketView({ matches, tournamentId }: Props) {
-  const wbMatches = matches
-    .filter((m) => m.bracket_type === "WINNERS")
-    .sort((a, b) => a.bracket_round - b.bracket_round || a.bracket_position - b.bracket_position);
-
-  const lbMatches = matches
-    .filter((m) => m.bracket_type === "LOSERS")
-    .sort((a, b) => a.bracket_round - b.bracket_round || a.bracket_position - b.bracket_position);
-
-  const gfMatches = matches
-    .filter((m) => m.bracket_type === "GRAND_FINAL")
-    .sort((a, b) => a.bracket_round - b.bracket_round);
-
-  return (
-    <div className="space-y-8">
-      {/* Winners Bracket */}
-      {wbMatches.length > 0 && (
-        <BracketSection
-          title="Winners Bracket"
-          subtitle="2 vies"
-          color="accent"
-          matches={wbMatches}
-          tournamentId={tournamentId}
-        />
-      )}
-
-      {/* Losers Bracket */}
-      {lbMatches.length > 0 && (
-        <BracketSection
-          title="Losers Bracket"
-          subtitle="1 vie restante"
-          color="warning"
-          matches={lbMatches}
-          tournamentId={tournamentId}
-        />
-      )}
-
-      {/* Grande Finale */}
-      {gfMatches.length > 0 && (
-        <BracketSection
-          title="Grande Finale"
-          subtitle="701 finish double"
-          color="success"
-          matches={gfMatches}
-          tournamentId={tournamentId}
-        />
-      )}
-    </div>
+  const sorted = [...matches].sort(
+    (a, b) => a.bracket_round - b.bracket_round || a.bracket_position - b.bracket_position
   );
-}
 
-// ── Section par type de bracket ───────────────────────────────────────────────
-
-type SectionColor = "accent" | "warning" | "success";
-
-const sectionStyles: Record<SectionColor, { header: string; dot: string }> = {
-  accent: { header: "text-accent border-border-default bg-surface-secondary", dot: "bg-accent" },
-  warning: { header: "text-warning border-warning-border bg-warning-subtle", dot: "bg-warning-solid" },
-  success: { header: "text-success border-success-border bg-success-subtle", dot: "bg-success-solid" },
-};
-
-function BracketSection({
-  title,
-  subtitle,
-  color,
-  matches,
-  tournamentId,
-}: {
-  title: string;
-  subtitle: string;
-  color: SectionColor;
-  matches: QuickMatch[];
-  tournamentId?: string;
-}) {
-  const styles = sectionStyles[color];
+  if (sorted.length === 0) return null;
 
   return (
-    <div>
-      <div className={`flex items-center gap-2 mb-3 rounded-lg border px-4 py-2 ${styles.header}`}>
-        <span className={`w-2 h-2 rounded-full ${styles.dot}`} />
-        <span className="text-sm font-semibold">{title}</span>
-        <span className="text-xs opacity-70">— {subtitle}</span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {matches.map((match) => (
-          <QuickMatchCard key={match.id} match={match} tournamentId={tournamentId} />
-        ))}
-      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {sorted.map((match) => (
+        <QuickMatchCard key={match.id} match={match} tournamentId={tournamentId} />
+      ))}
     </div>
   );
 }

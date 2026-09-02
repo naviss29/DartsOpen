@@ -1,21 +1,25 @@
 /**
- * Utilitaires pour le mode tournoi rapide (double élimination).
+ * Utilitaires pour le mode tournoi rapide.
  *
- * Règles du mode rapide :
+ * DO-QUICK-POOL-001 — bassin unique, décision Product Owner (le double élimination WB/LB/Grande
+ * Finale précédent créait deux files d'appariement indépendantes : un joueur encore à 2 vies ne
+ * pouvait jamais affronter un joueur à 1 vie, et une nouvelle manche losers pouvait démarrer
+ * pendant que d'anciens matchs winners tournaient encore ailleurs — perçu comme un ordre de
+ * passage faussé par l'organisateur). Règles :
  *   - Chaque joueur démarre avec 2 vies.
- *   - Défaite dans le bracket winners (WB) → 1 vie restante → passage en bracket losers (LB).
- *   - Défaite dans le bracket losers  (LB) → 0 vie → éliminé.
- *   - Quand il reste exactement 1 joueur WB (vies=2) + 1 joueur LB (vies=1) sans autre match actif :
- *     Grande Finale.
+ *   - Dès qu'une cible se libère ou qu'un joueur redevient disponible, TOUS les joueurs encore en
+ *     vie (1 ou 2) et non engagés dans un autre match forment un seul bassin, apparié sans tenir
+ *     compte du nombre de vies restant.
+ *   - Défaite → une vie perdue (2 → 1 → 0). 0 vie = éliminé.
+ *   - Le tournoi se termine quand il ne reste plus qu'un joueur en vie — le dernier match joué
+ *     est donc naturellement la finale, sans type de match ni traitement dédié.
  *
- * Format de jeu par phase (basé sur le nombre de joueurs encore en vie) :
- *   - > 8 joueurs actifs  : 501 fermeture double (WB) / Cricket (LB)
- *   - 5–8 joueurs actifs  : Cricket (huitièmes / quarts de finale)
- *   - ≤ 4 joueurs actifs  : 701 finish double (demi-finales / finale)
- *   - Grande Finale       : 701 finish double
+ * Format de jeu par phase (basé uniquement sur le nombre de joueurs encore en vie, jamais sur un
+ * bracket qui n'existe plus) :
+ *   - > 8 joueurs actifs  : 501 fermeture double
+ *   - 5–8 joueurs actifs  : Cricket
+ *   - ≤ 4 joueurs actifs  : 701 finish double
  */
-
-export type QuickBracketType = "WINNERS" | "LOSERS" | "GRAND_FINAL";
 
 /** Formats de jeu disponibles en mode rapide. */
 export const QUICK_ROUND_FORMATS = {
@@ -27,20 +31,13 @@ export const QUICK_ROUND_FORMATS = {
 export type QuickRoundFormat = (typeof QUICK_ROUND_FORMATS)[keyof typeof QUICK_ROUND_FORMATS];
 
 /**
- * Détermine le format de jeu d'un match en mode rapide.
- *
- * @param totalActivePlayers Joueurs encore en vie dans le tournoi (lives > 0).
- * @param bracketType        Type de bracket du match (WB, LB, Grande Finale).
+ * Détermine le format de jeu en mode rapide, uniquement en fonction du nombre de joueurs encore
+ * en vie dans le tournoi (lives > 0) — jamais d'un bracket, qui n'existe plus (DO-QUICK-POOL-001).
  */
-export function getQuickModeGameFormat(
-  totalActivePlayers: number,
-  bracketType: QuickBracketType
-): QuickRoundFormat {
-  if (bracketType === "GRAND_FINAL") return QUICK_ROUND_FORMATS.LATE;
+export function getQuickModeGameFormat(totalActivePlayers: number): QuickRoundFormat {
   if (totalActivePlayers <= 4) return QUICK_ROUND_FORMATS.LATE;
   if (totalActivePlayers <= 8) return QUICK_ROUND_FORMATS.MID;
-  // > 8 joueurs : LB toujours Cricket, WB commence en 501
-  return bracketType === "LOSERS" ? QUICK_ROUND_FORMATS.MID : QUICK_ROUND_FORMATS.EARLY;
+  return QUICK_ROUND_FORMATS.EARLY;
 }
 
 /**
