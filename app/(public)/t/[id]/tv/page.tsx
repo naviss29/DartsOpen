@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { dbGetTournamentPublic, dbListMatches } from "@/lib/db/tournament";
 import { TvBoard } from "@/components/tournament/TvBoard";
+import { TvFullscreenButton } from "@/components/tournament/TvFullscreenButton";
 import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -61,6 +62,7 @@ export default async function TvPage({ params }: Props) {
               Terminé
             </span>
           )}
+          <TvFullscreenButton />
           <Link href={`/t/${id}/live`} className="text-xs text-text-secondary hover:text-text-primary transition-colors">
             Vue normale →
           </Link>
