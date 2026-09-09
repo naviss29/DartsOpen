@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { prisma } from "./client";
 import { Prisma } from "../generated/prisma/client";
 import type { BracketType, MatchStatus, RegistrationStatus, TournamentStatus } from "../generated/prisma/client";
@@ -1065,43 +1066,45 @@ export async function dbGeneratePools(
     await tx.match.deleteMany({ where: { tournamentId, bracketRound: null } });
     await tx.pool.deleteMany({ where: { tournamentId } });
 
-    const createdPools = await Promise.all(
-      pools.map((p) =>
-        tx.pool.create({
-          data: { tournamentId, name: p.name },
-          select: { id: true },
-        })
-      )
-    );
+    // Perf pré-recette (E1) : ids de pools/matchs générés côté client (randomUUID(), même
+    // défaut que @default(uuid()) côté schéma) plutôt qu'un create()/Promise.all() par pool
+    // et une boucle séquentielle create()+createMany() par match — jusqu'à 64 poules et leurs
+    // matchs générés en 3 createMany groupés au lieu de dizaines à centaines d'allers-retours
+    // DB, tenus DANS withTournamentLock() (bloque toute autre action sur ce tournoi tant que
+    // ça dure).
+    const poolIds = pools.map(() => randomUUID());
+
+    await tx.pool.createMany({
+      data: pools.map((p, i) => ({ id: poolIds[i], tournamentId, name: p.name })),
+    });
 
     await tx.poolPlayer.createMany({
       data: pools.flatMap((p, i) =>
         p.playerIds.map((registrationId) => ({
-          poolId: createdPools[i].id,
+          poolId: poolIds[i],
           registrationId,
         }))
       ),
     });
 
-    for (const m of matches) {
-      const pool = createdPools[m.poolIndex];
-      const match = await tx.match.create({
-        data: {
-          tournamentId,
-          poolId: pool.id,
-          boardNumber: m.boardNumber,
-          status: m.status as MatchStatus,
-          player1Id: m.player1Id,
-          player2Id: m.player2Id,
-        },
-        select: { id: true },
-      });
+    const matchesWithIds = matches.map((m) => ({ ...m, id: randomUUID() }));
 
-      if (rounds.length > 0) {
-        await tx.matchSet.createMany({
-          data: rounds.map((r) => ({ matchId: match.id, roundId: r.id })),
-        });
-      }
+    await tx.match.createMany({
+      data: matchesWithIds.map((m) => ({
+        id: m.id,
+        tournamentId,
+        poolId: poolIds[m.poolIndex],
+        boardNumber: m.boardNumber,
+        status: m.status as MatchStatus,
+        player1Id: m.player1Id,
+        player2Id: m.player2Id,
+      })),
+    });
+
+    if (rounds.length > 0) {
+      await tx.matchSet.createMany({
+        data: matchesWithIds.flatMap((m) => rounds.map((r) => ({ matchId: m.id, roundId: r.id }))),
+      });
     }
   });
 }
@@ -1152,29 +1155,39 @@ type BulkMatchInput = {
  * ouvert. Utilisé directement par le code qui tourne sous withTournamentLock() (progression de
  * tour standard, avancement du tournoi rapide) : appeler dbBulkCreateMatches() lui-même depuis
  * là ouvrirait une SECONDE transaction indépendante, non couverte par le verrou déjà tenu.
+ *
+ * Perf pré-recette (E1) : générait auparavant chaque Match un par un (`create` en boucle) DANS
+ * `withTournamentLock()` — pour un tournoi de configuration maximale (jusqu'à 512 joueurs/64
+ * poules), la génération de bracket/poules pouvait prendre plusieurs secondes, verrou tournoi
+ * tenu pendant tout ce temps (bloque toute autre action sur ce tournoi, ex. saisie de score).
+ * L'id de chaque Match est désormais généré côté client (`randomUUID()`, même défaut que
+ * `@default(uuid())` côté schéma) : connu avant l'insertion, donc les MatchSet peuvent être
+ * construits et insérés en un seul `createMany` groupé, sans dépendre de l'ordre de retour
+ * d'un `createManyAndReturn` ni d'un aller-retour DB par match.
  */
 export async function bulkCreateMatchesTx(tx: Prisma.TransactionClient, tournamentId: string, matches: BulkMatchInput[]) {
-  for (const m of matches) {
-    const match = await tx.match.create({
-      data: {
-        tournamentId,
-        bracketRound: m.bracketRound,
-        bracketPosition: m.bracketPosition,
-        boardNumber: m.boardNumber,
-        bracketType: m.bracketType ?? "SINGLE",
-        status: m.status as MatchStatus,
-        player1Id: m.player1Id,
-        player2Id: m.player2Id ?? null,
-        winnerId: m.winnerId ?? null,
-      },
-      select: { id: true },
-    });
+  if (matches.length === 0) return;
 
-    if (m.roundIds.length > 0) {
-      await tx.matchSet.createMany({
-        data: m.roundIds.map((roundId) => ({ matchId: match.id, roundId })),
-      });
-    }
+  const matchesWithIds = matches.map((m) => ({ ...m, id: randomUUID() }));
+
+  await tx.match.createMany({
+    data: matchesWithIds.map((m) => ({
+      id: m.id,
+      tournamentId,
+      bracketRound: m.bracketRound,
+      bracketPosition: m.bracketPosition,
+      boardNumber: m.boardNumber,
+      bracketType: m.bracketType ?? "SINGLE",
+      status: m.status as MatchStatus,
+      player1Id: m.player1Id,
+      player2Id: m.player2Id ?? null,
+      winnerId: m.winnerId ?? null,
+    })),
+  });
+
+  const matchSetsData = matchesWithIds.flatMap((m) => m.roundIds.map((roundId) => ({ matchId: m.id, roundId })));
+  if (matchSetsData.length > 0) {
+    await tx.matchSet.createMany({ data: matchSetsData });
   }
 }
 
