@@ -2,6 +2,13 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
+> ⚠️ **Non tenu à jour en continu** (constaté lors de l'audit pré-recette 2026-09) — de
+> nombreuses missions postérieures à la dernière entrée ci-dessous (migration SSO,
+> DO-FIELD-ACCESS-001/002, DO-FIELD-INCIDENT-001/002, DARTSOPEN-MONETIZATION-002/003/004,
+> DO-QUICK-POOL-001, SEC-005/006...) n'y figurent pas. **`CLAUDE.md` fait foi pour l'état
+> actuel du produit** — ce changelog reste ponctuel/best-effort, ne pas s'y fier seul pour
+> évaluer ce qui est réellement livré.
+
 ## [DO-003] — 2026-08-03
 
 Migration complète des paiements vers l'architecture BApps Studio (SterPlatform gère
