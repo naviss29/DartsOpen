@@ -6,6 +6,7 @@ const findFirstMatch = vi.fn();
 const findFirstPoolPlayer = vi.fn();
 const deleteManyRegistration = vi.fn();
 const updateManyRegistration = vi.fn();
+const findUniqueTournament = vi.fn();
 
 vi.mock("./client", () => ({
   prisma: {
@@ -19,6 +20,9 @@ vi.mock("./client", () => ({
       deleteMany: (...args: unknown[]) => deleteManyRegistration(...args),
       updateMany: (...args: unknown[]) => updateManyRegistration(...args),
     },
+    tournament: {
+      findUnique: (...args: unknown[]) => findUniqueTournament(...args),
+    },
   },
 }));
 
@@ -28,6 +32,7 @@ import {
   dbEraseRegistration,
   dbUpdateRegistration,
   dbAnonymizeExpiredContacts,
+  dbGetTournamentPublic,
   CONTACT_RETENTION_MONTHS,
 } from "./tournament";
 
@@ -37,6 +42,7 @@ beforeEach(() => {
   deleteManyRegistration.mockReset();
   updateManyRegistration.mockReset();
   updateManyRegistration.mockResolvedValue({ count: 0 });
+  findUniqueTournament.mockReset();
 });
 
 /**
@@ -279,5 +285,55 @@ describe("dbUpdateRegistration (BAPPS-LEGAL-005 §7 — rectification)", () => {
         playerNames: ["Alice", "Bob"],
       },
     });
+  });
+});
+
+describe("dbGetTournamentPublic — n'expose pas association_id (audit pré-recette, S2)", () => {
+  function fullTournamentRow() {
+    return {
+      id: "t1",
+      userId: "org-user-uuid-secret",
+      name: "Open de printemps",
+      date: new Date("2026-06-01T00:00:00.000Z"),
+      location: "Bar Le Central",
+      status: "IN_PROGRESS",
+      maxPlayers: 32,
+      entryFee: 500,
+      nbPools: 4,
+      nbBoards: 8,
+      advancementPerPool: 2,
+      playersPerTeam: 1,
+      registrationMode: "ONLINE",
+      paymentMode: "ONLINE",
+      scoringMode: "ELECTRONIC",
+      quickMode: false,
+      idempotencyKey: "idem-key-123",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      rounds: [],
+    };
+  }
+
+  it("ne renvoie jamais association_id (l'id interne SterPlatform de l'organisateur)", async () => {
+    findUniqueTournament.mockResolvedValue(fullTournamentRow());
+
+    const result = await dbGetTournamentPublic("t1");
+
+    expect(result).not.toBeNull();
+    expect(result).not.toHaveProperty("association_id");
+    expect(JSON.stringify(result)).not.toContain("org-user-uuid-secret");
+  });
+
+  it("conserve idempotency_key (délibérément non-secret, déjà transmis à SterPlatform)", async () => {
+    findUniqueTournament.mockResolvedValue(fullTournamentRow());
+
+    const result = await dbGetTournamentPublic("t1");
+
+    expect(result).toMatchObject({ idempotency_key: "idem-key-123" });
+  });
+
+  it("retourne null si le tournoi n'existe pas, sans lever d'exception", async () => {
+    findUniqueTournament.mockResolvedValue(null);
+
+    expect(await dbGetTournamentPublic("inconnu")).toBeNull();
   });
 });

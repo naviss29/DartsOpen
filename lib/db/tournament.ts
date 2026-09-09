@@ -361,8 +361,20 @@ export async function dbGetTournament(id: string, client: Prisma.TransactionClie
   return mapTournament({ ...t, rounds: t.rounds.map(mapRound) });
 }
 
+/**
+ * Sécurité pré-recette (S2) — dbGetTournamentPublic() était un simple alias de
+ * dbGetTournament(), sans restriction de champs : exposait association_id (l'identifiant
+ * interne SterPlatform de l'organisateur, qui sert par ailleurs de clé d'autorisation
+ * ailleurs dans le système) et idempotency_key sans authentification, à n'importe quelle page
+ * publique (/t/{id}/live, /t/{id}/tv). idempotency_key reste délibérément non-secret (déjà
+ * transmis tel quel à SterPlatform, voir mapTournament) — c'est association_id qui n'avait
+ * aucune raison d'être public.
+ */
 export async function dbGetTournamentPublic(id: string) {
-  return dbGetTournament(id);
+  const t = await dbGetTournament(id);
+  if (!t) return null;
+  const { association_id: _association_id, ...publicTournament } = t;
+  return publicTournament;
 }
 
 /**
