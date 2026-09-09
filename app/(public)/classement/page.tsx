@@ -3,7 +3,12 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { EmptyState } from "@naviss29/design-system";
 
-export const dynamic = "force-dynamic";
+// Perf pré-recette (E2) : dbGetRanking() charge tous les Match/Registration FINISHED de TOUS
+// les tournois de la plateforme à chaque visite (agrégation en mémoire, aucun filtre date/
+// nombre de tournois) — impact négligeable au volume actuel, grossira avec l'historique de la
+// plateforme. Un cache court amortit les visites répétées sans changer l'algorithme de
+// classement ni sa sémantique ("tous tournois confondus", copie de la page inchangée).
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: "Classement général — DartsOpen",
