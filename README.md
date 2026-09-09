@@ -30,7 +30,7 @@ DartsOpen fait partie de l'écosystème [BApps Studio](https://github.com/naviss
 | Inscriptions par équipe (solo / doublette / triplette…) | ✅ |
 | Inscription en ligne + paiement (SterPlatform / Stripe Connect) | ✅ |
 | Mode inscriptions sur place uniquement | ✅ |
-| Frais plateforme 0,10 € / joueur (paiements en ligne via SterPlatform) | ✅ |
+| Modèle économique : gratuit ≤10 joueurs, crédit/abonnement au-delà (aucun frais par inscription) | ✅ |
 | QR Code pré-tournoi par cible (à scotcher sur les machines avant l'événement) | ✅ |
 | Mode scoring électronique (clic sur le vainqueur — double validation) | ✅ |
 | Mode scoring traditionnel (saisie des scores par volée avec tableau de bord) | ✅ |
@@ -47,7 +47,7 @@ DartsOpen fait partie de l'écosystème [BApps Studio](https://github.com/naviss
 | Dashboard multi-utilisateur — voir tous les opens, s'inscrire en un clic | ✅ |
 | Validation 501 (scores impossibles, bust double out, fermetures impossibles) | ✅ |
 | Historique des volées en temps réel (saisie mobile) | ✅ |
-| Conformité RGPD | 🔲 |
+| Conformité RGPD — rétention/anonymisation automatique implémentée (BAPPS-LEGAL-005), pas de portail export/droit à l'oubli en self-service | 🟡 |
 
 ---
 
@@ -81,9 +81,9 @@ exclusivement par SterPlatform (mission DO-003).
 ```
 DartsOpen/
 ├── app/                    # Next.js App Router
-│   ├── (auth)/             # Pages login / inscription
+│   ├── (auth)/             # Redirection vers le SSO central (aucun formulaire local, voir CLAUDE.md)
 │   ├── (dashboard)/        # Dashboard association
-│   ├── (tournament)/       # Vue tournoi (public + joueur)
+│   ├── (public)/           # Vue tournoi (public + joueur), classement, profils
 │   └── api/                # API Routes publiques + webhook paiements SterPlatform
 ├── components/             # Composants React réutilisables
 │   ├── ui/                 # Composants UI de base
@@ -203,13 +203,17 @@ passent exclusivement par l'API interne de SterPlatform.
 
 ## Modèle économique
 
-- **0,10 € par joueur** retenu par DartsOpen (frais de service)
-- Inscriptions en ligne : le montant total et `platformFeeCents` sont transmis à l'API de
-  paiement interne de SterPlatform, qui retient les frais via Stripe Connect
-- Inscriptions sur place (mode ONSITE) : aucun frais de plateforme prélevé automatiquement
-  (jamais transmis à Stripe)
-- Au-delà de la limite gratuite : abonnement DartsOpen ou crédit tournoi, gérés et consommés
-  exclusivement via SterPlatform (aucun palier de paiement intermédiaire dans DartsOpen)
+> Corrigé lors de l'audit pré-recette 2026-09 — décrivait encore un tarif de 0,10 €/joueur
+> jamais réellement appliqué en production (voir `lib/platformFee.ts`).
+
+- **Aucun frais retenu par DartsOpen sur les inscriptions** (`PLATFORM_FEE_CENTS = 0`,
+  décision Product Owner) — `platformFeeCents` reste transmis à l'API de paiement interne de
+  SterPlatform pour rester générique entre modules, mais vaut toujours 0 aujourd'hui
+- Inscriptions sur place (mode ONSITE) : aucun frais de plateforme, jamais transmis à Stripe
+- Au-delà de la limite gratuite (≤10 joueurs) : abonnement DartsOpen optionnel ou crédit
+  tournoi ponctuel, gérés et consommés exclusivement via SterPlatform (aucun palier de
+  paiement intermédiaire dans DartsOpen) — c'est ici, pas sur les inscriptions, que se trouve
+  le modèle économique réel du produit
 
 ---
 
