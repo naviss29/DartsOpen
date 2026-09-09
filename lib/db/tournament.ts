@@ -16,43 +16,30 @@ import {
 import { seedBracket } from "../utils/bracket";
 import { computePoolStandings } from "../utils/pools";
 import { pairPlayers, shufflePlayers, getQuickModeGameFormat } from "../utils/doubleElimination";
+import { p2002ConstraintIdentifiers } from "./prismaErrors";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — vérifie qu'une erreur P2002
- * porte bien sur `idempotency_key`, quelle que soit la forme de `meta` renvoyée. Avec
- * `@prisma/adapter-pg` (Prisma 7, driver adapters), `meta.target` n'existe pas : le champ en
- * conflit est niché sous `meta.driverAdapterError.cause.constraint.fields` — une forme
- * différente du classique `meta.target` du query engine intégré. Un test PostgreSQL
- * concurrent réel (lib/db/tournament.concurrency.test.ts) a montré que ne vérifier que
- * `meta.target` laisse passer un vrai P2002 concurrent tel quel (throw non géré) au lieu de
- * retourner le tournoi du gagnant de la course.
+ * porte bien sur `idempotency_key`, quelle que soit la forme de `meta` renvoyée par la version
+ * de Prisma en place (voir lib/db/prismaErrors.ts — la forme exacte a déjà changé une fois,
+ * silencieusement, entre deux versions mineures de prisma@7). Un test PostgreSQL concurrent
+ * réel (lib/db/tournament.concurrency.test.ts) a montré que ne vérifier qu'une seule forme
+ * laisse passer un vrai P2002 concurrent tel quel (throw non géré) au lieu de retourner le
+ * tournoi du gagnant de la course.
  */
 function isIdempotencyKeyConflict(err: unknown): boolean {
-  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
-    return false;
-  }
-  const meta = err.meta as
-    | { target?: string[]; driverAdapterError?: { cause?: { constraint?: { fields?: string[] } } } }
-    | undefined;
-  if (meta?.target?.includes("idempotency_key")) return true;
-  if (meta?.driverAdapterError?.cause?.constraint?.fields?.includes("idempotency_key")) return true;
-  return false;
+  return p2002ConstraintIdentifiers(err).some((id) => id.includes("idempotency_key"));
 }
 
 /**
  * DO-SPORT-001 — vérifie qu'une erreur P2002 provient bien de l'une des deux contraintes
  * partielles ajoutées sur `matches` (voir la migration dédiée) : au plus un match IN_PROGRESS
  * par cible réelle, ou au plus un match par slot de bracket (tournoi, type, round, position).
- * Même discipline que `isIdempotencyKeyConflict` — l'index Postgres réellement en conflit peut
- * être signalé sous des formes différentes selon le moteur de requête.
+ * Même discipline que `isIdempotencyKeyConflict`.
  */
 export function isSportEngineUniqueConflict(err: unknown): boolean {
-  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
-    return false;
-  }
-  const meta = err.meta as { target?: string; driverAdapterError?: { cause?: { constraint?: { name?: string } } } } | undefined;
-  const constraintName = meta?.target ?? meta?.driverAdapterError?.cause?.constraint?.name ?? "";
-  return constraintName.includes("matches_one_active_per_board") || constraintName.includes("matches_unique_bracket_slot");
+  const ids = p2002ConstraintIdentifiers(err);
+  return ids.some((id) => id.includes("matches_one_active_per_board") || id.includes("matches_unique_bracket_slot"));
 }
 
 /**

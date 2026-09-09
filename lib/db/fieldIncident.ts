@@ -1,6 +1,6 @@
 import { prisma } from "./client";
-import { Prisma } from "../generated/prisma/client";
 import type { FieldIncidentType, FieldIncidentReporterRole } from "../generated/prisma/client";
+import { p2002ConstraintIdentifiers } from "./prismaErrors";
 
 /**
  * DO-FIELD-INCIDENT-001 — CRUD léger de signalement terrain. Cette table ne fait que TRACER un
@@ -12,20 +12,12 @@ import type { FieldIncidentType, FieldIncidentReporterRole } from "../generated/
 const MAX_COMMENT_LENGTH = 280;
 
 /**
- * Même discipline que isIdempotencyKeyConflict (lib/db/tournament.ts) : le moteur de requête
- * signale une contrainte Postgres non modélisée dans le schéma Prisma (index partiel manuscrit)
- * via `driverAdapterError.cause.constraint.fields` (tableau de colonnes), jamais un `target`
- * ni un `constraint.name` exploitable — vérifié empiriquement contre le vrai driver.
+ * Même discipline que isIdempotencyKeyConflict (lib/db/tournament.ts) — voir
+ * lib/db/prismaErrors.ts pour la raison d'être de cette vérification multi-forme.
  */
 function isDuplicateOpenIncidentConflict(err: unknown): boolean {
-  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") {
-    return false;
-  }
-  const meta = err.meta as
-    | { target?: string[]; driverAdapterError?: { cause?: { constraint?: { fields?: string[] } } } }
-    | undefined;
-  const fields = meta?.target ?? meta?.driverAdapterError?.cause?.constraint?.fields ?? [];
-  return fields.includes("match_id") && fields.includes("type");
+  const ids = p2002ConstraintIdentifiers(err);
+  return ids.includes("field_incidents_open_dedup") || (ids.includes("match_id") && ids.includes("type"));
 }
 
 /**
