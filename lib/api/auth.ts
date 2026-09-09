@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { apiFetch } from './client';
 
@@ -41,7 +42,13 @@ export type SterUser = {
   isVerified: boolean;
 };
 
-export async function getUser(): Promise<SterUser | null> {
+// Perf pré-recette (D3) — chaque appel effectuait un aller-retour réseau vers SterPlatform
+// /api/auth/me (choix volontaire pour la fraîcheur des rôles/JWT, conservé tel quel). Sans
+// mémoïsation, le layout du dashboard ET chaque page/Server Action enfant appelaient getUser()
+// indépendamment, multipliant les appels à SterPlatform pour un seul rendu de page. cache()
+// (React) déduplique au sein d'un même rendu serveur, jamais entre deux requêtes distinctes —
+// aucun changement de comportement de fraîcheur inter-requêtes.
+export const getUser = cache(async (): Promise<SterUser | null> => {
   const token = await getServerToken();
   if (!token) return null;
 
@@ -52,4 +59,4 @@ export async function getUser(): Promise<SterUser | null> {
   } catch {
     return null;
   }
-}
+});
