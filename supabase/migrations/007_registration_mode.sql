@@ -1,1 +1,0 @@
-ALTER TABLE public.tournaments ADD COLUMN IF NOT EXISTS registration_mode VARCHAR(10) NOT NULL DEFAULT 'ONLINE';
