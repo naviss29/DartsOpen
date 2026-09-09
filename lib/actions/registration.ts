@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { PLATFORM_FEE_CENTS } from "@/lib/platformFee";
 import {
   dbGetTournament,
@@ -20,6 +21,24 @@ import { redirect } from "next/navigation";
  */
 const RESERVATION_TTL_MINUTES = 30;
 
+// Sécurité pré-recette (S3) — createRegistration() est la seule Server Action véritablement
+// publique et non authentifiée du produit (auto-inscription) : avant ce schéma, seul le
+// téléphone était validé (regex), contactEmail n'était jamais vérifié comme une adresse email
+// valide, teamName/playerNames n'avaient ni longueur maximale ni sanitation. Mêmes bornes que
+// PlayerSchema (lib/actions/player.ts), l'équivalent organisateur.
+const RegistrationSchema = z.object({
+  teamName: z.string().trim().min(1, "Le nom est requis.").max(100, "Le nom est trop long (100 caractères max)."),
+  contactEmail: z.string().trim().email("Email invalide."),
+  phone: z
+    .string()
+    .trim()
+    .refine((v) => !v || /^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(v), "Numéro de téléphone invalide (ex : 0612345678).")
+    .nullable(),
+  playerNames: z
+    .array(z.string().trim().min(1, "Le nom d'un joueur ne peut pas être vide.").max(100, "Nom de joueur trop long (100 caractères max)."))
+    .min(1, "Au moins un joueur est requis."),
+});
+
 export async function createRegistration(
   tournamentId: string,
   teamName: string,
@@ -27,13 +46,15 @@ export async function createRegistration(
   phone: string | null,
   playerNames: string[]
 ): Promise<{ error?: string }> {
+  const parsed = RegistrationSchema.safeParse({ teamName, contactEmail, phone, playerNames });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données d'inscription invalides." };
+  }
+  ({ teamName, contactEmail, phone, playerNames } = parsed.data);
+
   const tournament = await dbGetTournament(tournamentId);
   if (!tournament || tournament.status !== "OPEN") {
     return { error: "Ce tournoi n'accepte plus les inscriptions." };
-  }
-
-  if (phone && !/^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(phone.trim())) {
-    return { error: "Numéro de téléphone invalide (ex : 0612345678)." };
   }
 
   const platformFeeCents = PLATFORM_FEE_CENTS * tournament.players_per_team;

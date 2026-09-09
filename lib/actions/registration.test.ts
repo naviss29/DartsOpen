@@ -240,3 +240,54 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     expect(dbUpdateRegistrationPaymentId).not.toHaveBeenCalled();
   });
 });
+
+describe("createRegistration — validation d'entrée (audit pré-recette, S3)", () => {
+  it("refuse un email malformé, avant tout accès DB", async () => {
+    const result = await createRegistration("tournament-1", "Team A", "pas-un-email", null, ["Alice"]);
+
+    expect(result.error).toMatch(/email/i);
+    expect(dbGetTournament).not.toHaveBeenCalled();
+  });
+
+  it("refuse un nom d'équipe vide", async () => {
+    const result = await createRegistration("tournament-1", "   ", "a@example.com", null, ["Alice"]);
+
+    expect(result.error).toBeDefined();
+    expect(dbGetTournament).not.toHaveBeenCalled();
+  });
+
+  it("refuse un nom d'équipe de plus de 100 caractères", async () => {
+    const result = await createRegistration("tournament-1", "A".repeat(101), "a@example.com", null, ["Alice"]);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it("refuse une liste de joueurs vide", async () => {
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, []);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it("refuse un nom de joueur vide dans la liste", async () => {
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "   "]);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it("refuse un téléphone mal formé", async () => {
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", "123", ["Alice"]);
+
+    expect(result.error).toMatch(/téléphone/i);
+  });
+
+  it("accepte un téléphone null (non fourni) — la validation passe, l'inscription va jusqu'à la redirection de succès", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(dbGetTournament).toHaveBeenCalled();
+  });
+});
