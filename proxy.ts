@@ -24,6 +24,11 @@ const RATE_LIMIT_RULES: { prefix: string; windowMs: number; max: number }[] = [
   // peut voir plusieurs dizaines de joueurs partager la même IP publique
   // (NAT) pendant un événement en direct.
   { prefix: '/t/', windowMs: 5 * 60_000, max: 300 },
+  // Audit pré-recette (S4) — /classement agrège l'ensemble des tournois FINISHED de la
+  // plateforme à chaque requête (lib/db/ranking.ts, sans cache), /p/ lit le profil public
+  // d'un joueur : ni l'une ni l'autre n'était couverte, appelables sans aucune limite.
+  { prefix: '/classement', windowMs: 60_000, max: 120 },
+  { prefix: '/p/', windowMs: 60_000, max: 120 },
 ];
 
 function rateLimitResponse(request: NextRequest, retryAfterSeconds: number) {
