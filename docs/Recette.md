@@ -1,6 +1,8 @@
 # DartsOpen — Plan de recette / Campagne de tests
 
-> Version : 1.0 — Mai 2026  
+> Version : 1.1 — Septembre 2026 (Campagne C1 réécrite lors de l'audit pré-recette — décrivait
+> un formulaire `/login` local, retiré depuis la migration vers le SSO central, voir CLAUDE.md
+> §"Authentification (SSO central)")  
 > Outil de référence : style Squash TM  
 > Environnement cible : staging (`dartsopen.bichetapps.com`)
 
@@ -19,19 +21,23 @@
 
 ---
 
-## Campagne C1 — Authentification
+## Campagne C1 — Authentification (SSO central)
+
+> DartsOpen n'a plus aucun écran de login/register/mot-de-passe-oublié local. **BSsite** (le
+> Portail BApps Studio) est l'unique portail de connexion visible de l'écosystème — un compte
+> se crée et se gère exclusivement là-bas, jamais sur DartsOpen.
 
 ### T-001 — Connexion avec compte valide 🔴 P1
 
-**Préconditions :** Compte existant sur SterPlatform (email/password)
+**Préconditions :** Compte existant sur BSsite (le Portail BApps Studio)
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Accéder à `/login` | Formulaire email + mot de passe affiché |
-| 2 | Saisir email et mot de passe valides, cliquer "Se connecter" | Redirection vers `/dashboard` |
-| 3 | Vérifier le header | Nom de l'association / utilisateur visible |
+| 1 | Accéder à une page protégée de DartsOpen (ex. `/dashboard`) sans session | Redirection automatique vers BSsite (`/login`, ou directement le formulaire si déjà en transit SSO) |
+| 2 | Saisir email et mot de passe valides sur BSsite, ou utiliser le bouton Google, cliquer "Se connecter" | Redirection retour vers DartsOpen (`/api/auth/sso/callback` puis la page initialement demandée) |
+| 3 | Vérifier le header DartsOpen | Nom de l'association / utilisateur visible |
 
-**Ligne de test rapide :** Se connecter → vérifier la redirection vers `/dashboard`.
+**Ligne de test rapide :** Depuis `/dashboard` non connecté → se connecter sur BSsite → vérifier le retour automatique sur `/dashboard`.
 
 ---
 
@@ -41,11 +47,11 @@
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Accéder à `/login` | Formulaire affiché |
-| 2 | Saisir un mot de passe incorrect | Message d'erreur affiché ("Identifiants invalides" ou similaire) |
-| 3 | Vérifier qu'aucune redirection ne se produit | Reste sur `/login` |
+| 1 | Être redirigé vers BSsite depuis DartsOpen | Formulaire BSsite affiché |
+| 2 | Saisir un mot de passe incorrect | Message d'erreur affiché côté BSsite ("Identifiants invalides" ou similaire) |
+| 3 | Vérifier qu'aucune redirection vers DartsOpen ne se produit | Reste sur BSsite |
 
-**Ligne de test rapide :** Connexion avec mauvais mot de passe → vérifier message d'erreur.
+**Ligne de test rapide :** Connexion avec mauvais mot de passe sur BSsite → vérifier message d'erreur, pas de retour sur DartsOpen.
 
 ---
 
@@ -55,11 +61,11 @@
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Accéder à `/register` | Formulaire inscription affiché |
-| 2 | Remplir tous les champs requis, soumettre | Compte créé, redirection ou message de confirmation |
-| 3 | Se connecter avec le compte créé | Connexion réussie, accès dashboard |
+| 1 | Depuis la redirection SSO, cliquer sur le lien d'inscription proposé par BSsite | Formulaire d'inscription BSsite affiché (jamais sur DartsOpen) |
+| 2 | Remplir tous les champs requis, soumettre | Compte créé côté SterPlatform, retour vers le flux SSO |
+| 3 | Terminer la connexion avec le compte créé | Connexion réussie, retour sur DartsOpen (`/dashboard`) |
 
-**Ligne de test rapide :** Créer un compte avec un email unique → connexion réussie.
+**Ligne de test rapide :** Créer un compte sur BSsite avec un email unique → vérifier le retour réussi sur DartsOpen.
 
 ---
 
@@ -69,23 +75,24 @@
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Accéder directement à `/dashboard` | Redirection automatique vers `/login` |
-| 2 | Accéder directement à `/tournaments/new` | Redirection automatique vers `/login` |
+| 1 | Accéder directement à `/dashboard` | Redirection automatique vers le départ SSO (`/api/auth/sso/start`), puis BSsite |
+| 2 | Accéder directement à `/tournaments/new` | Même redirection, avec retour prévu sur `/tournaments/new` après connexion |
 
-**Ligne de test rapide :** Accéder à `/dashboard` sans être connecté → redirection vers `/login`.
+**Ligne de test rapide :** Accéder à `/dashboard` sans être connecté → vérifier la redirection vers BSsite (jamais un formulaire `/login` local).
 
 ---
 
-### T-005 — Déconnexion 🟠 P2
+### T-005 — Déconnexion (globale) 🟠 P2
 
 **Préconditions :** Utilisateur connecté
 
 | # | Action | Résultat attendu |
 |---|---|---|
-| 1 | Cliquer sur "Déconnexion" (menu ou bouton) | Session supprimée, redirection vers `/login` |
-| 2 | Tenter d'accéder à `/dashboard` | Redirection vers `/login` |
+| 1 | Cliquer sur "Déconnexion" (menu ou bouton) | Session DartsOpen révoquée puis vrai POST de formulaire top-level vers SterPlatform (`/api/auth/sso/logout`) — coupe la session **partout** dans l'écosystème, pas seulement sur DartsOpen |
+| 2 | Tenter d'accéder à `/dashboard` | Redirection vers le départ SSO (BSsite) |
+| 3 | (Si un autre produit BApps Studio était ouvert dans un autre onglet, ex. BSsite) Rafraîchir cet autre onglet | Également déconnecté — vérifie le caractère global de la déconnexion |
 
-**Ligne de test rapide :** Se déconnecter → vérifier que `/dashboard` est inaccessible.
+**Ligne de test rapide :** Se déconnecter → vérifier que `/dashboard` redirige vers BSsite, jamais vers un `/login` local.
 
 ---
 
