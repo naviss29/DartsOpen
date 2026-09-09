@@ -33,4 +33,6 @@
 
 ## Dette technique potentielle
 
-- Penser à l'index PostgreSQL sur `match.status` + `match.board_number` pour les requêtes temps réel
+- ~~Penser à l'index PostgreSQL sur `match.status` + `match.board_number`~~ — fait (audit
+  pré-recette 2026-09), voir `@@index([tournamentId, status, boardNumber])` sur `Match` dans
+  `prisma/schema.prisma`

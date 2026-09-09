@@ -277,6 +277,11 @@ model Match {
   @@index([tournamentId, bracketRound])
   @@index([tournamentId, poolId, status])
   @@index([poolId])
+  // Perf pré-recette (D2) — dbPromoteUnassignedMatches() (lib/db/tournament.ts) filtre par
+  // (tournamentId, status, boardNumber) ; noté depuis un moment (docs/pense-bete.md) sans
+  // index couvrant complet. Sans impact à la volumétrie actuelle (quelques centaines de
+  // matchs par tournoi), à traiter avant une montée en charge réelle.
+  @@index([tournamentId, status, boardNumber])
   // DO-SPORT-001 — deux contraintes d'unicité partielles (index PostgreSQL filtrés, ajoutées
   // en migration SQL manuscrite — non représentables par la syntaxe @@unique de Prisma) :
   // 1. au plus un match IN_PROGRESS par (tournoi, cible réelle) — une cible ne peut jamais
