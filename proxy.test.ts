@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import proxy from "./proxy";
 
@@ -89,5 +89,32 @@ describe("proxy — headers de sécurité (SEC-006)", () => {
     const csp = response.headers.get("Content-Security-Policy")!;
 
     expect(csp).toMatch(/form-action 'self'/);
+  });
+});
+
+describe("proxy — rafraîchissement silencieux de session (audit pré-recette 2026-09, SEC-3)", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  it("après rafraîchissement, le NOUVEL access token est aussi visible pour le rendu du MÊME cycle", async () => {
+    // Poser le nouveau cookie uniquement sur `response.cookies` ne le rend visible qu'à la
+    // PROCHAINE requête navigateur — le Server Component de CE rendu lirait encore l'ancien (ou
+    // aucun) `request.cookies` et pourrait rebondir vers le SSO malgré un refresh réussi.
+    // `NextResponse.next({ request })` transmet les en-têtes mis à jour via
+    // `x-middleware-request-cookie` (mécanisme interne Next.js) — on vérifie ici que le nouveau
+    // token y figure bien, pas seulement dans le Set-Cookie de la réponse.
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ token: "new-access", refresh_token: "new-refresh" }), { status: 200 }),
+    );
+    const req = new NextRequest("https://dartsopen.bapps-studio.com/dashboard", {
+      headers: { cookie: "ster_refresh_token=old-refresh" },
+    });
+
+    const res = await proxy(req);
+
+    expect(res.cookies.get("ster_token")?.value).toBe("new-access");
+    const overriddenCookieHeader = res.headers.get("x-middleware-request-cookie");
+    expect(overriddenCookieHeader).toContain("ster_token=new-access");
   });
 });

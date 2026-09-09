@@ -98,7 +98,20 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
     }
 
     const data = await res.json();
-    const response = NextResponse.next();
+
+    // Audit pré-recette 2026-09, finding SEC-3 (HIGH, initialement identifié dans Marketplace,
+    // même proxy.ts dupliqué à l'identique dans 5 repos) — poser les nouveaux cookies UNIQUEMENT
+    // sur `response.cookies` ne les rend visibles qu'à la PROCHAINE requête du navigateur : le
+    // Server Component rendu dans CE MÊME cycle continue de lire `request.cookies`, qui ne
+    // contient encore que l'ancien (ou aucun) access token — un rafraîchissement pourtant réussi
+    // peut donc faire rebondir l'utilisateur vers le SSO. On mute d'abord `request.cookies`
+    // (repris par `NextResponse.next({ request })`, qui transmet les en-têtes — donc les cookies
+    // — mis à jour au rendu en aval), puis on pose les mêmes cookies sur la réponse pour que le
+    // navigateur les conserve.
+    request.cookies.set(TOKEN_COOKIE, data.token);
+    request.cookies.set(REFRESH_COOKIE, data.refresh_token);
+
+    const response = NextResponse.next({ request });
 
     response.cookies.set(TOKEN_COOKIE, data.token, {
       ...COOKIE_BASE,
