@@ -19,7 +19,9 @@ describe("GET /api/health (DARTSOPEN)", () => {
   });
 
   it("reste HTTP 200 mais signale une base inaccessible", async () => {
-    queryRawMock.mockRejectedValue(new Error("connection refused"));
+    queryRawMock.mockImplementationOnce(() => {
+      throw new Error("connection refused");
+    });
     const { GET } = await import("./route");
 
     const response = await GET();
