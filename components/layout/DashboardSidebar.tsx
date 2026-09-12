@@ -3,13 +3,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/catalogs";
 
 const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
 
-export const dashboardNavLinks = [
-  { href: "/dashboard", label: "Tableau de bord", icon: "dashboard" },
-  { href: "/tournaments", label: "Mes tournois", icon: "tournaments" },
-  { href: "/settings", label: "Paramètres", icon: "settings" },
+export const dashboardNavLinks: Array<{
+  href: string;
+  label: string;
+  labelKey: MessageKey;
+  icon: string;
+}> = [
+  { href: "/dashboard", label: "Tableau de bord", labelKey: "nav.dashboard", icon: "dashboard" },
+  { href: "/tournaments", label: "Mes tournois", labelKey: "nav.tournaments", icon: "tournaments" },
+  { href: "/settings", label: "Paramètres", labelKey: "nav.settings", icon: "settings" },
 ];
 
 /**
@@ -59,6 +66,7 @@ export const navIcons: Record<string, React.ReactNode> = {
  */
 export default function DashboardSidebar() {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   return (
     // BAPPS-UX-UNIFICATION-006-FIX-002 — `sticky top-0 h-dvh overflow-y-auto` : la sidebar
@@ -105,7 +113,7 @@ export default function DashboardSidebar() {
               <span className="h-5 w-5 shrink-0" style={{ color: "var(--color-sidenav-icon)" }}>
                 {navIcons[link.icon]}
               </span>
-              {link.label}
+              {t(link.labelKey)}
             </Link>
           );
         })}

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { dashboardNavLinks, navIcons } from "@/components/layout/DashboardSidebar";
 import Button from "@/components/ui/Button";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 /**
  * BAPPS-UX-UNIFICATION-006 LOT 2 — même structure que DashboardMobileNav de BSsite : remplace
@@ -32,6 +33,7 @@ import Button from "@/components/ui/Button";
  */
 export default function DashboardMobileNav() {
   const [open, setOpen] = useState(false);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!open) return;
@@ -63,7 +65,7 @@ export default function DashboardMobileNav() {
             <span className="block h-0.5 w-5 bg-white" />
             <span className="block h-0.5 w-5 bg-white" />
           </span>
-          <span className="sr-only">{open ? "Fermer le menu" : "Ouvrir le menu"}</span>
+          <span className="sr-only">{open ? t("nav.closeMenu") : t("nav.openMenu")}</span>
         </Button>
       </div>
 
@@ -76,7 +78,7 @@ export default function DashboardMobileNav() {
           <div className="absolute inset-0 bg-overlay" aria-hidden="true" />
           <nav
             id="dashboard-mobile-menu"
-            aria-label="Navigation"
+            aria-label={t("nav.navigation")}
             className="absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-3rem))] flex-col overflow-y-auto"
             style={{ backgroundColor: "var(--color-sidenav-surface)" }}
             onMouseDown={(event) => event.stopPropagation()}
@@ -91,7 +93,7 @@ export default function DashboardMobileNav() {
                 <span aria-hidden="true" className="text-xl leading-none">
                   ×
                 </span>
-                <span className="sr-only">Fermer</span>
+                <span className="sr-only">{t("nav.close")}</span>
               </Button>
             </div>
 
@@ -106,7 +108,7 @@ export default function DashboardMobileNav() {
                   <span className="h-5 w-5 shrink-0" style={{ color: "var(--color-sidenav-icon)" }} aria-hidden="true">
                     {navIcons[link.icon]}
                   </span>
-                  {link.label}
+                  {t(link.labelKey)}
                 </Link>
               ))}
             </div>
