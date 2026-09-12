@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db/client";
 
-// Liveness uniquement — confirme que le serveur Next.js répond, jamais de
-// dépendance externe (DB...) pour éviter qu'un ralentissement transitoire
-// fasse échouer le healthcheck du conteneur.
+// Endpoint historique conservé comme liveness Docker : il répond toujours HTTP 200,
+// tout en publiant l'état non sensible de la base pour la supervision.
 export async function GET() {
-  return NextResponse.json({ status: "ok" });
+  let database: "ok" | "unreachable" = "unreachable";
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    database = "ok";
+  } catch {
+    database = "unreachable";
+  }
+
+  return NextResponse.json({ status: "ok", database });
 }
