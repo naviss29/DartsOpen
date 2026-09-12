@@ -5,6 +5,7 @@ import DashboardSidebar from "@/components/layout/DashboardSidebar";
 import DashboardMobileNav from "@/components/layout/DashboardMobileNav";
 import LogoutButton from "@/components/LogoutButton";
 import DashboardApplicationSwitcher from "@/components/layout/DashboardApplicationSwitcher";
+import LanguageSwitcher from "@/components/i18n/LanguageSwitcher";
 import { getMyOrganizationsProducts } from "@/lib/api/organizations";
 
 /**
@@ -51,6 +52,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <>
               <span className="hidden min-w-0 truncate text-sm text-white/80 sm:block">{user.email}</span>
               <DashboardApplicationSwitcher organizations={organizations} />
+              <LanguageSwitcher className="text-white" />
               <span className="shrink-0">
                 <LogoutButton className="text-white/90 hover:text-white" />
               </span>

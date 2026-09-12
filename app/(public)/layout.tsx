@@ -1,11 +1,17 @@
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
+import LanguageSwitcher from "@/components/i18n/LanguageSwitcher";
+import { getI18n } from "@/lib/i18n/server";
+
+export default async function PublicLayout({ children }: { children: React.ReactNode }) {
+  const { t } = await getI18n();
+
   return (
     <div className="min-h-screen bg-brand-light text-brand-dark flex flex-col">
       <div className="flex-1">{children}</div>
-      <footer className="border-t border-border-muted py-4 px-4 text-center text-xs text-brand-text-secondary space-x-4">
-        <a href="/mentions-legales" className="hover:text-brand-dark">Mentions légales</a>
-        <a href="/confidentialite" className="hover:text-brand-dark">Confidentialité</a>
-        <a href="/cgu" className="hover:text-brand-dark">CGU</a>
+      <footer className="flex flex-wrap items-center justify-center gap-4 border-t border-border-muted px-4 py-4 text-center text-xs text-brand-text-secondary">
+        <a href="/mentions-legales" className="hover:text-brand-dark">{t("footer.legal")}</a>
+        <a href="/confidentialite" className="hover:text-brand-dark">{t("footer.privacy")}</a>
+        <a href="/cgu" className="hover:text-brand-dark">{t("footer.terms")}</a>
+        <LanguageSwitcher className="text-brand-dark" />
       </footer>
     </div>
   );
