@@ -34,7 +34,7 @@ describe("design-tokens guardrail", () => {
   const globalsCss = readFileSync(path.resolve(__dirname, "app/globals.css"), "utf-8");
 
   it("pins @naviss29/design-system to exactly the canonical version", () => {
-    expect(packageJson.dependencies?.["@naviss29/design-system"]).toBe("0.8.0");
+    expect(packageJson.dependencies?.["@naviss29/design-system"]).toBe("0.8.2");
   });
 
   it("imports the canonical theme.css in globals.css", () => {

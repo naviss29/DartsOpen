@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { I18nProvider } from "@/components/i18n/I18nProvider";
 import { catalogs } from "@/lib/i18n/catalogs";
 import DashboardApplicationSwitcher from "./DashboardApplicationSwitcher";
 
 describe("DashboardApplicationSwitcher", () => {
+  afterEach(cleanup);
   it("affiche seulement les produits autorisés, identifie DartsOpen et masque l’application mobile", () => {
     render(
       <DashboardApplicationSwitcher
