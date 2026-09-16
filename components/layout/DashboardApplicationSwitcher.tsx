@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useI18n } from "@/components/i18n/I18nProvider";
-import type { MessageKey } from "@/lib/i18n/catalogs";
 import { ApplicationSwitcher } from "@naviss29/design-system";
 import type { OrganizationProductsSummary } from "@/lib/api/organizations";
 

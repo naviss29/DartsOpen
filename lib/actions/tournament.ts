@@ -336,15 +336,6 @@ export async function updateTournamentStatus(
   revalidatePath(`/tournaments/${tournamentId}`);
 }
 
-export async function deleteTournament(tournamentId: string): Promise<{ error?: string }> {
-  await getOwnedTournament(tournamentId);
-
-  const ok = await dbDeleteTournament(tournamentId).catch(() => null);
-  if (ok === null) return { error: "Erreur lors de la suppression du tournoi." };
-  revalidatePath("/tournaments");
-  redirect("/tournaments");
-}
-
 export async function addRound(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
   await getOwnedTournament(tournamentId);

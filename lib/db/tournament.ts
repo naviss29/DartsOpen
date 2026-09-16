@@ -659,28 +659,6 @@ export async function dbListRegistrations(
   return rows.map(mapRegistration);
 }
 
-export async function dbAddRegistration(tournamentId: string, data: {
-  playerName: string;
-  playerEmail: string;
-  playerPhone?: string | null;
-  playerNames: string[];
-  platformFeeCents: number;
-  status?: RegistrationStatus;
-}) {
-  const r = await prisma.registration.create({
-    data: {
-      tournamentId,
-      playerName: data.playerName,
-      playerEmail: data.playerEmail,
-      playerPhone: data.playerPhone ?? null,
-      playerNames: data.playerNames,
-      platformFeeCents: data.platformFeeCents,
-      ...(data.status ? { status: data.status } : {}),
-    },
-  });
-  return mapRegistration(r);
-}
-
 export type ReserveSlotResult =
   | { outcome: "RESERVED"; registration: ReturnType<typeof mapRegistration> }
   | { outcome: "FULL" }
@@ -986,15 +964,6 @@ export async function dbAnonymizeExpiredContacts(userId: string, now: Date = new
     data: { playerEmail: "", playerPhone: null },
   });
   return result.count;
-}
-
-export async function dbCountRegistrations(tournamentId: string, status?: string) {
-  return prisma.registration.count({
-    where: {
-      tournamentId,
-      ...(status ? { status: status as RegistrationStatus } : {}),
-    },
-  });
 }
 
 /**

@@ -179,6 +179,7 @@ la concurrence PostgreSQL, l'API interne SterPlatform et le webhook de paiements
 | `DATABASE_URL` | DSN PostgreSQL local |
 | `NEXT_PUBLIC_API_URL` | URL SterPlatform (ex. `https://sterplatform.bapps-studio.com`) |
 | `STER_ORG_SLUG` | Slug organisation SterPlatform (`dartsopen`) |
+| `NEXT_PUBLIC_STER_ORG_SLUG` | Même slug, exposé côté client (composants `"use client"` appelant SterPlatform directement) |
 | `STER_API_TOKEN` | Token serveur-à-serveur partagé avec SterPlatform (`X-App-Token` — email, statut Stripe Connect, création de paiement) |
 | `STER_PAYMENTS_CALLBACK_SECRET` | Secret de signature des notifications de paiement entrantes depuis SterPlatform (`/api/webhooks/sterplatform-payments`) |
 | `NEXT_PUBLIC_BSSITE_URL` | URL du portail BSsite (lien "Gérer Stripe Connect" depuis la page Paramètres) |
