@@ -58,9 +58,9 @@ Ce projet est porté par un pratiquant de fléchettes qui est également dévelo
 |---|---|---|
 | Framework | Next.js 16 (App Router + Server Actions) | SSR + API intégrée, idéal pour SaaS mobile-first |
 | UI | React 19 + Tailwind CSS 4 + shadcn/ui | Mobile-first, composants accessibles et personnalisables |
-| Base de données | PostgreSQL 15 via Supabase | Robuste, RLS natif pour multi-tenant, gratuit au démarrage |
-| Temps réel | Supabase Realtime | WebSockets sans infrastructure supplémentaire |
-| Auth | Supabase Auth | JWT + OAuth, multi-rôles, magic link |
+| Base de données | PostgreSQL (Prisma 7 + `@prisma/adapter-pg`) | DB propre à DartsOpen, aucune dépendance à Supabase |
+| Temps réel | Mercure (hub SterPlatform, JWT HS256, SSE) | Fallback polling automatique si Mercure indisponible (MatchBoard 3s, BracketLive/TvBoard 5s) |
+| Auth | SterPlatform SSO (Authorization Code + PKCE, JWT + cookies httpOnly) | Portail unique BSsite, aucun formulaire login/register local dans DartsOpen (voir CLAUDE.md) |
 | Paiement | SterPlatform (Stripe Connect) | Mission DO-003 — DartsOpen ne dialogue plus jamais directement avec Stripe, uniquement avec l'API interne de paiement de SterPlatform |
 | QR Code | `qrcode` npm | Génération côté serveur simple |
 | Tests | Vitest + @testing-library/react | Runner rapide, compatible Next.js |
@@ -213,14 +213,16 @@ BApps Studio (0,10 €/joueur retenu par DartsOpen via platformFeeCents)
 
 ## 5. Structure du projet
 
+> Structure simplifiée — voir `README.md` (section "Structure du dépôt") pour l'arborescence
+> actuelle exacte, tenue à jour à chaque mission.
+
 ```
 DartsOpen/
 ├── app/
-│   ├── (auth)/
-│   │   ├── login/page.tsx
-│   │   └── register/page.tsx
+│   ├── (auth)/                    # Redirection vers le SSO central, aucun formulaire local
+│   │   └── login/page.tsx         # Redirige immédiatement vers /api/auth/sso/start
 │   ├── (dashboard)/
-│   │   ├── layout.tsx             # Layout association connectée
+│   │   ├── layout.tsx             # Layout organisateur connecté
 │   │   ├── dashboard/page.tsx
 │   │   └── tournaments/
 │   │       ├── page.tsx           # Liste tournois
@@ -229,34 +231,36 @@ DartsOpen/
 │   │           ├── page.tsx       # Détail tournoi
 │   │           ├── pools/page.tsx # Gestion poules
 │   │           └── live/page.tsx  # Vue salle temps réel
-│   ├── (tournament)/
-│   │   └── tournament/[id]/
+│   ├── (public)/
+│   │   └── t/[id]/
 │   │       ├── live/page.tsx      # Vue publique (spectateur)
+│   │       ├── tv/page.tsx        # Mode écran TV plein écran
 │   │       └── score/page.tsx     # Saisie score (joueur via QR)
 │   └── api/
-│       ├── webhooks/sterplatform-payments/route.ts   # DO-003 — remplace l'ancien webhook Stripe local
+│       ├── auth/sso/{start,callback}/route.ts         # SSO SterPlatform (Authorization Code + PKCE)
+│       ├── webhooks/sterplatform-payments/route.ts    # DO-003 — remplace l'ancien webhook Stripe local
 │       └── qr/[token]/route.ts
 ├── components/
-│   ├── ui/                        # shadcn/ui (Button, Card, Dialog...)
-│   ├── tournament/
-│   │   ├── MatchBoard.tsx         # Tableau matchs en cours/à venir
-│   │   ├── ScoreBoard.tsx         # Tableau des scores par poule
-│   │   ├── NextMatchAlert.tsx     # Annonce visuelle prochain match
-│   │   └── ScoreForm.tsx          # Formulaire saisie score mobile
-│   └── realtime/
-│       └── RealtimeProvider.tsx   # Provider Supabase Realtime
+│   ├── ui/                        # Composants UI de base
+│   └── tournament/
+│       ├── MatchBoard.tsx         # Tableau matchs en cours/à venir
+│       ├── ScoreBoard.tsx         # Tableau des scores par poule
+│       ├── NextMatchAlert.tsx     # Annonce visuelle prochain match
+│       └── ScoreForm.tsx          # Formulaire saisie score mobile
 ├── lib/
-│   ├── supabase/
-│   │   ├── server.ts              # Client Supabase côté serveur
-│   │   └── client.ts             # Client Supabase côté navigateur
+│   ├── sso/                       # Transaction PKCE locale (state, code verifier), voir CLAUDE.md
+│   ├── mercure.ts                 # Signature JWT HS256 + publication des mises à jour (temps réel)
 │   ├── api/
 │   │   └── sterplatformInternal.ts  # DO-003 — client interne SterPlatform (statut Connect, création paiement)
+│   ├── db/                        # Couche Prisma (tournament.ts, ranking.ts...)
+│   ├── generated/prisma/          # Client Prisma généré (gitignored)
 │   └── utils/
 │       ├── qrcode.ts             # Génération QR codes
 │       ├── bracket.ts            # Algorithme phases finales
 │       └── pools.ts              # Génération poules + classement
-├── types/
-│   └── index.ts                  # Types TypeScript partagés
+├── prisma/
+│   ├── schema.prisma              # Schéma de données PostgreSQL
+│   └── migrations/
 ├── docs/
 │   ├── DartsOpen_Documentation.md
 │   └── pense-bete.md
@@ -547,7 +551,7 @@ Ne pas oublier de mettre à jour `APP_FROM_EMAIL` dans Coolify (ex: `noreply@dar
 - **Tableau des scores en salle** : affichage grand écran (TV/vidéoprojecteur) de la vue Live en plein écran sans navigation
 
 ### Qualité & tests
-- **Tests d'intégration server actions** : couvrir `proposeWinner`, `confirmWinner`, `markWinnerDirect`, `generatePools` avec une vraie base de données (Supabase local via `supabase start` ou PostgreSQL Docker)
+- **Tests d'intégration server actions** : couvrir `proposeWinner`, `confirmWinner`, `markWinnerDirect`, `generatePools` avec une vraie base de données (PostgreSQL via `docker compose up -d`, DB propre à DartsOpen — voir `lib/db/tournament.concurrency.test.ts` pour un précédent)
   - Scénarios prioritaires : flux complet d'un match (propose → confirm → match FINISHED → activation match suivant), génération de poules avec différentes configurations
 - **Tests d'intégration actions tournoi** : `updateTournamentStatus` (passage OPEN → IN_PROGRESS, clôture avec frais plateforme), `addPlayer`, `removePlayer`
 - **Seuil de couverture CI** : ajouter `@vitest/coverage-v8` et imposer un minimum (ex. 80 %) dans le workflow GitHub Actions pour bloquer les PR en cas de régression
