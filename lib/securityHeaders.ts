@@ -26,12 +26,21 @@ function originOf(url: string | undefined): string {
 export function buildSecurityHeaders(): Record<string, string> {
   const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_URL);
   const mercureOrigin = originOf(process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL);
+  // Portail BSsite (NEXT_PUBLIC_BSSITE_URL ici, pas NEXT_PUBLIC_PORTAL_URL comme dans les
+  // autres apps — voir DashboardSidebar.tsx/DashboardApplicationSwitcher.tsx) :
+  // SsoController::logout() (SterPlatform) redirige systématiquement vers bssiteLoginBase()
+  // après avoir révoqué la session, jamais vers l'origine appelante. Un navigateur récent
+  // applique form-action à la cible de CETTE redirection, pas seulement à l'URL de soumission
+  // initiale du formulaire — sans cette origine ici, le POST de logout top-level est bloqué
+  // après coup malgré un form-action qui semble déjà correct (même pattern corrigé sur
+  // Connect/BilletAsso/MarketPlace).
+  const portalOrigin = originOf(process.env.NEXT_PUBLIC_BSSITE_URL);
 
   // dédoublonné : en production, le hub Mercure est parfois proxié sous le même domaine que
   // l'API SterPlatform (NEXT_PUBLIC_MERCURE_PUBLIC_URL et NEXT_PUBLIC_API_URL peuvent alors
   // partager la même origine) — un CSP valide mais inutilement répété sinon.
   const connectSrc = [...new Set(["'self'", apiOrigin, mercureOrigin].filter(Boolean))].join(" ");
-  const formAction = ["'self'", apiOrigin].filter(Boolean).join(" ");
+  const formAction = ["'self'", apiOrigin, portalOrigin].filter(Boolean).join(" ");
 
   const csp = [
     "default-src 'self'",
