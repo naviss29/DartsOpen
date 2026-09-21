@@ -10,11 +10,16 @@ export async function POST(request: Request) {
   }
 
   const response = NextResponse.json({ locale });
+  const hostname = new URL(request.url).hostname.toLowerCase();
+  const domain = hostname === "bapps-studio.com" || hostname.endsWith(".bapps-studio.com")
+    ? "bapps-studio.com"
+    : undefined;
   response.cookies.set(localeCookieName, locale, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: domain !== undefined || process.env.NODE_ENV === "production",
     path: "/",
+    ...(domain ? { domain } : {}),
     maxAge: 60 * 60 * 24 * 365,
   });
   return response;

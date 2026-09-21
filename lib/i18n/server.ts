@@ -3,8 +3,9 @@ import { cookies } from "next/headers";
 import { catalogs, translate, type Locale, type MessageKey } from "./catalogs";
 import {
   defaultLocale,
-  isLocale,
+  legacyLocaleCookieName,
   localeCookieName,
+  resolveLocalePreference,
   localeTags,
   selectPlural,
   type PluralForms,
@@ -15,8 +16,10 @@ async function resolveRequestLocale(overrideLocale?: Locale): Promise<Locale> {
 
   try {
     const store = await cookies();
-    const requestedLocale = store.get(localeCookieName)?.value;
-    return isLocale(requestedLocale) ? requestedLocale : defaultLocale;
+    return resolveLocalePreference(
+      store.get(localeCookieName)?.value,
+      store.get(legacyLocaleCookieName)?.value,
+    );
   } catch {
     // Les composants peuvent être rendus hors requête pendant un test unitaire ou un build
     // statique. Le français reste alors le repli déterministe.
