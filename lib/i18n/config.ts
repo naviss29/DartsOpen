@@ -2,7 +2,8 @@ import { catalogs, type Locale } from "./catalogs";
 
 export type { Locale } from "./catalogs";
 export const defaultLocale: Locale = "fr";
-export const localeCookieName = "bapps_locale";
+export const localeCookieName = "bapps_locale_shared";
+export const legacyLocaleCookieName = "bapps_locale";
 export const supportedLocales = Object.keys(catalogs) as Locale[];
 
 export const localeLabels: Record<Locale, string> = {
@@ -28,6 +29,11 @@ export type PluralForms = { other: string } & Partial<Record<PluralCategory, str
 
 export function isLocale(value: unknown): value is Locale {
   return typeof value === "string" && supportedLocales.includes(value as Locale);
+}
+
+export function resolveLocalePreference(shared: unknown, legacy: unknown): Locale {
+  if (isLocale(shared)) return shared;
+  return isLocale(legacy) ? legacy : defaultLocale;
 }
 
 export function selectPlural(locale: Locale, count: number, forms: PluralForms): string {
