@@ -54,18 +54,8 @@ l'écosystème ; DartsOpen n'a plus aucun écran de login/register/forgot-passwo
 reset-password local (retirés par cette migration, pas seulement masqués). SterPlatform
 reste l'unique fournisseur d'identité. Protocole : Authorization Code + PKCE (S256),
 échange de code serveur-à-serveur — jamais de JWT/refresh token dans une URL. Même
-architecture que BilletAsso (pilote AUTH-002) et BSsite (AUTH-005), voir leurs CLAUDE.md
+architecture que BilletAsso (pilote AUTH-002) et BSsite, voir leurs CLAUDE.md
 respectifs pour le détail du protocole côté SterPlatform.
-
-**Remplace l'ancien flux (obsolète, supprimé par cette migration)** : `lib/actions/auth.ts`
-(server actions `register`/`login`/`requestPasswordReset`/`updatePassword`) appelait
-directement les endpoints classiques SterPlatform (`/api/auth/register`, `/login`,
-`/forgot-password`, `/reset-password`) avec le mot de passe transmis en clair depuis un
-formulaire local. Ce fichier, `components/auth/{Login,Register,ForgotPassword,ResetPassword}
-Form.tsx` et les pages `app/(auth)/{register,forgot-password,reset-password}/page.tsx` ont
-été supprimés. Les vestiges Supabase (`app/auth/{callback,confirm}/route.ts`,
-`app/auth/verified/page.tsx`, déjà désactivés avant cette migration) ont également été
-retirés.
 
 - **`app/api/auth/sso/start/route.ts`** — point d'entrée unique de toute redirection "non
   authentifié" (`proxy.ts`, `app/(auth)/login/page.tsx`). Ouvre une transaction locale :
@@ -114,7 +104,7 @@ retirés.
 - Transitions de statut validées côté serveur par `lib/utils/tournamentStatus.ts` (`DRAFT → OPEN → IN_PROGRESS → FINISHED`, séquentiel, `FINISHED` terminal), appliqué dans `dbUpdateTournamentStatus`
 - Clôture automatique en fin de tournoi (mode standard et mode rapide) : voir « Garde-fous »
 
-## Incidents terrain (mission DO-FIELD-INCIDENT-001)
+## Incidents terrain
 
 Mécanisme unique — jamais un système de tickets générique — pour gérer deux situations
 terrain : joueur absent (forfait) et résultat contesté. Repose entièrement sur le modèle
@@ -178,7 +168,7 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
 - **Arbitrage destructeur** : en mode standard, corriger un match de bracket dont le vainqueur change supprime les matchs des tours suivants déjà générés (`dbArbitrateMatch`). `ArbitrateMatchModal` calcule ce risque côté client (`laterMatchesCount`, transmis par `BracketView`) et bloque le bouton de validation tant qu'une case à cocher explicite n'a pas été confirmée. Les matchs de poule (`bracket_round` null) et le mode rapide (jamais destructeur) ne sont pas concernés.
 - **Régénération des poules** : `generatePools` refuse la régénération dès qu'au moins un match de poule est `FINISHED` (contrôle serveur, dans l'action). Tant qu'aucun match n'est terminé, `GeneratePoolsButton` affiche un avertissement et exige une case à cocher avant de permettre la régénération (poules + matchs existants supprimés, joueurs redistribués aléatoirement).
 
-## Inscriptions et paiement (mission DO-003)
+## Inscriptions et paiement
 
 - `lib/actions/registration.ts` (`createRegistration`) — inscription publique. Tournoi
   gratuit (`entry_fee === 0`) : confirmée immédiatement (`status: "PAID"`), email envoyé,
@@ -210,8 +200,7 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   quand Stripe n'est pas opérationnel). Ne s'applique qu'à `registration_mode = ONLINE` avec
   `entry_fee > 0` — un tournoi ONLINE gratuit ou un tournoi ONSITE (quel que soit son
   `entry_fee`, jamais transmis à Stripe) ne nécessite aucun Stripe.
-- **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) — remplace l'ancien
-  webhook Stripe local : reçoit les notifications de paiement signées par SterPlatform
+- **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) : reçoit les notifications de paiement signées par SterPlatform
   (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`). Sur
   `payment.succeeded`, appelle `dbConfirmPendingPayment()` (jamais un `UPDATE` aveugle — voir
   "Capacité, paiement tardif et remboursement" ci-dessous) : `CONFIRMED` → email de
@@ -373,7 +362,7 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 ## Mode tournoi rapide
 
 ### Concept
-Élimination à vies pour bar/soirée, bassin unique (DO-QUICK-POOL-001). Chaque joueur a 2 vies.
+Élimination à vies pour bar/soirée, bassin unique. Chaque joueur a 2 vies.
 Dès qu'une cible se libère ou qu'un joueur redevient disponible, TOUS les joueurs encore en vie
 (1 ou 2) et non engagés dans un autre match forment un seul bassin, apparié sans tenir compte du
 nombre de vies restant — jamais deux files séparées par nombre de vies. Une défaite retire une
@@ -429,6 +418,10 @@ Fonction uniquement du nombre de joueurs encore en vie dans le tournoi, jamais d
 4. Cliquer **Générer le bracket rapide** → `generateQuickBracket` crée les matchs de la manche 1 sur les cibles disponibles
 5. Désigner le gagnant via le bouton **Arbitrer** sur chaque match → `arbitrateMatch` (`lib/actions/admin.ts`) → `doAdvanceQuickTournament` déclenché automatiquement
 6. Les matchs suivants (bassin unique) se créent et s'affectent aux cibles libres automatiquement, jusqu'à ce qu'il ne reste plus qu'un joueur en vie
+
+## Garde-fou i18n
+
+`npm run guardrail:i18n` (`scripts/check-i18n-visible-copy.mjs`, inclus dans `verify`) échoue sur tout **nouveau** texte visible codé en dur hors catalogue. La traduction du produit n'est pas terminée : les écarts historiques sont listés dans `scripts/i18n-visible-copy.baseline.json` (jamais à agrandir). Après avoir traduit des écrans, relancer avec `--update-baseline` pour réduire la baseline. Règles i18n : skill `bapps-i18n`.
 
 ## Conventions
 - Port DB local : 5433 (évite le conflit avec SterPlatform sur 5432)
