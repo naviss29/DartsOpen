@@ -1,3 +1,4 @@
+import { getI18n } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { RegisterTeamForm } from "@/components/tournament/RegisterTeamForm";
 import { dbGetTournamentPublic, dbCountOccupiedSlots } from "@/lib/db/tournament";
@@ -5,7 +6,10 @@ import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }>; searchParams: Promise<{ cancelled?: string }> }
 
-export const metadata: Metadata = { title: "Inscription — DartsOpen" };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t("register.meta") };
+}
 
 type Tournament = {
   id: string;
@@ -22,6 +26,7 @@ type Tournament = {
 };
 
 export default async function RegisterPage({ params, searchParams }: Props) {
+  const { t, formatDate, formatNumber, formatCurrency } = await getI18n();
   const { id } = await params;
   const { cancelled } = await searchParams;
 
@@ -39,55 +44,50 @@ export default async function RegisterPage({ params, searchParams }: Props) {
           <img src="/brand/logo-horizontal.svg" alt="DartsOpen" width={118} height={50} className="h-6 w-auto mx-auto" />
           <h1 className="text-2xl font-bold text-brand-dark">{tournament.name}</h1>
           <p className="text-brand-text-secondary text-sm">
-            📅 {new Date(tournament.date).toLocaleDateString("fr-FR")} &nbsp;·&nbsp;
+            📅 {formatDate(tournament.date)} &nbsp;·&nbsp;
             📍 {tournament.location}
           </p>
           <p className="text-brand-dark text-sm">
-            {count * tournament.players_per_team} / {tournament.max_players} joueurs inscrits
+            {t("register.count", { count: formatNumber(count * tournament.players_per_team), max: formatNumber(tournament.max_players) })}
           </p>
           <p className="text-brand-text-secondary text-sm">
-            👥 {tournament.players_per_team} joueur{tournament.players_per_team > 1 ? "s" : ""} par équipe
+            👥 {t(tournament.players_per_team > 1 ? "register.playersPerTeamPlural" : "register.playersPerTeam", { count: formatNumber(tournament.players_per_team) })}
           </p>
         </div>
 
         {cancelled && (
           <div className="rounded-lg border border-warning-solid/30 bg-warning-solid/10 p-3 text-sm text-warning text-center">
-            Paiement annulé. Vous pouvez réessayer.
+            {t("register.cancelled")}
           </div>
         )}
 
         {tournament.registration_mode === "ONSITE" ? (
           <div className="rounded-xl bg-surface border border-border-muted p-8 text-center space-y-3">
             <p className="text-3xl">📍</p>
-            <p className="font-semibold text-brand-dark">Inscriptions sur place uniquement</p>
+            <p className="font-semibold text-brand-dark">{t("register.onsiteTitle")}</p>
             <p className="text-sm text-brand-text-secondary">
-              Les inscriptions pour cet open se font directement le jour de l&apos;événement.
-              Rendez-vous à l&apos;accueil le{" "}
-              <strong className="text-brand-dark">
-                {new Date(tournament.date).toLocaleDateString("fr-FR")}
-              </strong>{" "}
-              à <strong className="text-brand-dark">{tournament.location}</strong>.
+              {t("register.onsiteDetail", { date: formatDate(tournament.date), location: tournament.location })}
             </p>
           </div>
         ) : isFull ? (
           <div className="rounded-xl bg-surface border border-border-muted p-8 text-center space-y-2">
             <p className="text-2xl">😔</p>
-            <p className="font-semibold text-brand-dark">Tournoi complet</p>
-            <p className="text-brand-text-secondary text-sm">Toutes les places sont prises.</p>
+            <p className="font-semibold text-brand-dark">{t("register.full")}</p>
+            <p className="text-brand-text-secondary text-sm">{t("register.fullDetail")}</p>
           </div>
         ) : (
           <div className="rounded-xl bg-surface border border-border-muted p-6 space-y-5">
             <div>
-              <h2 className="text-h2 text-brand-dark">Inscription de votre équipe</h2>
+              <h2 className="text-h2 text-brand-dark">{t("register.heading")}</h2>
               {tournament.entry_fee > 0 && (
                 <p className="text-brand-turquoise font-medium mt-1">
-                  {(tournament.entry_fee / 100).toFixed(2)} € / joueur &nbsp;·&nbsp;{" "}
+                  {t("register.perPlayer", { price: formatCurrency(tournament.entry_fee / 100) })} &nbsp;·&nbsp;{" "}
                   <span className="font-bold">
-                    {((tournament.entry_fee * tournament.players_per_team) / 100).toFixed(2)} € / équipe
+                    {t("register.perTeam", { price: formatCurrency((tournament.entry_fee * tournament.players_per_team) / 100) })}
                   </span>
                   {tournament.payment_mode !== "ONLINE" && (
                     <span className="block text-sm font-normal text-brand-text-secondary mt-0.5">
-                      Réglé sur place le jour du tournoi
+                      {t("register.paidOnsite")}
                     </span>
                   )}
                 </p>

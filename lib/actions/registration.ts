@@ -1,5 +1,7 @@
 "use server";
 
+import { getI18n } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/catalogs";
 import { z } from "zod";
 import { PLATFORM_FEE_CENTS } from "@/lib/platformFee";
 import {
@@ -26,17 +28,17 @@ const RESERVATION_TTL_MINUTES = 30;
 // téléphone était validé (regex), contactEmail n'était jamais vérifié comme une adresse email
 // valide, teamName/playerNames n'avaient ni longueur maximale ni sanitation. Mêmes bornes que
 // PlayerSchema (lib/actions/player.ts), l'équivalent organisateur.
-const RegistrationSchema = z.object({
-  teamName: z.string().trim().min(1, "Le nom est requis.").max(100, "Le nom est trop long (100 caractères max)."),
-  contactEmail: z.string().trim().email("Email invalide."),
+const RegistrationSchema = (t: (key: MessageKey) => string) => z.object({
+  teamName: z.string().trim().min(1, t("register.nameRequired")).max(100, t("register.nameTooLong")),
+  contactEmail: z.string().trim().email(t("register.invalidEmail")),
   phone: z
     .string()
     .trim()
-    .refine((v) => !v || /^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(v), "Numéro de téléphone invalide (ex : 0612345678).")
+    .refine((v) => !v || /^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(v), t("register.invalidPhone"))
     .nullable(),
   playerNames: z
-    .array(z.string().trim().min(1, "Le nom d'un joueur ne peut pas être vide.").max(100, "Nom de joueur trop long (100 caractères max)."))
-    .min(1, "Au moins un joueur est requis."),
+    .array(z.string().trim().min(1, t("register.playerRequired")).max(100, t("register.playerTooLong")))
+    .min(1, t("register.onePlayer")),
 });
 
 export async function createRegistration(
@@ -46,15 +48,16 @@ export async function createRegistration(
   phone: string | null,
   playerNames: string[]
 ): Promise<{ error?: string }> {
-  const parsed = RegistrationSchema.safeParse({ teamName, contactEmail, phone, playerNames });
+  const { t } = await getI18n();
+  const parsed = RegistrationSchema(t).safeParse({ teamName, contactEmail, phone, playerNames });
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Données d'inscription invalides." };
+    return { error: parsed.error.issues[0]?.message ?? t("register.invalidData") };
   }
   ({ teamName, contactEmail, phone, playerNames } = parsed.data);
 
   const tournament = await dbGetTournament(tournamentId);
   if (!tournament || tournament.status !== "OPEN") {
-    return { error: "Ce tournoi n'accepte plus les inscriptions." };
+    return { error: t("register.closed") };
   }
 
   const platformFeeCents = PLATFORM_FEE_CENTS * tournament.players_per_team;
@@ -84,10 +87,10 @@ export async function createRegistration(
       return null;
     });
 
-    if (!result) return { error: "Erreur lors de l'inscription." };
-    if (result.outcome === "FULL") return { error: "Ce tournoi est complet." };
+    if (!result) return { error: t("register.failed") };
+    if (result.outcome === "FULL") return { error: t("register.fullError") };
     if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
-      return { error: "Ce tournoi n'accepte plus les inscriptions." };
+      return { error: t("register.closed") };
     }
 
     const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -114,7 +117,7 @@ export async function createRegistration(
   // directement avec Stripe, uniquement avec SterPlatform).
   const org = await dbGetOrganization(tournament.association_id);
   if (!org?.sterOrganizationSlug) {
-    return { error: "Les paiements en ligne ne sont pas encore configurés pour ce tournoi. Contactez l'organisateur." };
+    return { error: t("register.paymentSetup") };
   }
 
   // DO-PAYMENT-GUARD-001 — défense en profondeur, indépendante de la configuration du
@@ -128,7 +131,7 @@ export async function createRegistration(
     return null;
   });
   if (!stripeStatus?.canReceivePayments) {
-    return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
+    return { error: t("register.paymentUnavailable") };
   }
 
   // 2. Capacité/réservation — atomique, avec expiration (DO-AUD-009) : si le checkout Stripe
@@ -149,10 +152,10 @@ export async function createRegistration(
     return null;
   });
 
-  if (!result) return { error: "Erreur lors de l'inscription." };
-  if (result.outcome === "FULL") return { error: "Ce tournoi est complet." };
+  if (!result) return { error: t("register.failed") };
+  if (result.outcome === "FULL") return { error: t("register.fullError") };
   if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
-    return { error: "Ce tournoi n'accepte plus les inscriptions." };
+    return { error: t("register.closed") };
   }
   const registration = result.registration;
 
@@ -175,7 +178,7 @@ export async function createRegistration(
     console.error("[registration] Échec création paiement SterPlatform:", error);
     // La réservation reste PENDING et expirera d'elle-même (RESERVATION_TTL_MINUTES) — jamais
     // une inscription orpheline permanente (DO-AUD-009), jamais besoin de la supprimer ici.
-    return { error: "Le paiement n'a pas pu être initié. Réessayez dans quelques instants." };
+    return { error: t("register.paymentFailed") };
   }
 
   await dbUpdateRegistrationPaymentId(registration.id, checkout.paymentId);

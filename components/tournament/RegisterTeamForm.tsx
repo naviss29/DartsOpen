@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition, useState } from "react";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { createRegistration } from "@/lib/actions/registration";
 
 const inputCn =
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPerTeam }: Props) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
 
     const phone = (fd.get("phone") as string).trim();
     if (phone && !/^(?:0[1-9]|\+33\s?[1-9])([\s.\-]?\d{2}){4}$/.test(phone)) {
-      setError("Numéro de téléphone invalide (ex : 0612345678).");
+      setError(t("register.invalidPhone"));
       return;
     }
 
@@ -66,7 +68,7 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
       {isTeam && (
         <div>
           <label htmlFor="team_name" className="block text-sm font-medium text-brand-dark mb-1">
-            Nom de l&apos;équipe *
+            {t("register.teamName")}
           </label>
           <input
             id="team_name"
@@ -74,7 +76,7 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
             type="text"
             required
             minLength={2}
-            placeholder="Les Flèches d'Or"
+            placeholder={t("register.teamPlaceholder")}
             className={inputCn}
           />
         </div>
@@ -82,7 +84,7 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
 
       <div className="space-y-3">
         <label htmlFor="player_0" className="block text-sm font-medium text-brand-dark">
-          {isTeam ? "Pseudos des joueurs *" : "Votre pseudo *"}
+          {isTeam ? t("register.players") : t("register.nickname")}
         </label>
         {Array.from({ length: playersPerTeam }, (_, i) => (
           <input
@@ -92,7 +94,7 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
             type="text"
             required
             minLength={2}
-            placeholder={isTeam ? `Joueur ${i + 1}` : "Votre pseudo"}
+            placeholder={isTeam ? t("register.playerPlaceholder", { number: i + 1 }) : t("register.nicknamePlaceholder")}
             className={inputCn}
           />
         ))}
@@ -100,24 +102,24 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
 
       <div>
         <label htmlFor="contact_email" className="block text-sm font-medium text-brand-dark mb-1">
-          Email de contact *
+          {t("register.email")}
         </label>
         <input
           id="contact_email"
           name="contact_email"
           type="email"
           required
-          placeholder="capitaine@monequipe.fr"
+          placeholder="contact@example.com"
           className={inputCn}
         />
         <p className="mt-1 text-xs text-brand-text-secondary">
-          Utilisé uniquement pour les rappels et informations du tournoi.
+          {t("register.emailHint")}
         </p>
       </div>
 
       <div>
         <label htmlFor="phone" className="block text-sm font-medium text-brand-dark mb-1">
-          Téléphone (optionnel)
+          {t("register.phone")}
         </label>
         <input
           id="phone"
@@ -130,14 +132,10 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
       </div>
 
       <p className="text-xs text-brand-text-secondary">
-        Votre pseudo et vos résultats seront visibles publiquement sur les pages du tournoi et
-        le classement DartsOpen. Votre email et téléphone servent uniquement aux communications
-        liées à ce tournoi ; ils sont supprimés automatiquement 12 mois après l&apos;événement.
-        Voir notre{" "}
+        {t("register.privacy")}{" "}
         <a href="/confidentialite" className="underline hover:text-brand-dark" target="_blank" rel="noreferrer">
-          politique de confidentialité
+          {t("register.privacyLink")}
         </a>
-        .
       </p>
 
       <button
@@ -146,10 +144,10 @@ export function RegisterTeamForm({ tournamentId, confirmsImmediately, playersPer
         className="w-full rounded-lg bg-brand-turquoise px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-turquoise/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
         {isPending
-          ? "Redirection…"
+          ? t("register.redirecting")
           : confirmsImmediately
-          ? "Confirmer l'inscription"
-          : "Procéder au paiement →"}
+          ? t("register.confirm")
+          : t("register.pay")}
       </button>
     </form>
   );
