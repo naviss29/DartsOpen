@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import { computePoolStandings } from "@/lib/utils/pools";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
-const ORG_SLUG = process.env.NEXT_PUBLIC_STER_ORG_SLUG ?? "dartsopen";
 const MERCURE_URL = process.env.NEXT_PUBLIC_MERCURE_PUBLIC_URL ?? "";
 
 interface Pool {
@@ -57,24 +55,34 @@ export function ScoreBoard({ tournamentId, pools, finishedMatches: initialMatche
     const connect = async () => {
       if (!MERCURE_URL) { startPolling(); return; }
 
-      const tokenRes = await fetch(
-        `${API_URL}/api/public/tournaments/${tournamentId}/mercure-token`,
-        { headers: { "X-Organization-Slug": ORG_SLUG } }
-      );
-      if (!tokenRes.ok) { startPolling(); return; }
+      try {
+        // Route locale à DartsOpen (voir app/api/public/tournaments/[id]/mercure-token/route.ts),
+        // pas SterPlatform : cette route n'existe pas côté SterPlatform (aucune correspondance
+        // dans SterPlatform/src). L'ancienne URL absolue pointait vers SterPlatform et tombait
+        // donc en 404, silencieusement absorbé par `if (!tokenRes.ok)` — les scores en direct via
+        // Mercure ne fonctionnaient jamais en production, sans repli visible (bug trouvé le
+        // 27/09/2026 pendant l'audit CORS, cf. Reprise-Validation-JWKS.md). Relatif comme l'appel
+        // `/matches` ci-dessus, qui lui pointait déjà correctement en local.
+        const tokenRes = await fetch(`/api/public/tournaments/${tournamentId}/mercure-token`);
+        if (!tokenRes.ok) { startPolling(); return; }
 
-      const { token, topic } = await tokenRes.json() as { token: string; topic: string };
-      const url = new URL(MERCURE_URL);
-      url.searchParams.append("topic", topic);
-      url.searchParams.append("authorization", token);
+        const { token, topic } = await tokenRes.json() as { token: string; topic: string };
+        const url = new URL(MERCURE_URL);
+        url.searchParams.append("topic", topic);
+        url.searchParams.append("authorization", token);
 
-      es = new EventSource(url.toString());
-      es.onmessage = doFetch;
-      es.onerror = () => {
-        es?.close();
-        es = null;
+        es = new EventSource(url.toString());
+        es.onmessage = doFetch;
+        es.onerror = () => {
+          es?.close();
+          es = null;
+          if (mounted && !poll) startPolling();
+        };
+      } catch {
+        // Erreur réseau (pas juste un statut non-ok) : sans ce catch, une exception ici restait
+        // une rejection non gérée et ne déclenchait jamais le repli sur le polling.
         if (mounted && !poll) startPolling();
-      };
+      }
     };
 
     connect();
