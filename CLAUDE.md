@@ -3,6 +3,10 @@
 ## Stack
 - **Next.js 16** (App Router, standalone output) + TypeScript
 - **Prisma 7** + PostgreSQL (port 5433 en local)
+  - `overrides` npm (`deepmerge-ts` ^8, `mysql2` ^3.24) : le CLI `prisma` 7.10 (dernière stable au
+    29/09/2026, 8.0 encore en RC) embarque des versions vulnérables (GHSA-ggr8-5vv4-36mx,
+    GHSA-3f6p-5ww8-9rcr, GHSA-rgwj-5xj2-c3m3). Exposition réelle quasi nulle (MySQL inutilisé),
+    mais `npm audit` redevient propre. À retirer quand une version stable de Prisma les corrige.
 - **SterPlatform** — auth organisateurs via le SSO central (JWT, cookies httpOnly), aucune
   page de connexion/inscription locale — voir "Authentification (SSO central)" ci-dessous
 - **Tailwind CSS 4**
