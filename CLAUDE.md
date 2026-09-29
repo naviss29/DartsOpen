@@ -44,7 +44,7 @@ lib/
 
 components/ → composants React (tournament/, ui/)
 prisma/     → schema + migrations
-scripts/    → seed de données de test
+scripts/    → seed de données de test, scripts opérationnels (purge planifiée RGPD)
 ```
 
 ## Authentification (SSO central — migration écosystème SSO)
@@ -300,6 +300,36 @@ ne calcule ni revenu ni reversement — SterPlatform gère l'argent réel). Une 
 mélange) reste à faire si une logique financière venait un jour à dépendre de cette distinction
 — non traitée ici pour rester proportionné (aucun besoin actuel ne le justifie).
 
+## Conservation des données personnelles — purge planifiée (BAPPS-LEGAL-005 §9, RGPD-001)
+
+- **Règle (décision PO, inchangée)** : l'email et le téléphone d'une inscription sont vidés
+  (`playerEmail = ""`, `playerPhone = null`) **12 mois** (`CONTACT_RETENTION_MONTHS`,
+  `lib/db/contactRetention.ts`) après la date d'un tournoi `FINISHED` (comparaison stricte
+  `date < now - 12 mois`). Le nom/pseudo, les coéquipiers (`playerNames`), les résultats et les
+  champs de paiement sont conservés — classement inter-tournois. Un tournoi jamais passé
+  `FINISHED` n'est pas concerné.
+- **Déclenchement** : `purgeExpiredContacts()` — balayage **global** (tous organisateurs),
+  paginé par curseur sur `Tournament.id` (100 tournois/lot par défaut), idempotent (le filtre ne
+  retient que les inscriptions portant encore une coordonnée), un lot en échec est journalisé et
+  compté sans bloquer les suivants. Avant RGPD-001, la purge était déclenchée de façon
+  opportuniste par la visite de `/tournaments` (promesse non attendue, organisateur par
+  organisateur) : un organisateur qui ne revenait jamais ne voyait jamais ses données purgées.
+  Ce déclenchement a été retiré de la page.
+- **Script** : `scripts/purge-expired-contacts.ts` — un mode explicite est obligatoire
+  (sans flag : refus, code 2) :
+  - `npm run purge:expired-contacts -- --dry-run` : comptage seul, aucune écriture ;
+  - `npm run purge:expired-contacts -- --apply` : purge réelle ;
+  - option `--batch-size=N`. Sortie : cible (hôte/base, sans identifiants), seuil, compteurs.
+    Codes de sortie : 0 succès, 1 lot en échec/erreur inattendue, 2 usage/config invalide.
+- **Planification** : aucun scheduler dans l'application — Coolify Scheduled Task sur le
+  conteneur DartsOpen (staging puis production), commande `npm run purge:expired-contacts -- --apply`,
+  une fois par jour. L'image de production embarque `scripts/`, `lib/` (copié en entier pour
+  ce script), `tsconfig.json` (alias `@/`) et `tsx` (via `node_modules` complet de l'étape deps).
+- **Tests** : `lib/db/contactRetention.db.test.ts` (vrai PostgreSQL : frontière de date,
+  organisateur jamais revenu, idempotence, dry-run sans écriture, données non concernées
+  intactes, pagination), `lib/db/contactRetention.test.ts` (lot en échec, taille de lot
+  invalide), `scripts/purge-expired-contacts.test.ts` (CLI réel : codes de sortie).
+
 ## Algorithme de classement (lib/db/ranking.ts)
 - Participation : +1 pt
 - Victoire en poule : +1 pt
@@ -428,3 +458,4 @@ Fonction uniquement du nombre de joueurs encore en vie dans le tournoi, jamais d
 - Branche de travail : `develop` → merge sur `main` après validation
 - Tests : `npm run test:run`
 - Seed tournoi test : `npm run seed:players`
+- Purge RGPD planifiée : `npm run purge:expired-contacts -- --dry-run|--apply` (voir « Conservation des données personnelles »)
