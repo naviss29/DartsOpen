@@ -1,4 +1,4 @@
-import { dbListTournaments, dbAnonymizeExpiredContacts } from "@/lib/db/tournament";
+import { dbListTournaments } from "@/lib/db/tournament";
 import { getUser } from "@/lib/api/auth";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -27,9 +27,9 @@ export default async function TournamentsPage() {
   const user = await getUser();
   const tournaments = user ? await dbListTournaments(user.id).catch(() => []) as Tournament[] : [];
 
-  // Purge automatique et opportuniste des coordonnées de contact expirées (BAPPS-LEGAL-005
-  // §9) — jamais bloquante pour l'affichage du tableau de bord, un échec reste silencieux.
-  if (user) dbAnonymizeExpiredContacts(user.id).catch((err) => console.warn("[tournaments] Purge coordonnées expirées:", err));
+  // La purge des coordonnées expirées (BAPPS-LEGAL-005 §9) n'est volontairement plus
+  // déclenchée ici (RGPD-001) : elle ne s'appliquait qu'aux organisateurs qui revenaient sur
+  // cette page. Elle tourne désormais en tâche planifiée globale — scripts/purge-expired-contacts.ts.
 
   return (
     <div className="space-y-6">

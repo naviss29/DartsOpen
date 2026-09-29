@@ -940,32 +940,6 @@ export async function dbEraseRegistration(
   return { anonymized: true };
 }
 
-/** Décision Product Owner (BAPPS-LEGAL-005 §9) : durée de conservation des coordonnées de contact (email/téléphone) après la fin d'un tournoi. Le nom/pseudo et les résultats sportifs, eux, sont conservés indéfiniment — c'est le classement inter-tournois, cœur du produit. */
-export const CONTACT_RETENTION_MONTHS = 12;
-
-/**
- * Purge automatique et opportuniste des coordonnées de contact (BAPPS-LEGAL-005
- * §9) — jamais du nom/pseudo (identité sportive, conservée indéfiniment) ni des
- * résultats. Scopée aux tournois d'un seul organisateur (`userId`) : déclenchée
- * à chaque visite de son tableau de bord (`app/(dashboard)/tournaments/page.tsx`),
- * jamais un balayage global déclenché par la visite d'un organisateur différent.
- * Idempotente (une inscription déjà purgée ne correspond plus à `playerEmail !=
- * "" OR playerPhone != null`) ; ne touche jamais un tournoi non `FINISHED`.
- */
-export async function dbAnonymizeExpiredContacts(userId: string, now: Date = new Date()): Promise<number> {
-  const cutoff = new Date(now);
-  cutoff.setMonth(cutoff.getMonth() - CONTACT_RETENTION_MONTHS);
-
-  const result = await prisma.registration.updateMany({
-    where: {
-      tournament: { userId, status: "FINISHED", date: { lt: cutoff } },
-      OR: [{ playerEmail: { not: "" } }, { playerPhone: { not: null } }],
-    },
-    data: { playerEmail: "", playerPhone: null },
-  });
-  return result.count;
-}
-
 /**
  * DARTSOPEN-MONETIZATION-002 — read-only count of registrations currently occupying a slot
  * (same definition as dbReserveRegistrationSlot()'s atomic check: PAID, or PENDING with a
