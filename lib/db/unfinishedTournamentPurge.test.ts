@@ -72,18 +72,17 @@ describe("purgeUnfinishedTournaments — validation", () => {
   });
 });
 
-describe("createCloseReminderNotifier (état actuel : bloqué côté SterPlatform)", () => {
-  it("se déclare indisponible et lève à l'envoi — donc jamais d'horodatage ni de suppression", async () => {
-    const notifier = createCloseReminderNotifier();
+describe("createCloseReminderNotifier (configuration absente)", () => {
+  it("se déclare indisponible et renvoie CONFIGURATION_ERROR — donc jamais d'horodatage ni de suppression", async () => {
+    const notifier = createCloseReminderNotifier({ env: {} });
     expect(notifier.available).toBe(false);
-    await expect(
-      notifier.send({
-        tournamentId: "t",
-        creatorUserId: "u",
-        tournamentName: "n",
-        tournamentDate: day("2026-10-01"),
-        deletionNotBefore: day("2026-10-04"),
-      }),
-    ).rejects.toThrow(/Rappel de clôture impossible/);
+    const result = await notifier.send({
+      tournamentId: "t",
+      creatorUserId: "u",
+      tournamentName: "n",
+      tournamentDate: day("2026-10-01"),
+      deletionNotBefore: day("2026-10-04"),
+    });
+    expect(result.outcome).toBe("CONFIGURATION_ERROR");
   });
 });

@@ -1,33 +1,111 @@
-import type { CloseReminderNotifier } from "../db/unfinishedTournamentPurge";
+import type { CloseReminderNotifier, CloseReminderSendResult, CloseReminderTarget } from "../db/unfinishedTournamentPurge";
+import { sendEmailToUser, type SendEmailToUserOutcome } from "../api/sterplatformInternal";
 
 /**
- * DO-UNFINISHED-PURGE-001 — envoi du rappel « clôturez votre tournoi » au créateur.
+ * DO-UNFINISHED-PURGE-001 — envoi du rappel « clôturez votre tournoi » au créateur, via
+ * `POST {SterPlatform}/api/email/send-to-user` (EMAIL-SCOPE-001). DartsOpen ne connaît du
+ * créateur que son identifiant SterPlatform (`Tournament.userId` = `id` renvoyé par
+ * `/api/auth/me`, UUID) : SterPlatform résout l'adresse et ne la renvoie jamais (ARCH-001).
  *
- * BLOQUÉ côté SterPlatform (constaté le 30/09/2026, aucun contournement volontairement) :
- * DartsOpen ne connaît du créateur que son identifiant SterPlatform (`Tournament.userId`) —
- * jamais son email (ARCH-001 : SterPlatform possède User). Or :
- *   1. `POST /api/email/send` exige l'adresse `to` en clair, et aucun endpoint serveur-à-serveur
- *      (`X-App-Token`) ne permet de résoudre un utilisateur par son id (seul `GET /api/auth/me`,
- *      avec le JWT de l'utilisateur lui-même, expose l'email — indisponible dans une tâche
- *      planifiée) ; `POST /api/email/send-to-organization` vise les OWNER/ADMIN d'une
- *      organisation par UUID, pas le créateur (DartsOpen ne connaît qu'un slug, et seulement
- *      si l'organisateur l'a lié) ;
- *   2. aucun template `dartsopen_*` de rappel de clôture n'existe dans `email_templates` ;
- *   3. `User` n'a pas de langue préférée : impossible de choisir FR/EN/ES par créateur.
- * Tant que ces éléments manquent, `send` lève une erreur : aucun rappel n'est horodaté, donc
- * aucune suppression n'a jamais lieu (garde-fou de la règle). Voir CLAUDE.md, section « Purge des
- * tournois jamais terminés », pour le contrat proposé.
+ * Le template n'existe qu'en français côté SterPlatform (pas de langue préférée sur `User`) :
+ * les dates sont donc formatées en français, fuseau Europe/Paris.
  */
-export const CLOSE_REMINDER_UNAVAILABLE_REASON =
-  "SterPlatform n'expose aucun moyen serveur-à-serveur d'écrire au créateur à partir de son identifiant " +
-  "(endpoint de résolution utilisateur ou d'envoi par userId + template de rappel manquants)";
 
-export function createCloseReminderNotifier(): CloseReminderNotifier {
+export const CLOSE_REMINDER_TEMPLATE = "dartsopen_tournament_close_reminder";
+
+type SendToUser = (template: string, userId: string, variables: Record<string, string>) => Promise<SendEmailToUserOutcome>;
+
+type NotifierDeps = {
+  env?: Record<string, string | undefined>;
+  sendToUser?: SendToUser;
+};
+
+/**
+ * « 1 octobre » → « 1er octobre » : Intl ne produit pas l'ordinal français du premier du mois,
+ * or l'email est lu par un humain.
+ */
+function withFrenchFirstOrdinal(formatted: string): string {
+  return formatted.replace(/^1 /, "1er ");
+}
+
+/**
+ * `Tournament.date` est un `@db.Date` lu à minuit UTC : formaté en UTC pour ne jamais décaler le
+ * jour (c'est une date calendaire, pas un instant).
+ */
+export function formatTournamentDateFr(date: Date): string {
+  return withFrenchFirstOrdinal(new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeZone: "UTC" }).format(date));
+}
+
+/**
+ * Instant à partir duquel la suppression devient possible (envoi + 48 h), en heure de Paris,
+ * avec l'heure : le template dit « Clôturez-le avant le {{ deletionDate }} ». Honnête dans les
+ * deux sens — aucune suppression n'a lieu avant cet instant (la règle l'interdit), et comme la
+ * tâche ne passe qu'une fois par jour elle peut survenir plus tard, jamais plus tôt : clôturer
+ * avant cette échéance garantit toujours de conserver le tournoi.
+ */
+export function formatDeletionDateFr(deletionNotBefore: Date): string {
+  return withFrenchFirstOrdinal(
+    new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Paris" }).format(deletionNotBefore),
+  );
+}
+
+/**
+ * Page d'administration du tournoi (`app/(dashboard)/tournaments/[id]`), celle qui porte le bouton
+ * « Clôturer le tournoi » ; protégée par l'authentification (redirection vers la connexion si besoin).
+ */
+export function buildTournamentAdminUrl(appUrl: string, tournamentId: string): string {
+  return `${appUrl.replace(/\/+$/, "")}/tournaments/${encodeURIComponent(tournamentId)}`;
+}
+
+/**
+ * Variables d'environnement lues au runtime par la tâche planifiée (conteneur DartsOpen) : mêmes
+ * variables que le reste de l'application, aucune nouvelle. Pas de repli `localhost` pour
+ * l'URL du site (contrairement à d'autres écrans) : un lien faux dans un email qui annonce une
+ * suppression est pire que pas d'email — et sans email il n'y a jamais de suppression.
+ */
+const REQUIRED_ENV = ["NEXT_PUBLIC_API_URL", "STER_API_TOKEN", "NEXT_PUBLIC_APP_URL"] as const;
+
+export function createCloseReminderNotifier(deps: NotifierDeps = {}): CloseReminderNotifier {
+  const env = deps.env ?? process.env;
+  const sendToUser = deps.sendToUser ?? sendEmailToUser;
+  const missing = REQUIRED_ENV.filter((name) => !env[name]?.trim());
+
+  if (missing.length > 0) {
+    const reason = `variable(s) d'environnement manquante(s) : ${missing.join(", ")}`;
+    return {
+      available: false,
+      unavailableReason: reason,
+      // Configuration cassée : même traitement qu'un 401/403 (aucun horodatage, script en échec).
+      send: async () => ({ outcome: "CONFIGURATION_ERROR", error: `Rappel de clôture impossible : ${reason}.` }),
+    };
+  }
+
+  const appUrl = env.NEXT_PUBLIC_APP_URL!.trim();
+
   return {
-    available: false,
-    unavailableReason: CLOSE_REMINDER_UNAVAILABLE_REASON,
-    send: async () => {
-      throw new Error(`Rappel de clôture impossible : ${CLOSE_REMINDER_UNAVAILABLE_REASON}.`);
+    available: true,
+    send: async (target: CloseReminderTarget): Promise<CloseReminderSendResult> => {
+      try {
+        const result = await sendToUser(CLOSE_REMINDER_TEMPLATE, target.creatorUserId, {
+          tournamentName: target.tournamentName,
+          tournamentDate: formatTournamentDateFr(target.tournamentDate),
+          deletionDate: formatDeletionDateFr(target.deletionNotBefore),
+          tournamentUrl: buildTournamentAdminUrl(appUrl, target.tournamentId),
+        });
+        switch (result.outcome) {
+          case "SENT":
+            return { outcome: "SENT" };
+          case "RECIPIENT_NOT_FOUND":
+            return { outcome: "RECIPIENT_NOT_FOUND" };
+          case "CONFIGURATION_ERROR":
+            return { outcome: "CONFIGURATION_ERROR", error: result.error };
+          default:
+            return { outcome: "FAILED", error: result.error };
+        }
+      } catch (err) {
+        // Filet : le client ne lève pas, mais un formatage ou une dépendance injectée pourrait.
+        return { outcome: "FAILED", error: `Envoi du rappel de clôture en échec : ${err instanceof Error ? err.message : String(err)}` };
+      }
     },
   };
 }

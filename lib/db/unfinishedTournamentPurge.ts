@@ -84,14 +84,29 @@ export type CloseReminderTarget = {
 };
 
 /**
- * Port d'envoi du rappel. `send` doit lever une erreur si l'email n'est pas parti : aucune
- * erreur ⇒ horodatage posé ⇒ suppression possible 48 h plus tard. `available = false` signale
- * dès le dry-run qu'aucun rappel ne pourra partir (voir lib/tournament/closeReminderNotifier.ts).
+ * Issue d'un envoi de rappel. SEUL `SENT` pose l'horodatage (donc autorise une suppression
+ * 48 h plus tard) ; tout le reste laisse le tournoi sans horodatage, retenté au passage suivant.
+ * - RECIPIENT_NOT_FOUND : SterPlatform ne trouve pas le créateur (404 USER_NOT_FOUND : compte
+ *   supprimé, ou plus membre d'aucune organisation où DartsOpen est actif) — propre à CE tournoi ;
+ * - CONFIGURATION_ERROR : jeton refusé (401/403), template absent, variable manquante — casse
+ *   TOUS les envois ;
+ * - FAILED : transitoire ou inattendu (400, 5xx, réseau).
+ */
+export type CloseReminderSendResult =
+  | { outcome: "SENT" }
+  | { outcome: "RECIPIENT_NOT_FOUND" }
+  | { outcome: "CONFIGURATION_ERROR"; error: string }
+  | { outcome: "FAILED"; error: string };
+
+/**
+ * Port d'envoi du rappel (implémentation : lib/tournament/closeReminderNotifier.ts). `send` ne
+ * devrait pas lever ; s'il le fait, l'exception est traitée comme FAILED. `available = false`
+ * signale dès le dry-run qu'aucun rappel ne pourra partir (configuration manquante).
  */
 export type CloseReminderNotifier = {
   available: boolean;
   unavailableReason?: string;
-  send: (target: CloseReminderTarget) => Promise<void>;
+  send: (target: CloseReminderTarget) => Promise<CloseReminderSendResult>;
 };
 
 /** Lignes rattachées à un tournoi — affichées en dry-run et journalisées à la suppression. */
@@ -162,6 +177,12 @@ export type UnfinishedTournamentOutcome =
   | "REMINDER_SENT"
   | "REMINDER_WOULD_SEND"
   | "REMINDER_FAILED"
+  /** SterPlatform ne trouve pas le créateur (404 USER_NOT_FOUND) : pas d'horodatage, retenté demain. */
+  | "REMINDER_RECIPIENT_NOT_FOUND"
+  /** Configuration cassée (401/403, template absent, variable manquante) : pas d'horodatage. */
+  | "REMINDER_CONFIGURATION_ERROR"
+  /** Rappel non tenté : une erreur de configuration a déjà été constatée pendant ce passage. */
+  | "REMINDER_NOT_ATTEMPTED"
   /** Email parti mais le tournoi a changé entre-temps (clôturé/reporté) : horodatage non posé. */
   | "REMINDER_SKIPPED_CHANGED"
   | "AWAITING_GRACE"
@@ -186,13 +207,24 @@ export type UnfinishedTournamentPurgeReport = {
   now: Date;
   scanned: number;
   remindersSent: number;
+  /** 404 USER_NOT_FOUND — journalisés, ne font pas échouer le script (problème de données, pas de service). */
+  remindersRecipientNotFound: number;
+  /** Envois tentés et en échec (5xx, réseau, 400, configuration) — hors 404 et hors rappels non tentés. */
   remindersFailed: number;
+  /** Rappels non tentés parce qu'une erreur de configuration a déjà été constatée pendant ce passage. */
+  remindersNotAttempted: number;
   awaitingGrace: number;
   deleted: number;
   deletionsFailed: number;
   spared: number;
   /** Tournois en échec (rappel ou suppression) — le lot continue, le script sort en code 1. */
   errors: number;
+  /**
+   * Première erreur de configuration constatée (401/403, template absent, variable manquante),
+   * `null` sinon. Non nulle ⇒ plus aucun envoi tenté pendant ce passage et le script sort en
+   * code 2 (voir purgeUnfinishedTournaments).
+   */
+  configurationError: string | null;
   entries: UnfinishedTournamentEntry[];
 };
 
@@ -294,12 +326,15 @@ export async function purgeUnfinishedTournaments(
     now,
     scanned: 0,
     remindersSent: 0,
+    remindersRecipientNotFound: 0,
     remindersFailed: 0,
+    remindersNotAttempted: 0,
     awaitingGrace: 0,
     deleted: 0,
     deletionsFailed: 0,
     spared: 0,
     errors: 0,
+    configurationError: null,
     entries: [],
   };
 
@@ -360,16 +395,45 @@ export async function purgeUnfinishedTournaments(
               `${prefix} ${label} : rappel de clôture À ENVOYER` +
                 (notifier.available ? "." : ` — ATTENTION : envoi impossible actuellement (${notifier.unavailableReason}).`),
             );
+          } else if (report.configurationError !== null) {
+            // Une erreur de configuration (jeton refusé, template absent) casse TOUS les envois :
+            // inutile de solliciter SterPlatform N fois de plus pour N refus identiques (et autant
+            // d'alertes de sécurité dans ses journaux). Les suppressions, elles, continuent : elles
+            // ne reposent que sur des rappels réellement envoyés lors de passages précédents.
+            report.remindersNotAttempted += 1;
+            report.errors += 1;
+            entry.outcome = "REMINDER_NOT_ATTEMPTED";
+            log(`${prefix} ${label} : rappel non tenté (configuration SterPlatform en erreur), aucun horodatage posé.`);
           } else {
+            let result: CloseReminderSendResult;
             try {
-              await notifier.send(target);
+              result = await notifier.send(target);
             } catch (err) {
-              // Pas d'email ⇒ pas d'horodatage ⇒ jamais de suppression pour ce tournoi.
-              report.remindersFailed += 1;
-              report.errors += 1;
-              entry.outcome = "REMINDER_FAILED";
-              entry.error = err instanceof Error ? err.message : String(err);
-              log(`${prefix} ${label} : ÉCHEC de l'envoi du rappel, aucun horodatage posé : ${entry.error}`);
+              result = { outcome: "FAILED", error: err instanceof Error ? err.message : String(err) };
+            }
+            if (result.outcome !== "SENT") {
+              // Pas d'email confirmé ⇒ pas d'horodatage ⇒ jamais de suppression pour ce tournoi ;
+              // il est retenté au passage suivant.
+              if (result.outcome === "RECIPIENT_NOT_FOUND") {
+                // Problème de données propre à ce créateur (compte supprimé, plus membre d'une
+                // organisation DartsOpen active), pas une panne : ne fait pas échouer la tâche.
+                // Journal : id du tournoi seulement, jamais le nom ni l'email du créateur.
+                report.remindersRecipientNotFound += 1;
+                entry.outcome = "REMINDER_RECIPIENT_NOT_FOUND";
+                log(`${prefix} ${label} : créateur introuvable côté SterPlatform (404), rappel non envoyé, aucun horodatage posé — retenté au prochain passage.`);
+              } else {
+                report.remindersFailed += 1;
+                report.errors += 1;
+                entry.error = result.error;
+                if (result.outcome === "CONFIGURATION_ERROR") {
+                  report.configurationError = result.error;
+                  entry.outcome = "REMINDER_CONFIGURATION_ERROR";
+                  log(`${prefix} ${label} : ERREUR DE CONFIGURATION, aucun horodatage posé, plus aucun rappel tenté pendant ce passage : ${result.error}`);
+                } else {
+                  entry.outcome = "REMINDER_FAILED";
+                  log(`${prefix} ${label} : ÉCHEC de l'envoi du rappel, aucun horodatage posé : ${result.error}`);
+                }
+              }
               report.entries.push(entry);
               continue;
             }

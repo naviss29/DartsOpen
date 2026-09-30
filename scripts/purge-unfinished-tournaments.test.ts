@@ -46,11 +46,29 @@ describe("scripts/purge-unfinished-tournaments.ts (CLI)", () => {
     expect(r.output).toContain("DATABASE_URL");
   }, 60_000);
 
-  it("--dry-run s'exécute contre la base, signale l'envoi indisponible et affiche son bilan (code 0)", () => {
-    const r = run(["--dry-run"]);
+  it("--dry-run sans configuration SterPlatform : signale l'envoi indisponible et affiche son bilan (code 0)", () => {
+    const env = { ...process.env };
+    delete env.STER_API_TOKEN;
+    delete env.NEXT_PUBLIC_APP_URL;
+    const r = run(["--dry-run"], env);
     expect(r.output).toContain("DRY-RUN terminé");
     expect(r.output).toContain("envoi des rappels indisponible");
+    expect(r.output).toContain("STER_API_TOKEN");
     expect(r.output).not.toMatch(/postgres(ql)?:\/\/[^@\s]*:[^@\s]*@/); // jamais d'identifiants dans la sortie
+    expect(r.status).toBe(0);
+  }, 60_000);
+
+  it("--dry-run configuré : aucun avertissement d'indisponibilité, aucun appel SterPlatform (code 0)", () => {
+    // URL injoignable volontairement : un dry-run qui tenterait un envoi échouerait ou traînerait.
+    const r = run(["--dry-run"], {
+      ...process.env,
+      NEXT_PUBLIC_API_URL: "http://127.0.0.1:9",
+      STER_API_TOKEN: "jeton-de-test",
+      NEXT_PUBLIC_APP_URL: "https://dartsopen.test",
+    });
+    expect(r.output).toContain("DRY-RUN terminé");
+    expect(r.output).not.toContain("envoi des rappels indisponible");
+    expect(r.output).not.toContain("jeton-de-test");
     expect(r.status).toBe(0);
   }, 60_000);
 });

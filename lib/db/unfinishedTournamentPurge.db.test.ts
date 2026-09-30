@@ -7,6 +7,7 @@ import {
   purgeUnfinishedTournaments,
   deleteUnfinishedTournamentIfDue,
   type CloseReminderNotifier,
+  type CloseReminderSendResult,
   type UnfinishedTournamentPurgeReport,
 } from "./unfinishedTournamentPurge";
 import { createCloseReminderNotifier } from "../tournament/closeReminderNotifier";
@@ -40,14 +41,26 @@ afterEach(async () => {
   createdTournamentIds.length = 0;
 });
 
-function fakeNotifier(failFor: string[] = []): CloseReminderNotifier & { send: ReturnType<typeof vi.fn> } {
+/**
+ * Simule SterPlatform : `outcomes[tournamentId]` force l'issue de l'envoi pour ce tournoi
+ * (sinon SENT) ; une fonction permet de faire varier l'issue d'un passage à l'autre.
+ */
+function fakeNotifier(
+  outcomes: Record<string, CloseReminderSendResult | (() => CloseReminderSendResult)> = {},
+): CloseReminderNotifier & { send: ReturnType<typeof vi.fn> } {
   return {
     available: true,
-    send: vi.fn(async (target: { tournamentId: string }) => {
-      if (failFor.includes(target.tournamentId)) throw new Error("SMTP indisponible (simulé)");
+    send: vi.fn(async (target: { tournamentId: string }): Promise<CloseReminderSendResult> => {
+      const forced = outcomes[target.tournamentId];
+      if (forced === undefined) return { outcome: "SENT" };
+      return typeof forced === "function" ? forced() : forced;
     }),
   };
 }
+
+const SMTP_DOWN: CloseReminderSendResult = { outcome: "FAILED", error: "SterPlatform send-to-user 500 : SMTP indisponible (simulé)" };
+const NOT_FOUND: CloseReminderSendResult = { outcome: "RECIPIENT_NOT_FOUND" };
+const BAD_TOKEN: CloseReminderSendResult = { outcome: "CONFIGURATION_ERROR", error: "SterPlatform refuse l'appel (401) (simulé)" };
 
 async function createTournament(date: string, status: TournamentStatus = "OPEN", closeReminderSentAt: Date | null = null) {
   const t = await prisma.tournament.create({
@@ -194,7 +207,7 @@ describe("purgeUnfinishedTournaments — rappel (vrai PostgreSQL)", () => {
   it("échec d'email → aucun horodatage, donc aucune suppression même bien après 48 h ; le lot continue", async () => {
     const failing = await createTournament("1995-06-14");
     const ok = await createTournament("1995-06-13");
-    const notifier = fakeNotifier([failing.id]);
+    const notifier = fakeNotifier({ [failing.id]: SMTP_DOWN });
 
     const report = await purge({ notifier, now: REMINDER_RUN });
     expect(entryFor(report, failing.id)?.outcome).toBe("REMINDER_FAILED");
@@ -208,12 +221,88 @@ describe("purgeUnfinishedTournaments — rappel (vrai PostgreSQL)", () => {
     expect(await prisma.tournament.count({ where: { id: failing.id } })).toBe(1);
   });
 
-  it("notifier réel actuel (SterPlatform bloqué) : aucun rappel horodaté, aucune suppression, erreur comptée", async () => {
+  it("exception levée par le notifier : traitée comme un échec, aucun horodatage", async () => {
     const t = await createTournament("1995-06-14");
-    const report = await purge({ notifier: createCloseReminderNotifier(), now: REMINDER_RUN });
+    const notifier: CloseReminderNotifier = {
+      available: true,
+      send: async () => {
+        throw new Error("fetch failed (simulé)");
+      },
+    };
+    const report = await purge({ notifier, now: REMINDER_RUN });
     expect(entryFor(report, t.id)?.outcome).toBe("REMINDER_FAILED");
-    expect(report.errors).toBeGreaterThanOrEqual(1);
+    expect(entryFor(report, t.id)?.error).toContain("fetch failed");
     expect(await reminderOf(t.id)).toBeNull();
+  });
+
+  it("notifier réel sans configuration (variables absentes) : erreur de configuration, aucun horodatage", async () => {
+    const t = await createTournament("1995-06-14");
+    const report = await purge({ notifier: createCloseReminderNotifier({ env: {} }), now: REMINDER_RUN });
+    expect(entryFor(report, t.id)?.outcome).toBe("REMINDER_CONFIGURATION_ERROR");
+    expect(report.configurationError).toContain("STER_API_TOKEN");
+    expect(await reminderOf(t.id)).toBeNull();
+  });
+
+  it("créateur introuvable (404) : pas d'horodatage, pas compté en erreur, journal sans nom ; rappel envoyé au passage suivant", async () => {
+    const t = await createTournament("1995-06-14");
+    let firstRun = true;
+    const notifier = fakeNotifier({ [t.id]: () => (firstRun ? NOT_FOUND : { outcome: "SENT" }) });
+    const logs: string[] = [];
+
+    const report = await purge({ notifier, now: REMINDER_RUN, log: (m) => logs.push(m) });
+    expect(entryFor(report, t.id)?.outcome).toBe("REMINDER_RECIPIENT_NOT_FOUND");
+    expect(report.remindersRecipientNotFound).toBe(1);
+    expect(report.errors).toBe(0);
+    expect(await reminderOf(t.id)).toBeNull();
+    const line = logs.find((l) => l.includes(t.id))!;
+    expect(line).toContain("404");
+    expect(line).not.toContain("Tournoi jamais terminé");
+
+    // 48 h après le 404 : toujours rien à supprimer (aucun rappel réellement parti), nouvel essai.
+    firstRun = false;
+    const retry = new Date(REMINDER_RUN.getTime() + 48 * H);
+    const second = await purge({ notifier, now: retry });
+    expect(entryFor(second, t.id)?.outcome).toBe("REMINDER_SENT");
+    expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(1);
+    expect((await reminderOf(t.id))?.toISOString()).toBe(retry.toISOString());
+
+    // Le délai de 48 h court depuis le rappel RÉELLEMENT envoyé, pas depuis le premier essai.
+    const early = await purge({ notifier, now: new Date(retry.getTime() + 47 * H) });
+    expect(entryFor(early, t.id)?.outcome).toBe("AWAITING_GRACE");
+    const due = await purge({ notifier, now: new Date(retry.getTime() + 48 * H) });
+    expect(entryFor(due, t.id)?.outcome).toBe("DELETED");
+    expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(0);
+  });
+
+  it("erreur de configuration (401/403) : plus aucun envoi tenté, suppressions déjà dues traitées quand même", async () => {
+    // Ordre de balayage = ordre des ids : on ne présume pas lequel des deux tournois à rappeler
+    // passe en premier, le notifier refuse les deux.
+    const a = await createTournament("1995-06-14");
+    const b = await createTournament("1995-06-13");
+    const toDelete = await createTournament("1995-06-10", "IN_PROGRESS", new Date(REMINDER_RUN.getTime() - 48 * H));
+    const notifier = fakeNotifier({ [a.id]: BAD_TOKEN, [b.id]: BAD_TOKEN });
+
+    const report = await purge({ notifier, now: REMINDER_RUN });
+
+    expect(report.configurationError).toContain("401");
+    const outcomes = [entryFor(report, a.id)?.outcome, entryFor(report, b.id)?.outcome].sort();
+    expect(outcomes).toEqual(["REMINDER_CONFIGURATION_ERROR", "REMINDER_NOT_ATTEMPTED"]);
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(report.remindersNotAttempted).toBe(1);
+    expect(report.errors).toBe(2);
+    expect(await reminderOf(a.id)).toBeNull();
+    expect(await reminderOf(b.id)).toBeNull();
+    expect(entryFor(report, toDelete.id)?.outcome).toBe("DELETED");
+  });
+
+  it("réponse 5xx : échec compté, aucun horodatage, les autres tournois continuent", async () => {
+    const failing = await createTournament("1995-06-14");
+    const ok = await createTournament("1995-06-12");
+    const report = await purge({ notifier: fakeNotifier({ [failing.id]: SMTP_DOWN }), now: REMINDER_RUN });
+    expect(entryFor(report, failing.id)?.outcome).toBe("REMINDER_FAILED");
+    expect(report.configurationError).toBeNull();
+    expect(entryFor(report, ok.id)?.outcome).toBe("REMINDER_SENT");
+    expect(await reminderOf(failing.id)).toBeNull();
   });
 });
 

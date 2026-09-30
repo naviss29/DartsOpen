@@ -16,11 +16,15 @@
  *   npm run purge:unfinished-tournaments -- --apply     # envoie les rappels, supprime les tournois échus
  *   options : --batch-size=N (défaut 100 tournois par page)
  *
- * Codes de sortie : 0 = succès (y compris « rien à faire »), 1 = au moins un tournoi en échec
- * (rappel non envoyé, suppression échouée) ou erreur inattendue, 2 = usage invalide / configuration
- * manquante.
+ * Codes de sortie : 0 = succès (y compris « rien à faire » et les créateurs introuvables côté
+ * SterPlatform, 404 : journalisés par id de tournoi, retentés au passage suivant), 1 = au moins un
+ * tournoi en échec (rappel non envoyé pour 5xx/réseau, suppression échouée) ou erreur inattendue,
+ * 2 = usage invalide / configuration manquante ou rejetée par SterPlatform (401/403, template
+ * absent) — dans ce dernier cas les suppressions déjà dues sont quand même traitées, seuls les
+ * envois de rappels s'arrêtent (voir purgeUnfinishedTournaments).
  *
- * Nécessite DATABASE_URL. En local : node --env-file=.env.local node_modules/tsx/dist/cli.mjs
+ * Nécessite DATABASE_URL, et pour l'envoi des rappels NEXT_PUBLIC_API_URL, STER_API_TOKEN et
+ * NEXT_PUBLIC_APP_URL (mêmes variables que l'application, lues au runtime). En local : node --env-file=.env.local node_modules/tsx/dist/cli.mjs
  * scripts/purge-unfinished-tournaments.ts --dry-run
  */
 import {
@@ -80,7 +84,7 @@ async function main(): Promise<number> {
       `${CLOSE_REMINDER_GRACE_HOURS} h après le rappel si le tournoi n'est toujours pas FINISHED.`,
   );
   if (!notifier.available) {
-    console.error(`${PREFIX} AVERTISSEMENT : envoi des rappels indisponible (${notifier.unavailableReason}) — aucun rappel ne sera horodaté, donc aucune suppression.`);
+    console.error(`${PREFIX} AVERTISSEMENT : envoi des rappels indisponible (${notifier.unavailableReason}) — aucun rappel ne sera horodaté, donc aucune nouvelle suppression planifiée.`);
   }
 
   const report = await purgeUnfinishedTournaments({
@@ -96,14 +100,21 @@ async function main(): Promise<number> {
     `${PREFIX} ${report.dryRun ? "DRY-RUN" : "APPLY"} terminé — ${report.scanned} tournoi(s) non terminé(s) à date passée ; ` +
       (report.dryRun
         ? `${wouldSend} rappel(s) à envoyer ; ${wouldDelete} suppression(s) à effectuer ; `
-        : `${report.remindersSent} rappel(s) envoyé(s) ; ${report.remindersFailed} rappel(s) en échec ; ` +
+        : `${report.remindersSent} rappel(s) envoyé(s) ; ${report.remindersRecipientNotFound} créateur(s) introuvable(s) (404) ; ` +
+          `${report.remindersFailed} rappel(s) en échec ; ${report.remindersNotAttempted} rappel(s) non tenté(s) ; ` +
           `${report.deleted} tournoi(s) supprimé(s) ; ${report.deletionsFailed} suppression(s) en échec ; ` +
           `${report.spared} épargné(s) ; `) +
       `${report.awaitingGrace} en attente du délai de ${CLOSE_REMINDER_GRACE_HOURS} h ; ${report.errors} tournoi(s) en erreur.`,
   );
 
   // Code non nul = alerte pour la tâche planifiée : un rappel non parti ou une suppression
-  // échouée n'est jamais un succès silencieux.
+  // échouée n'est jamais un succès silencieux. Une configuration cassée (jeton refusé, template
+  // absent) a son propre code, 2 : elle bloquera tous les passages suivants tant qu'un humain
+  // n'intervient pas, contrairement à une panne SterPlatform passagère (1).
+  if (report.configurationError !== null) {
+    console.error(`${PREFIX} ERREUR DE CONFIGURATION SterPlatform : ${report.configurationError}`);
+    return 2;
+  }
   return report.errors > 0 ? 1 : 0;
 }
 
