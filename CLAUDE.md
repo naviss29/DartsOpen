@@ -48,7 +48,7 @@ lib/
 
 components/ → composants React (tournament/, ui/)
 prisma/     → schema + migrations
-scripts/    → seed de données de test, scripts opérationnels (purge planifiée RGPD)
+scripts/    → seed de données de test, scripts opérationnels (purges planifiées)
 ```
 
 ## Authentification (SSO central — migration écosystème SSO)
@@ -334,6 +334,59 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   intactes, pagination), `lib/db/contactRetention.test.ts` (lot en échec, taille de lot
   invalide), `scripts/purge-expired-contacts.test.ts` (CLI réel : codes de sortie).
 
+## Purge des tournois jamais terminés (DO-UNFINISHED-PURGE-001, décision Alan 30/09/2026)
+
+- **Règle** : un tournoi dont le statut n'est pas `FINISHED` (seul statut terminal de
+  `TournamentStatus` ; il n'existe pas de statut « annulé » — `PENDING_ENTITLEMENT`, `DRAFT`,
+  `OPEN`, `IN_PROGRESS` sont donc tous concernés) et dont la `date` est passée :
+  1. **J+1** (dès 00:00 UTC le lendemain de `date`, `@db.Date`) : rappel au créateur « clôturez le
+     tournoi, sinon ses données seront supprimées sous 48 h » ; `Tournament.closeReminderSentAt`
+     est posé **après** succès de l'envoi, sous `withTournamentLock`, seulement si le tournoi a
+     encore besoin d'un rappel (conditionnel + idempotent : un seul envoi par tournoi) ;
+  2. **48 h après ce rappel** (au plus tôt J+3 ; avec une tâche quotidienne, J+3 ou J+4 selon la
+     seconde exacte de démarrage) : si toujours pas `FINISHED`, suppression du tournoi et de tout
+     ce qui en dépend, via `deleteTournamentTreeTx` (même ordre que `dbDeleteTournament`, imposé
+     par les FK RESTRICT `matches.player1_id`, `match_sets.round_id`, `match_set_throws.player_id`).
+  La condition est revérifiée sous verrou dans la transaction de suppression (clôture concurrente
+  → épargné). Jamais de suppression sans rappel envoyé : échec d'email ⇒ pas d'horodatage ⇒ pas de
+  suppression. Un rappel n'est valable que s'il est postérieur à J+1 de la date **courante** : un
+  tournoi reporté après un rappel reçoit un nouveau rappel, jamais une suppression immédiate.
+- **Code** : `lib/db/unfinishedTournamentPurge.ts` (`classifyUnfinishedTournament` = règle pure
+  partagée par le balayage et les deux revérifications), `lib/tournament/closeReminderNotifier.ts`
+  (port d'envoi), `scripts/purge-unfinished-tournaments.ts` (CLI). Script distinct de
+  `purge:expired-contacts` : effets externes (emails), suppression de tournois entiers, et
+  activable indépendamment dans Coolify (la purge RGPD ne doit jamais échouer à cause des rappels).
+- **Commande** : `npm run purge:unfinished-tournaments -- --dry-run|--apply` (`--batch-size=N`).
+  Journal par tournoi (id, date, statut, compteurs de lignes — jamais de nom ni de coordonnées),
+  try/catch par tournoi, codes de sortie 0/1/2 comme `purge:expired-contacts`. Planification
+  recommandée : Coolify Scheduled Task quotidienne `0 4 * * *` (UTC),
+  `npm run purge:unfinished-tournaments -- --apply`.
+- **BLOQUÉ — envoi du rappel** : `createCloseReminderNotifier()` se déclare indisponible et lève
+  à chaque envoi, car SterPlatform ne permet pas d'écrire au créateur depuis une tâche planifiée :
+  (1) DartsOpen ne connaît que `Tournament.userId` ; `POST /api/email/send` exige l'email en clair
+  et aucun endpoint serveur-à-serveur ne résout un utilisateur par id (seul `/api/auth/me`, avec
+  le JWT de l'utilisateur) ; `send-to-organization` vise les OWNER/ADMIN d'une organisation par
+  UUID, pas le créateur ; (2) aucun template de rappel `dartsopen_*` dans `email_templates` ;
+  (3) `User` n'a pas de langue préférée (FR/EN/ES impossible à choisir). Tant que c'est le cas, la
+  tâche `--apply` ne supprime rien et sort en code 1 dès qu'un tournoi attend un rappel —
+  ne pas la planifier avant déblocage. Contrat proposé côté SterPlatform (à valider par Alan) :
+  `POST /api/email/send-to-user` (`X-App-Token`) `{ template, userId, variables }`, SterPlatform
+  résolvant email et langue, templates `dartsopen_tournament_close_reminder` FR/EN/ES
+  (variables `tournamentName`, `tournamentDate`, `deletionDate`, `tournamentUrl`).
+- **Données hors base non supprimées** (DartsOpen ne peut pas les effacer) : consommation de crédit
+  tournoi SterPlatform (référence = `tournament.id`, reste consommée) ; paiements SterPlatform/
+  Stripe des inscriptions en ligne (`externalReference` = `registration.id`, `customerEmail` du
+  joueur) — un webhook tardif (`payment.succeeded`/`payment.refunded`) sur une inscription
+  supprimée devient un no-op `NOT_FOUND` : un paiement encaissé ou un remboursement
+  `REFUND_PENDING` perd sa seule trace locale. Le journal affiche ces compteurs par tournoi
+  (payées en ligne / remboursements en attente). Aucun fichier ni stockage objet n'est lié à un
+  tournoi ; le topic Mercure n'a pas d'état persistant.
+- **Tests** : `lib/db/unfinishedTournamentPurge.test.ts` (règle pure),
+  `lib/db/unfinishedTournamentPurge.db.test.ts` (vrai PostgreSQL : J+1, rappel unique, 48 h,
+  suppression complète vérifiée table par table, clôture entre-temps, revérification sous verrou,
+  report de date, dry-run sans écriture, échec d'email sans horodatage),
+  `scripts/purge-unfinished-tournaments.test.ts` (CLI : codes de sortie).
+
 ## Algorithme de classement (lib/db/ranking.ts)
 - Participation : +1 pt
 - Victoire en poule : +1 pt
@@ -463,3 +516,4 @@ Fonction uniquement du nombre de joueurs encore en vie dans le tournoi, jamais d
 - Tests : `npm run test:run`
 - Seed tournoi test : `npm run seed:players`
 - Purge RGPD planifiée : `npm run purge:expired-contacts -- --dry-run|--apply` (voir « Conservation des données personnelles »)
+- Purge des tournois jamais terminés : `npm run purge:unfinished-tournaments -- --dry-run|--apply` (voir la section dédiée ; envoi du rappel bloqué côté SterPlatform)

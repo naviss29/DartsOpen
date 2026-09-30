@@ -172,6 +172,21 @@ la concurrence PostgreSQL, l'API interne SterPlatform et le webhook de paiements
 
 ---
 
+## Tâches planifiées (Coolify Scheduled Tasks, conteneur DartsOpen)
+
+Aucun scheduler dans l'application : chaque tâche est un script `tsx` lancé par Coolify dans le
+conteneur (staging puis production). Un mode explicite est obligatoire (sans `--dry-run` ni
+`--apply` : refus, code 2). Codes de sortie : 0 succès, 1 échec partiel, 2 usage/config invalide.
+
+| Commande | Rôle | Planification recommandée |
+|---|---|---|
+| `npm run purge:expired-contacts -- --apply` | Vide email/téléphone des inscriptions 12 mois après un tournoi terminé (RGPD-001) | quotidienne, ex. `0 3 * * *` (UTC) |
+| `npm run purge:unfinished-tournaments -- --apply` | Tournoi jamais terminé : rappel au créateur à J+1, puis suppression complète 48 h après le rappel (DO-UNFINISHED-PURGE-001) | quotidienne, `0 4 * * *` (UTC) — **à n'activer qu'une fois l'envoi du rappel débloqué côté SterPlatform** (voir CLAUDE.md) |
+
+Toujours lancer `-- --dry-run` d'abord (liste ce qui serait envoyé/supprimé, n'écrit rien).
+
+---
+
 ## Variables d'environnement
 
 | Variable | Description |
