@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import {
   classifyUnfinishedTournament,
   deletionNotBefore,
+  deletionWithoutReminderNotBefore,
+  needsCloseReminder,
   startOfUtcDay,
   purgeUnfinishedTournaments,
 } from "./unfinishedTournamentPurge";
@@ -55,6 +57,55 @@ describe("classifyUnfinishedTournament", () => {
     const t = { status: "OPEN" as const, date: day("2026-10-10"), closeReminderSentAt: new Date("2026-10-02T04:00:00.000Z") };
     expect(classifyUnfinishedTournament(t, new Date("2026-10-05T04:00:00.000Z"))).toBe("NOT_DUE");
     expect(classifyUnfinishedTournament(t, new Date("2026-10-11T04:00:00.000Z"))).toBe("SEND_REMINDER");
+  });
+});
+
+describe("classifyUnfinishedTournament — créateur introuvable (404 USER_NOT_FOUND)", () => {
+  // Tournoi du 01/10 : J+1 = 02/10 00:00 UTC, échéance sans rappel = 04/10 00:00 UTC.
+  const date = day("2026-10-01");
+  const notFoundAt = new Date("2026-10-02T04:00:00.000Z");
+
+  it("avant J+1 + 48 h : le rappel reste simplement à retenter", () => {
+    const t = { status: "OPEN" as const, date, closeReminderSentAt: null, closeReminderRecipientNotFoundAt: notFoundAt };
+    expect(classifyUnfinishedTournament(t, new Date("2026-10-03T23:59:59.999Z"))).toBe("SEND_REMINDER");
+  });
+
+  it("à partir de J+1 00:00 UTC + 48 h (pas du constat) : suppression sans rappel si le 404 est reconfirmé", () => {
+    const t = { status: "IN_PROGRESS" as const, date, closeReminderSentAt: null, closeReminderRecipientNotFoundAt: notFoundAt };
+    expect(classifyUnfinishedTournament(t, new Date("2026-10-04T00:00:00.000Z"))).toBe("DELETE_IF_RECIPIENT_STILL_NOT_FOUND");
+    expect(deletionWithoutReminderNotBefore(date).toISOString()).toBe("2026-10-04T00:00:00.000Z");
+  });
+
+  it("sans constat de 404, l'échéance ne change rien : jamais de suppression sans rappel", () => {
+    const t = { status: "OPEN" as const, date, closeReminderSentAt: null, closeReminderRecipientNotFoundAt: null };
+    expect(classifyUnfinishedTournament(t, new Date("2026-10-20T04:00:00.000Z"))).toBe("SEND_REMINDER");
+    expect(classifyUnfinishedTournament({ status: "OPEN", date, closeReminderSentAt: null }, new Date("2026-10-20T04:00:00.000Z"))).toBe("SEND_REMINDER");
+  });
+
+  it("un rappel finalement envoyé prime : ses 48 h s'appliquent", () => {
+    const sentAt = new Date("2026-10-04T04:00:00.000Z");
+    const t = { status: "OPEN" as const, date, closeReminderSentAt: sentAt, closeReminderRecipientNotFoundAt: notFoundAt };
+    expect(classifyUnfinishedTournament(t, new Date("2026-10-05T04:00:00.000Z"))).toBe("AWAITING_GRACE");
+    expect(classifyUnfinishedTournament(t, new Date("2026-10-06T04:00:00.000Z"))).toBe("DELETE");
+  });
+
+  it("tournoi FINISHED ou reporté : le constat ne vaut plus rien", () => {
+    const now = new Date("2026-10-10T04:00:00.000Z");
+    expect(
+      classifyUnfinishedTournament({ status: "FINISHED", date, closeReminderSentAt: null, closeReminderRecipientNotFoundAt: notFoundAt }, now),
+    ).toBe("NOT_DUE");
+    // Reporté au 08/10 : constat du 02/10 antérieur à la nouvelle J+1 ⇒ cycle neuf (rappel).
+    const postponed = { status: "OPEN" as const, date: day("2026-10-08"), closeReminderSentAt: null, closeReminderRecipientNotFoundAt: notFoundAt };
+    expect(classifyUnfinishedTournament(postponed, new Date("2026-10-07T04:00:00.000Z"))).toBe("NOT_DUE");
+    expect(classifyUnfinishedTournament(postponed, new Date("2026-10-12T04:00:00.000Z"))).toBe("SEND_REMINDER");
+  });
+
+  it("needsCloseReminder : vrai pour les deux actions qui passent par un nouvel essai d'envoi", () => {
+    expect(needsCloseReminder("SEND_REMINDER")).toBe(true);
+    expect(needsCloseReminder("DELETE_IF_RECIPIENT_STILL_NOT_FOUND")).toBe(true);
+    expect(needsCloseReminder("DELETE")).toBe(false);
+    expect(needsCloseReminder("AWAITING_GRACE")).toBe(false);
+    expect(needsCloseReminder("NOT_DUE")).toBe(false);
   });
 });
 

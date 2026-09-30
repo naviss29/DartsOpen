@@ -10,9 +10,21 @@ import { deleteTournamentTreeTx, withTournamentLock } from "./tournament";
  *      sinon toutes ses données seront supprimées sous 48 h » — un seul envoi par tournoi ;
  *   2. 48 h après ce rappel (donc au plus tôt J+3), si le tournoi n'est toujours pas FINISHED,
  *      le tournoi et TOUT ce qui en dépend sont supprimés.
- * Garde-fou absolu : jamais de suppression sans rappel réellement envoyé (l'horodatage n'est
- * posé qu'après succès de l'envoi), et la condition est revérifiée sous verrou, dans la même
+ * Garde-fou : jamais de suppression sans rappel réellement envoyé (l'horodatage n'est posé
+ * qu'après succès de l'envoi), et la condition est revérifiée sous verrou, dans la même
  * transaction que la suppression — un organisateur qui clôture entre-temps est épargné.
+ *
+ * SEULE exception (complément décidé par Alan le 30/09/2026) : le rappel ne PEUT pas partir parce
+ * que SterPlatform répond 404 `USER_NOT_FOUND` (créateur supprimé, ou membre d'aucune
+ * organisation où DARTSOPEN est actif). Sans exception, un tel tournoi ne serait jamais supprimé.
+ * Il l'est donc sans email, au premier passage à partir de J+1 00:00 UTC + 48 h, si :
+ *   - ce 404 a été constaté et horodaté (`closeReminderRecipientNotFoundAt`) à partir de J+1 de la
+ *     date COURANTE ;
+ *   - le rappel est RETENTÉ lors de ce passage et SterPlatform répond encore 404 USER_NOT_FOUND
+ *     (un créateur redevenu joignable reçoit son rappel et bénéficie des 48 h normales) ;
+ *   - la condition est revérifiée sous verrou dans la transaction de suppression.
+ * Tout autre échec (5xx, réseau, 400, 401/403, template absent) ne pose rien et n'autorise rien :
+ * on ne supprime jamais parce que SterPlatform était en panne ou mal configuré.
  */
 
 /** Délai de grâce entre le rappel et la suppression (décision Alan). */
@@ -40,13 +52,26 @@ export type UnfinishedTournamentAction =
   /** Rappel envoyé, délai de 48 h pas encore écoulé. */
   | "AWAITING_GRACE"
   /** Rappel envoyé depuis au moins 48 h, tournoi toujours pas terminé : supprimer. */
-  | "DELETE";
+  | "DELETE"
+  /**
+   * Aucun rappel valable, créateur constaté introuvable (404 USER_NOT_FOUND) à partir de J+1 et
+   * J+1 00:00 UTC + 48 h atteint : retenter le rappel ; s'il répond ENCORE 404 USER_NOT_FOUND,
+   * supprimer sans rappel (s'il part, cycle normal de 48 h).
+   */
+  | "DELETE_IF_RECIPIENT_STILL_NOT_FOUND";
 
 export type UnfinishedTournamentState = {
   status: TournamentStatus;
   date: Date;
   closeReminderSentAt: Date | null;
+  /** Absent = null (jamais constaté). */
+  closeReminderRecipientNotFoundAt?: Date | null;
 };
+
+/** Le tournoi attend encore un rappel (qu'une suppression sans rappel soit possible ou non). */
+export function needsCloseReminder(action: UnfinishedTournamentAction): boolean {
+  return action === "SEND_REMINDER" || action === "DELETE_IF_RECIPIENT_STILL_NOT_FOUND";
+}
 
 /**
  * Décision pure (sans E/S), partagée entre le balayage, la revérification sous verrou avant
@@ -64,9 +89,31 @@ export function classifyUnfinishedTournament(t: UnfinishedTournamentState, now: 
 
   const reminderValidFrom = t.date.getTime() + DAY_MS;
   const sentAt = t.closeReminderSentAt?.getTime();
-  if (sentAt === undefined || sentAt < reminderValidFrom) return "SEND_REMINDER";
+  if (sentAt !== undefined && sentAt >= reminderValidFrom) {
+    // Un rappel réellement envoyé prime toujours : ses 48 h s'appliquent, même si un 404 avait
+    // été constaté avant (créateur redevenu joignable).
+    return now.getTime() - sentAt >= GRACE_MS ? "DELETE" : "AWAITING_GRACE";
+  }
 
-  return now.getTime() - sentAt >= GRACE_MS ? "DELETE" : "AWAITING_GRACE";
+  // Même règle de validité que le rappel : un 404 constaté pour une date antérieure (tournoi
+  // reporté depuis) ne compte pas, sinon le report déclencherait une suppression sans nouvel essai.
+  const notFoundAt = t.closeReminderRecipientNotFoundAt?.getTime();
+  if (
+    notFoundAt !== undefined &&
+    notFoundAt >= reminderValidFrom &&
+    now.getTime() >= reminderValidFrom + GRACE_MS
+  ) {
+    return "DELETE_IF_RECIPIENT_STILL_NOT_FOUND";
+  }
+  return "SEND_REMINDER";
+}
+
+/**
+ * Instant à partir duquel un tournoi dont le créateur est introuvable peut être supprimé sans
+ * rappel : J+1 00:00 UTC + 48 h (décision Alan). `date` est un `@db.Date` (minuit UTC).
+ */
+export function deletionWithoutReminderNotBefore(date: Date): Date {
+  return new Date(date.getTime() + DAY_MS + GRACE_MS);
 }
 
 /** Date à partir de laquelle un rappel envoyé à `sentAt` autorise la suppression (affichée dans l'email). */
@@ -84,10 +131,13 @@ export type CloseReminderTarget = {
 };
 
 /**
- * Issue d'un envoi de rappel. SEUL `SENT` pose l'horodatage (donc autorise une suppression
- * 48 h plus tard) ; tout le reste laisse le tournoi sans horodatage, retenté au passage suivant.
+ * Issue d'un envoi de rappel. SEUL `SENT` pose `closeReminderSentAt` (donc autorise une
+ * suppression 48 h plus tard) ; tout le reste laisse le tournoi sans rappel, retenté au passage
+ * suivant.
  * - RECIPIENT_NOT_FOUND : SterPlatform ne trouve pas le créateur (404 USER_NOT_FOUND : compte
  *   supprimé, ou plus membre d'aucune organisation où DartsOpen est actif) — propre à CE tournoi ;
+ *   seule issue d'échec qui pose un horodatage (`closeReminderRecipientNotFoundAt`) et peut mener
+ *   à une suppression sans rappel à J+1 + 48 h ;
  * - CONFIGURATION_ERROR : jeton refusé (401/403), template absent, variable manquante — casse
  *   TOUS les envois ;
  * - FAILED : transitoire ou inattendu (400, 5xx, réseau).
@@ -177,7 +227,10 @@ export type UnfinishedTournamentOutcome =
   | "REMINDER_SENT"
   | "REMINDER_WOULD_SEND"
   | "REMINDER_FAILED"
-  /** SterPlatform ne trouve pas le créateur (404 USER_NOT_FOUND) : pas d'horodatage, retenté demain. */
+  /**
+   * SterPlatform ne trouve pas le créateur (404 USER_NOT_FOUND) avant l'échéance J+1 + 48 h :
+   * constat horodaté, rappel retenté au passage suivant.
+   */
   | "REMINDER_RECIPIENT_NOT_FOUND"
   /** Configuration cassée (401/403, template absent, variable manquante) : pas d'horodatage. */
   | "REMINDER_CONFIGURATION_ERROR"
@@ -186,8 +239,13 @@ export type UnfinishedTournamentOutcome =
   /** Email parti mais le tournoi a changé entre-temps (clôturé/reporté) : horodatage non posé. */
   | "REMINDER_SKIPPED_CHANGED"
   | "AWAITING_GRACE"
+  /** Supprimé 48 h après un rappel réellement envoyé. */
   | "DELETED"
+  /** Supprimé sans rappel : créateur introuvable (404 USER_NOT_FOUND) constaté puis reconfirmé. */
+  | "DELETED_WITHOUT_REMINDER"
   | "DELETION_WOULD_RUN"
+  /** Dry-run : le rappel serait retenté ; si le créateur est toujours introuvable, suppression sans rappel. */
+  | "DELETION_WITHOUT_REMINDER_WOULD_RUN"
   | "DELETION_FAILED"
   /** Condition revérifiée sous verrou : tournoi clôturé/reporté/déjà supprimé entre-temps. */
   | "SPARED";
@@ -197,6 +255,7 @@ export type UnfinishedTournamentEntry = {
   status: TournamentStatus;
   date: Date;
   closeReminderSentAt: Date | null;
+  closeReminderRecipientNotFoundAt: Date | null;
   outcome: UnfinishedTournamentOutcome;
   counts?: TournamentTreeCounts;
   error?: string;
@@ -207,14 +266,23 @@ export type UnfinishedTournamentPurgeReport = {
   now: Date;
   scanned: number;
   remindersSent: number;
-  /** 404 USER_NOT_FOUND — journalisés, ne font pas échouer le script (problème de données, pas de service). */
+  /**
+   * 404 USER_NOT_FOUND avant l'échéance (hors suppressions sans rappel, comptées dans
+   * deletedWithoutReminder) — journalisés, ne font pas échouer le script (problème de données,
+   * pas de service).
+   */
   remindersRecipientNotFound: number;
   /** Envois tentés et en échec (5xx, réseau, 400, configuration) — hors 404 et hors rappels non tentés. */
   remindersFailed: number;
   /** Rappels non tentés parce qu'une erreur de configuration a déjà été constatée pendant ce passage. */
   remindersNotAttempted: number;
   awaitingGrace: number;
+  /** Total des suppressions = deletedAfterReminder + deletedWithoutReminder. */
   deleted: number;
+  /** Supprimés 48 h après un rappel réellement envoyé. */
+  deletedAfterReminder: number;
+  /** Supprimés sans rappel : créateur introuvable (404 USER_NOT_FOUND) constaté puis reconfirmé. */
+  deletedWithoutReminder: number;
   deletionsFailed: number;
   spared: number;
   /** Tournois en échec (rappel ou suppression) — le lot continue, le script sort en code 1. */
@@ -252,11 +320,35 @@ export async function markCloseReminderSent(tournamentId: string, sentAt: Date, 
   return withTournamentLock(tournamentId, async (tx) => {
     const current = await tx.tournament.findUnique({
       where: { id: tournamentId },
-      select: { status: true, date: true, closeReminderSentAt: true },
+      select: { status: true, date: true, closeReminderSentAt: true, closeReminderRecipientNotFoundAt: true },
     });
-    if (!current || classifyUnfinishedTournament(current, now) !== "SEND_REMINDER") return false;
+    if (!current || !needsCloseReminder(classifyUnfinishedTournament(current, now))) return false;
     await tx.tournament.update({ where: { id: tournamentId }, data: { closeReminderSentAt: sentAt } });
     return true;
+  });
+}
+
+/**
+ * Horodate sous verrou le premier 404 USER_NOT_FOUND constaté pour la date courante du tournoi,
+ * SEULEMENT si le tournoi attend toujours un rappel (clôturé/reporté entre-temps ⇒ rien). Un
+ * constat déjà valable n'est jamais réécrit : on garde la PREMIÈRE observation (trace utile à
+ * l'exploitant ; l'échéance, elle, se compte depuis J+1 et non depuis ce constat).
+ */
+export async function markCloseReminderRecipientNotFound(
+  tournamentId: string,
+  observedAt: Date,
+  now: Date,
+): Promise<"RECORDED" | "ALREADY_RECORDED" | "CHANGED"> {
+  return withTournamentLock(tournamentId, async (tx) => {
+    const current = await tx.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { status: true, date: true, closeReminderSentAt: true, closeReminderRecipientNotFoundAt: true },
+    });
+    if (!current || !needsCloseReminder(classifyUnfinishedTournament(current, now))) return "CHANGED" as const;
+    const existing = current.closeReminderRecipientNotFoundAt?.getTime();
+    if (existing !== undefined && existing >= current.date.getTime() + DAY_MS) return "ALREADY_RECORDED" as const;
+    await tx.tournament.update({ where: { id: tournamentId }, data: { closeReminderRecipientNotFoundAt: observedAt } });
+    return "RECORDED" as const;
   });
 }
 
@@ -270,12 +362,32 @@ export async function deleteUnfinishedTournamentIfDue(
   tournamentId: string,
   now: Date,
 ): Promise<{ deleted: true; counts: TournamentTreeCounts } | { deleted: false }> {
+  return deleteUnfinishedTournamentIfClassifiedAs(tournamentId, now, "DELETE");
+}
+
+/**
+ * Suppression SANS rappel (créateur introuvable) : à n'appeler qu'après un 404 USER_NOT_FOUND
+ * reçu PENDANT ce passage. Même revérification sous verrou : un tournoi clôturé ou reporté
+ * entre-temps (ou dont le rappel a finalement été envoyé) n'est pas supprimé.
+ */
+export async function deleteUnfinishedTournamentWithoutReminderIfDue(
+  tournamentId: string,
+  now: Date,
+): Promise<{ deleted: true; counts: TournamentTreeCounts } | { deleted: false }> {
+  return deleteUnfinishedTournamentIfClassifiedAs(tournamentId, now, "DELETE_IF_RECIPIENT_STILL_NOT_FOUND");
+}
+
+async function deleteUnfinishedTournamentIfClassifiedAs(
+  tournamentId: string,
+  now: Date,
+  expected: "DELETE" | "DELETE_IF_RECIPIENT_STILL_NOT_FOUND",
+): Promise<{ deleted: true; counts: TournamentTreeCounts } | { deleted: false }> {
   return withTournamentLock(tournamentId, async (tx) => {
     const current = await tx.tournament.findUnique({
       where: { id: tournamentId },
-      select: { status: true, date: true, closeReminderSentAt: true },
+      select: { status: true, date: true, closeReminderSentAt: true, closeReminderRecipientNotFoundAt: true },
     });
-    if (!current || classifyUnfinishedTournament(current, now) !== "DELETE") return { deleted: false as const };
+    if (!current || classifyUnfinishedTournament(current, now) !== expected) return { deleted: false as const };
     const counts = await countTournamentTree(tx, tournamentId);
     await deleteTournamentTreeTx(tx, tournamentId);
     return { deleted: true as const, counts };
@@ -331,6 +443,8 @@ export async function purgeUnfinishedTournaments(
     remindersNotAttempted: 0,
     awaitingGrace: 0,
     deleted: 0,
+    deletedAfterReminder: 0,
+    deletedWithoutReminder: 0,
     deletionsFailed: 0,
     spared: 0,
     errors: 0,
@@ -351,7 +465,15 @@ export async function purgeUnfinishedTournaments(
         date: { lt: todayStart },
         ...(options.onlyTournamentIds ? { id: { in: options.onlyTournamentIds } } : {}),
       },
-      select: { id: true, userId: true, name: true, date: true, status: true, closeReminderSentAt: true },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        date: true,
+        status: true,
+        closeReminderSentAt: true,
+        closeReminderRecipientNotFoundAt: true,
+      },
       orderBy: { id: "asc" },
       take: batchSize,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -369,6 +491,7 @@ export async function purgeUnfinishedTournaments(
         status: t.status,
         date: t.date,
         closeReminderSentAt: t.closeReminderSentAt,
+        closeReminderRecipientNotFoundAt: t.closeReminderRecipientNotFoundAt,
         outcome: "AWAITING_GRACE",
       };
       const label = `tournoi ${t.id} (date ${formatDay(t.date)}, statut ${t.status})`;
@@ -381,7 +504,8 @@ export async function purgeUnfinishedTournaments(
             `${prefix} ${label} : rappel envoyé le ${t.closeReminderSentAt!.toISOString()}, suppression possible ` +
               `à partir du ${deletionNotBefore(t.closeReminderSentAt!).toISOString()}.`,
           );
-        } else if (action === "SEND_REMINDER") {
+        } else if (needsCloseReminder(action)) {
+          const deleteIfStillNotFound = action === "DELETE_IF_RECIPIENT_STILL_NOT_FOUND";
           const target: CloseReminderTarget = {
             tournamentId: t.id,
             creatorUserId: t.userId,
@@ -389,7 +513,15 @@ export async function purgeUnfinishedTournaments(
             tournamentDate: t.date,
             deletionNotBefore: deletionNotBefore(now),
           };
-          if (dryRun) {
+          if (dryRun && deleteIfStillNotFound) {
+            const counts = await countTournamentTree(prisma, t.id);
+            entry.outcome = "DELETION_WITHOUT_REMINDER_WOULD_RUN";
+            entry.counts = counts;
+            log(
+              `${prefix} ${label} : créateur introuvable (404) constaté le ${t.closeReminderRecipientNotFoundAt!.toISOString()} — ` +
+                `rappel à retenter ; s'il répond encore 404, SERAIT SUPPRIMÉ SANS RAPPEL avec ${describeCounts(counts)}.`,
+            );
+          } else if (dryRun) {
             entry.outcome = "REMINDER_WOULD_SEND";
             log(
               `${prefix} ${label} : rappel de clôture À ENVOYER` +
@@ -412,15 +544,50 @@ export async function purgeUnfinishedTournaments(
               result = { outcome: "FAILED", error: err instanceof Error ? err.message : String(err) };
             }
             if (result.outcome !== "SENT") {
-              // Pas d'email confirmé ⇒ pas d'horodatage ⇒ jamais de suppression pour ce tournoi ;
-              // il est retenté au passage suivant.
-              if (result.outcome === "RECIPIENT_NOT_FOUND") {
+              // Pas d'email confirmé ⇒ pas de closeReminderSentAt ⇒ pas de suppression « après
+              // rappel » ; retenté au passage suivant. Seul le 404 USER_NOT_FOUND ouvre la voie
+              // d'une suppression sans rappel — jamais une panne ni une erreur de configuration.
+              if (result.outcome === "RECIPIENT_NOT_FOUND" && deleteIfStillNotFound) {
+                // 404 USER_NOT_FOUND déjà constaté, reconfirmé à l'instant, J+1 + 48 h atteint :
+                // le rappel ne pourra jamais partir — suppression sans email (décision Alan).
+                // Revérifiée sous verrou (clôture/report concurrent ⇒ épargné).
+                try {
+                  const deletion = await deleteUnfinishedTournamentWithoutReminderIfDue(t.id, now);
+                  if (deletion.deleted) {
+                    report.deleted += 1;
+                    report.deletedWithoutReminder += 1;
+                    entry.outcome = "DELETED_WITHOUT_REMINDER";
+                    entry.counts = deletion.counts;
+                    log(`${prefix} ${label} : SUPPRIMÉ SANS RAPPEL (créateur introuvable côté SterPlatform, 404 reconfirmé) avec ${describeCounts(deletion.counts)}.`);
+                  } else {
+                    report.spared += 1;
+                    entry.outcome = "SPARED";
+                    log(`${prefix} ${label} : épargné (clôturé, reporté ou supprimé entre-temps).`);
+                  }
+                } catch (err) {
+                  report.deletionsFailed += 1;
+                  report.errors += 1;
+                  entry.outcome = "DELETION_FAILED";
+                  entry.error = err instanceof Error ? err.message : String(err);
+                  log(`${prefix} ${label} : ÉCHEC de la suppression sans rappel (transaction annulée, rien supprimé) : ${entry.error}`);
+                }
+              } else if (result.outcome === "RECIPIENT_NOT_FOUND") {
                 // Problème de données propre à ce créateur (compte supprimé, plus membre d'une
                 // organisation DartsOpen active), pas une panne : ne fait pas échouer la tâche.
-                // Journal : id du tournoi seulement, jamais le nom ni l'email du créateur.
+                // Le constat est horodaté : il autorisera la suppression sans rappel à J+1 + 48 h
+                // si le 404 est reconfirmé alors. Journal : id du tournoi seulement, jamais le nom
+                // ni l'email du créateur.
                 report.remindersRecipientNotFound += 1;
                 entry.outcome = "REMINDER_RECIPIENT_NOT_FOUND";
-                log(`${prefix} ${label} : créateur introuvable côté SterPlatform (404), rappel non envoyé, aucun horodatage posé — retenté au prochain passage.`);
+                const recorded = await markCloseReminderRecipientNotFound(t.id, now, now);
+                const deadline = deletionWithoutReminderNotBefore(t.date).toISOString();
+                log(
+                  `${prefix} ${label} : créateur introuvable côté SterPlatform (404), rappel non envoyé — ` +
+                    (recorded === "CHANGED"
+                      ? "tournoi modifié entre-temps (clôturé/reporté), rien horodaté."
+                      : `constat ${recorded === "RECORDED" ? "horodaté" : "déjà horodaté"} ; rappel retenté à chaque passage, ` +
+                        `suppression sans rappel à partir du ${deadline} si le créateur est toujours introuvable.`),
+                );
               } else {
                 report.remindersFailed += 1;
                 report.errors += 1;
@@ -459,6 +626,7 @@ export async function purgeUnfinishedTournaments(
               const result = await deleteUnfinishedTournamentIfDue(t.id, now);
               if (result.deleted) {
                 report.deleted += 1;
+                report.deletedAfterReminder += 1;
                 entry.outcome = "DELETED";
                 entry.counts = result.counts;
                 log(`${prefix} ${label} : SUPPRIMÉ avec ${describeCounts(result.counts)}.`);
@@ -481,7 +649,7 @@ export async function purgeUnfinishedTournaments(
         // un tournoi problématique ne doit jamais bloquer les suivants.
         report.errors += 1;
         entry.error = err instanceof Error ? err.message : String(err);
-        if (action === "SEND_REMINDER") {
+        if (needsCloseReminder(action)) {
           report.remindersFailed += 1;
           entry.outcome = "REMINDER_FAILED";
         } else {

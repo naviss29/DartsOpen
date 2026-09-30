@@ -16,8 +16,13 @@
  *   npm run purge:unfinished-tournaments -- --apply     # envoie les rappels, supprime les tournois échus
  *   options : --batch-size=N (défaut 100 tournois par page)
  *
+ * Créateur introuvable côté SterPlatform (404 USER_NOT_FOUND) : constat horodaté, rappel retenté à
+ * chaque passage ; à partir de J+1 00:00 UTC + 48 h, si le 404 est reconfirmé, le tournoi est
+ * supprimé SANS rappel (décision Alan 30/09/2026) — le bilan distingue « supprimés après rappel »
+ * et « supprimés sans rappel (créateur introuvable) ».
+ *
  * Codes de sortie : 0 = succès (y compris « rien à faire » et les créateurs introuvables côté
- * SterPlatform, 404 : journalisés par id de tournoi, retentés au passage suivant), 1 = au moins un
+ * SterPlatform, 404 : journalisés par id de tournoi), 1 = au moins un
  * tournoi en échec (rappel non envoyé pour 5xx/réseau, suppression échouée) ou erreur inattendue,
  * 2 = usage invalide / configuration manquante ou rejetée par SterPlatform (401/403, template
  * absent) — dans ce dernier cas les suppressions déjà dues sont quand même traitées, seuls les
@@ -81,7 +86,8 @@ async function main(): Promise<number> {
   const mode = parsed.dryRun ? "DRY-RUN (aucune écriture, aucun email)" : "APPLY (rappels et suppressions réels)";
   console.log(
     `${PREFIX} Mode ${mode} — base ${describeDatabaseTarget(databaseUrl)} — rappel à J+1, suppression ` +
-      `${CLOSE_REMINDER_GRACE_HOURS} h après le rappel si le tournoi n'est toujours pas FINISHED.`,
+      `${CLOSE_REMINDER_GRACE_HOURS} h après le rappel si le tournoi n'est toujours pas FINISHED ; sans rappel ` +
+      `à partir de J+1 + ${CLOSE_REMINDER_GRACE_HOURS} h si le créateur reste introuvable (404 USER_NOT_FOUND).`,
   );
   if (!notifier.available) {
     console.error(`${PREFIX} AVERTISSEMENT : envoi des rappels indisponible (${notifier.unavailableReason}) — aucun rappel ne sera horodaté, donc aucune nouvelle suppression planifiée.`);
@@ -96,13 +102,17 @@ async function main(): Promise<number> {
 
   const wouldSend = report.entries.filter((e) => e.outcome === "REMINDER_WOULD_SEND").length;
   const wouldDelete = report.entries.filter((e) => e.outcome === "DELETION_WOULD_RUN").length;
+  const wouldDeleteWithoutReminder = report.entries.filter((e) => e.outcome === "DELETION_WITHOUT_REMINDER_WOULD_RUN").length;
   console.log(
     `${PREFIX} ${report.dryRun ? "DRY-RUN" : "APPLY"} terminé — ${report.scanned} tournoi(s) non terminé(s) à date passée ; ` +
       (report.dryRun
-        ? `${wouldSend} rappel(s) à envoyer ; ${wouldDelete} suppression(s) à effectuer ; `
+        ? `${wouldSend} rappel(s) à envoyer ; ${wouldDelete} suppression(s) après rappel à effectuer ; ` +
+          `${wouldDeleteWithoutReminder} suppression(s) sans rappel si le créateur est toujours introuvable ; `
         : `${report.remindersSent} rappel(s) envoyé(s) ; ${report.remindersRecipientNotFound} créateur(s) introuvable(s) (404) ; ` +
           `${report.remindersFailed} rappel(s) en échec ; ${report.remindersNotAttempted} rappel(s) non tenté(s) ; ` +
-          `${report.deleted} tournoi(s) supprimé(s) ; ${report.deletionsFailed} suppression(s) en échec ; ` +
+          `${report.deletedAfterReminder} tournoi(s) supprimé(s) après rappel ; ` +
+          `${report.deletedWithoutReminder} tournoi(s) supprimé(s) sans rappel (créateur introuvable) ; ` +
+          `${report.deletionsFailed} suppression(s) en échec ; ` +
           `${report.spared} épargné(s) ; `) +
       `${report.awaitingGrace} en attente du délai de ${CLOSE_REMINDER_GRACE_HOURS} h ; ${report.errors} tournoi(s) en erreur.`,
   );

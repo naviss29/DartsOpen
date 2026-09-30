@@ -6,6 +6,7 @@ import { dbDeleteTournament } from "./tournament";
 import {
   purgeUnfinishedTournaments,
   deleteUnfinishedTournamentIfDue,
+  deleteUnfinishedTournamentWithoutReminderIfDue,
   type CloseReminderNotifier,
   type CloseReminderSendResult,
   type UnfinishedTournamentPurgeReport,
@@ -168,6 +169,16 @@ async function reminderOf(id: string) {
   return (await prisma.tournament.findUnique({ where: { id }, select: { closeReminderSentAt: true } }))?.closeReminderSentAt ?? null;
 }
 
+async function notFoundOf(id: string) {
+  return (
+    await prisma.tournament.findUnique({ where: { id }, select: { closeReminderRecipientNotFoundAt: true } })
+  )?.closeReminderRecipientNotFoundAt ?? null;
+}
+
+// Tournois datés du 14/06/1995 : J+1 00:00 UTC + 48 h = 17/06/1995 00:00 UTC ; passage quotidien
+// de 04:00 UTC ce jour-là = premier passage autorisé à supprimer sans rappel.
+const NO_REMINDER_DEADLINE_RUN = new Date("1995-06-17T04:00:00.000Z");
+
 describe("purgeUnfinishedTournaments — rappel (vrai PostgreSQL)", () => {
   it("aucun rappel le jour même du tournoi ni pour un tournoi FINISHED ; rappel à J+1", async () => {
     const today = await createTournament("1995-06-15");
@@ -243,7 +254,7 @@ describe("purgeUnfinishedTournaments — rappel (vrai PostgreSQL)", () => {
     expect(await reminderOf(t.id)).toBeNull();
   });
 
-  it("créateur introuvable (404) : pas d'horodatage, pas compté en erreur, journal sans nom ; rappel envoyé au passage suivant", async () => {
+  it("créateur introuvable (404) puis redevenu joignable : constat horodaté, rappel envoyé au passage suivant, cycle normal de 48 h", async () => {
     const t = await createTournament("1995-06-14");
     let firstRun = true;
     const notifier = fakeNotifier({ [t.id]: () => (firstRun ? NOT_FOUND : { outcome: "SENT" }) });
@@ -254,11 +265,13 @@ describe("purgeUnfinishedTournaments — rappel (vrai PostgreSQL)", () => {
     expect(report.remindersRecipientNotFound).toBe(1);
     expect(report.errors).toBe(0);
     expect(await reminderOf(t.id)).toBeNull();
+    expect((await notFoundOf(t.id))?.toISOString()).toBe(REMINDER_RUN.toISOString());
     const line = logs.find((l) => l.includes(t.id))!;
     expect(line).toContain("404");
     expect(line).not.toContain("Tournoi jamais terminé");
 
-    // 48 h après le 404 : toujours rien à supprimer (aucun rappel réellement parti), nouvel essai.
+    // Échéance J+1 + 48 h atteinte, mais le rappel part cette fois : pas de suppression sans
+    // rappel, le créateur bénéficie des 48 h normales à compter de cet envoi.
     firstRun = false;
     const retry = new Date(REMINDER_RUN.getTime() + 48 * H);
     const second = await purge({ notifier, now: retry });
@@ -367,6 +380,127 @@ describe("purgeUnfinishedTournaments — suppression (vrai PostgreSQL)", () => {
     const afterNewDate = await purge({ notifier, now: new Date("1995-06-21T04:00:00.000Z") });
     expect(entryFor(afterNewDate, t.id)?.outcome).toBe("REMINDER_SENT");
     expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(1);
+  });
+});
+
+describe("purgeUnfinishedTournaments — créateur introuvable, suppression sans rappel (vrai PostgreSQL)", () => {
+  it("404 à J+1 puis reconfirmé au premier passage ≥ J+1 00:00 UTC + 48 h : supprimé sans rappel, arbre complet", async () => {
+    const t = await createTournament("1995-06-14", "IN_PROGRESS");
+    const tree = await createFullTree(t.id);
+    const notifier = fakeNotifier({ [t.id]: NOT_FOUND });
+
+    await purge({ notifier, now: REMINDER_RUN });
+    // Passage intermédiaire (J+2) : toujours 404, constat conservé (première observation), rien supprimé.
+    const j2 = await purge({ notifier, now: new Date(REMINDER_RUN.getTime() + 24 * H) });
+    expect(entryFor(j2, t.id)?.outcome).toBe("REMINDER_RECIPIENT_NOT_FOUND");
+    expect((await notFoundOf(t.id))?.toISOString()).toBe(REMINDER_RUN.toISOString());
+    // Juste avant l'échéance : toujours rien supprimé.
+    const early = await purge({ notifier, now: new Date("1995-06-16T23:59:59.000Z") });
+    expect(entryFor(early, t.id)?.outcome).toBe("REMINDER_RECIPIENT_NOT_FOUND");
+    expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(1);
+
+    const logs: string[] = [];
+    const report = await purge({ notifier, now: NO_REMINDER_DEADLINE_RUN, log: (m) => logs.push(m) });
+
+    const entry = entryFor(report, t.id);
+    expect(entry?.outcome).toBe("DELETED_WITHOUT_REMINDER");
+    expect(entry?.counts).toMatchObject({ registrations: 2, matches: 1, matchSetThrows: 1 });
+    expect(report.deletedWithoutReminder).toBe(1);
+    expect(report.deletedAfterReminder).toBe(0);
+    expect(report.deleted).toBe(1);
+    expect(report.errors).toBe(0);
+    // Le rappel a bien été retenté à l'échéance avant de supprimer (4 passages = 4 essais).
+    expect(notifier.send.mock.calls.filter(([x]) => x.tournamentId === t.id)).toHaveLength(4);
+    expect(await remainingRows(t.id, tree)).toEqual({ tournaments: 0, registrations: 0, rounds: 0, pools: 0, poolPlayers: 0, matches: 0, sets: 0, throws: 0, sessions: 0, grants: 0, incidents: 0 });
+    const line = logs.find((l) => l.includes(t.id))!;
+    expect(line).toContain("SUPPRIMÉ SANS RAPPEL");
+    expect(line).not.toContain("Tournoi jamais terminé");
+    expect(logs.join("\n")).not.toContain("@example.com");
+  });
+
+  it("à l'échéance, toute autre issue que 404 USER_NOT_FOUND (5xx, configuration) : jamais de suppression", async () => {
+    const down = await createTournament("1995-06-14");
+    const misconfigured = await createTournament("1995-06-13");
+    for (const id of [down.id, misconfigured.id]) {
+      await prisma.tournament.update({ where: { id }, data: { closeReminderRecipientNotFoundAt: REMINDER_RUN } });
+    }
+    const notifier = fakeNotifier({ [down.id]: SMTP_DOWN, [misconfigured.id]: BAD_TOKEN });
+
+    // Deux passages : le second n'a plus de configuration valable pour l'un et reste en panne pour l'autre.
+    for (const now of [NO_REMINDER_DEADLINE_RUN, new Date(NO_REMINDER_DEADLINE_RUN.getTime() + 24 * H)]) {
+      const report = await purge({ notifier, now });
+      expect(report.deletedWithoutReminder).toBe(0);
+      expect(entryFor(report, down.id)?.outcome).toMatch(/^REMINDER_(FAILED|NOT_ATTEMPTED)$/);
+      expect(entryFor(report, misconfigured.id)?.outcome).toMatch(/^REMINDER_(CONFIGURATION_ERROR|NOT_ATTEMPTED)$/);
+    }
+    expect(await prisma.tournament.count({ where: { id: { in: [down.id, misconfigured.id] } } })).toBe(2);
+  });
+
+  it("premier 404 constaté seulement après l'échéance (SterPlatform en panne avant) : horodaté, supprimé au passage suivant seulement", async () => {
+    const t = await createTournament("1995-06-14");
+    let outcome: CloseReminderSendResult = SMTP_DOWN;
+    const notifier = fakeNotifier({ [t.id]: () => outcome });
+
+    await purge({ notifier, now: REMINDER_RUN });
+    expect(await notFoundOf(t.id)).toBeNull();
+
+    outcome = NOT_FOUND;
+    const first = await purge({ notifier, now: NO_REMINDER_DEADLINE_RUN });
+    expect(entryFor(first, t.id)?.outcome).toBe("REMINDER_RECIPIENT_NOT_FOUND");
+    expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(1);
+
+    const next = await purge({ notifier, now: new Date(NO_REMINDER_DEADLINE_RUN.getTime() + 24 * H) });
+    expect(entryFor(next, t.id)?.outcome).toBe("DELETED_WITHOUT_REMINDER");
+    expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(0);
+  });
+
+  it("tournoi clôturé après le constat : ni balayé ni supprimé ; revérification sous verrou", async () => {
+    const t = await createTournament("1995-06-14", "IN_PROGRESS");
+    const tree = await createFullTree(t.id);
+    await prisma.tournament.update({ where: { id: t.id }, data: { closeReminderRecipientNotFoundAt: REMINDER_RUN, status: "FINISHED" } });
+
+    const report = await purge({ notifier: fakeNotifier({ [t.id]: NOT_FOUND }), now: NO_REMINDER_DEADLINE_RUN });
+    expect(entryFor(report, t.id)).toBeUndefined();
+    // Course simulée : classé « à supprimer » par le balayage, clôturé avant la transaction.
+    const result = await deleteUnfinishedTournamentWithoutReminderIfDue(t.id, NO_REMINDER_DEADLINE_RUN);
+    expect(result.deleted).toBe(false);
+    expect(Object.values(await remainingRows(t.id, tree)).every((n) => n > 0)).toBe(true);
+  });
+
+  it("tournoi reporté après le constat : l'ancien 404 ne vaut plus, cycle neuf à la nouvelle J+1", async () => {
+    const t = await createTournament("1995-06-14");
+    await prisma.tournament.update({ where: { id: t.id }, data: { closeReminderRecipientNotFoundAt: REMINDER_RUN, date: day("1995-06-20") } });
+    const notifier = fakeNotifier({ [t.id]: NOT_FOUND });
+
+    const before = await purge({ notifier, now: NO_REMINDER_DEADLINE_RUN });
+    expect(entryFor(before, t.id)).toBeUndefined();
+    // Sous verrou aussi : la suppression sans rappel est refusée.
+    expect((await deleteUnfinishedTournamentWithoutReminderIfDue(t.id, new Date("1995-06-30T04:00:00.000Z"))).deleted).toBe(false);
+
+    // Nouvelle J+1 (21/06) : nouvel essai, nouveau constat, pas de suppression avant 23/06 00:00 UTC.
+    const newJ1 = new Date("1995-06-21T04:00:00.000Z");
+    const again = await purge({ notifier, now: newJ1 });
+    expect(entryFor(again, t.id)?.outcome).toBe("REMINDER_RECIPIENT_NOT_FOUND");
+    expect((await notFoundOf(t.id))?.toISOString()).toBe(newJ1.toISOString());
+    const due = await purge({ notifier, now: new Date("1995-06-23T04:00:00.000Z") });
+    expect(entryFor(due, t.id)?.outcome).toBe("DELETED_WITHOUT_REMINDER");
+  });
+
+  it("dry-run à l'échéance : annonce la suppression sans rappel, n'envoie rien, n'écrit rien", async () => {
+    const t = await createTournament("1995-06-14", "IN_PROGRESS");
+    const tree = await createFullTree(t.id);
+    await prisma.tournament.update({ where: { id: t.id }, data: { closeReminderRecipientNotFoundAt: REMINDER_RUN } });
+    const notifier = fakeNotifier({ [t.id]: NOT_FOUND });
+    const logs: string[] = [];
+
+    const report = await purge({ notifier, now: NO_REMINDER_DEADLINE_RUN, dryRun: true, log: (m) => logs.push(m) });
+
+    expect(entryFor(report, t.id)?.outcome).toBe("DELETION_WITHOUT_REMINDER_WOULD_RUN");
+    expect(entryFor(report, t.id)?.counts?.registrations).toBe(2);
+    expect(notifier.send).not.toHaveBeenCalled();
+    expect(report.deleted).toBe(0);
+    expect(Object.values(await remainingRows(t.id, tree)).every((n) => n > 0)).toBe(true);
+    expect(logs.find((l) => l.includes(t.id))).toContain("SERAIT SUPPRIMÉ SANS RAPPEL");
   });
 });
 
