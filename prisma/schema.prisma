@@ -136,6 +136,16 @@ model Tournament {
    * suppression immédiate. Voir lib/db/unfinishedTournamentPurge.ts.
    */
   closeReminderSentAt DateTime?       @map("close_reminder_sent_at")
+  /**
+   * DO-UNFINISHED-PURGE-001 (décision Alan, 30/09/2026, complément) — premier instant où
+   * SterPlatform a répondu 404 `USER_NOT_FOUND` au rappel de clôture (créateur supprimé ou membre
+   * d'aucune organisation où DARTSOPEN est actif) : le rappel ne PEUT pas partir. Posé sous verrou,
+   * valable seulement s'il est postérieur à J+1 de la `date` COURANTE (report ⇒ cycle neuf). Il
+   * autorise la suppression SANS email à partir de J+1 00:00 UTC + 48 h, à condition que le 404
+   * soit reconfirmé lors du passage qui supprime. Aucun autre échec (5xx, réseau, 401/403,
+   * template absent) ne pose cette colonne. Voir lib/db/unfinishedTournamentPurge.ts.
+   */
+  closeReminderRecipientNotFoundAt DateTime? @map("close_reminder_recipient_not_found_at")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
