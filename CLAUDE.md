@@ -348,9 +348,22 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
      ce qui en dépend, via `deleteTournamentTreeTx` (même ordre que `dbDeleteTournament`, imposé
      par les FK RESTRICT `matches.player1_id`, `match_sets.round_id`, `match_set_throws.player_id`).
   La condition est revérifiée sous verrou dans la transaction de suppression (clôture concurrente
-  → épargné). Jamais de suppression sans rappel envoyé : échec d'email ⇒ pas d'horodatage ⇒ pas de
+  → épargné). Jamais de suppression sans rappel envoyé (seule exception : règle 3) : échec d'email ⇒ pas d'horodatage ⇒ pas de
   suppression. Un rappel n'est valable que s'il est postérieur à J+1 de la date **courante** : un
   tournoi reporté après un rappel reçoit un nouveau rappel, jamais une suppression immédiate.
+  3. **Seule exception — créateur introuvable** (complément décidé par Alan le 30/09/2026) : si
+     SterPlatform répond 404 `USER_NOT_FOUND` (créateur supprimé ou membre d'aucune organisation
+     où DARTSOPEN est actif), le rappel ne peut pas partir. Le premier constat est horodaté sous
+     verrou (`Tournament.closeReminderRecipientNotFoundAt`, valable seulement s'il est postérieur à
+     J+1 de la date courante — report ⇒ cycle neuf), le rappel est retenté à chaque passage, et au
+     premier passage **à partir de J+1 00:00 UTC + 48 h** (tournoi du 14 → dès le 17 00:00 UTC,
+     donc le passage de 04:00 du 17) le rappel est retenté une dernière fois : 404 `USER_NOT_FOUND`
+     reconfirmé ⇒ suppression **sans email** (même revérification sous verrou, action
+     `DELETE_IF_RECIPIENT_STILL_NOT_FOUND`) ; rappel parti ⇒ cycle normal de 48 h ; toute autre
+     issue ⇒ rien. Aucun autre échec (5xx, réseau, 400, 401/403, template absent, variable
+     manquante) ne pose cet horodatage ni n'autorise de suppression : on ne supprime jamais parce
+     que SterPlatform était en panne ou mal configuré. Un 404 `USER_NOT_FOUND` implique un jeton
+     accepté (sinon 401/403), donc le bon SterPlatform.
 - **Code** : `lib/db/unfinishedTournamentPurge.ts` (`classifyUnfinishedTournament` = règle pure
   partagée par le balayage et les deux revérifications), `lib/tournament/closeReminderNotifier.ts`
   (port d'envoi), `scripts/purge-unfinished-tournaments.ts` (CLI). Script distinct de
@@ -358,7 +371,11 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   activable indépendamment dans Coolify (la purge RGPD ne doit jamais échouer à cause des rappels).
 - **Commande** : `npm run purge:unfinished-tournaments -- --dry-run|--apply` (`--batch-size=N`).
   Journal par tournoi (id, date, statut, compteurs de lignes — jamais de nom ni de coordonnées),
-  try/catch par tournoi. Codes de sortie : 0 succès (créateurs introuvables inclus), 1 au moins un
+  try/catch par tournoi. Le bilan distingue « supprimé(s) après rappel » et « supprimé(s) sans
+  rappel (créateur introuvable) » (`deletedAfterReminder` / `deletedWithoutReminder`, total
+  `deleted`) ; en dry-run, « suppression(s) sans rappel si le créateur est toujours introuvable »
+  (aucun envoi en dry-run, le 404 n'y est donc pas reconfirmé).
+  Codes de sortie : 0 succès (créateurs introuvables et suppressions sans rappel inclus), 1 au moins un
   rappel ou une suppression en échec, 2 usage invalide ou configuration manquante/rejetée. Planification
   recommandée : Coolify Scheduled Task quotidienne `0 4 * * *` (UTC),
   `npm run purge:unfinished-tournaments -- --apply`.
@@ -378,11 +395,11 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   `DATABASE_URL`, `NEXT_PUBLIC_API_URL`, `STER_API_TOKEN` et `NEXT_PUBLIC_APP_URL` (sans repli
   `localhost` : variable absente ⇒ notifier indisponible, aucun rappel).
   **Sûreté** : `closeReminderSentAt` n'est posé QUE sur un 200 `{"sent":true}`. Toute autre issue
-  laisse le tournoi sans horodatage (donc jamais supprimé) et il est retenté au passage suivant :
+  laisse le tournoi sans rappel et il est retenté au passage suivant :
   - 404 `USER_NOT_FOUND` (créateur supprimé ou membre d'aucune organisation où DARTSOPEN est
-    actif) → compté « créateur introuvable », journalisé par id de tournoi (jamais nom/email),
-    **ne fait pas échouer** la tâche. Un tournoi dont le créateur reste introuvable n'est donc
-    jamais supprimé (à surveiller dans les journaux) ;
+    actif) → compté « créateur introuvable », constat horodaté (`closeReminderRecipientNotFoundAt`),
+    journalisé par id de tournoi (jamais nom/email), **ne fait pas échouer** la tâche ; à partir de
+    J+1 00:00 UTC + 48 h, s'il est reconfirmé, suppression sans rappel (règle 3 ci-dessus) ;
   - 5xx, réseau, 400, 200 sans `sent: true` → « rappel en échec », code de sortie 1 ;
   - 401/403, 404 sans `USER_NOT_FOUND` (template non seedé), variable manquante → **erreur de
     configuration** : plus aucun envoi tenté pendant ce passage (N refus identiques n'apportent
@@ -395,6 +412,12 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   à Paris — après la purge RGPD de 03:00). Lancer d'abord `-- --dry-run` à la main pour relire la
   liste. Les inscriptions payées en ligne sont supprimées sans attendre de remboursement (décision
   Alan : le remboursement relève de l'association organisatrice).
+- **CGU** (`app/(public)/cgu/page.tsx`, section « Annulation et remboursement », mise à jour du
+  30/09/2026) : remboursement d'un tournoi annulé ou qui n'a pas lieu = association organisatrice,
+  seule bénéficiaire des sommes encaissées ; tournoi non clôturé supprimé avec toutes ses données
+  à partir de 48 h après le lendemain de sa date, après un rappel lorsque l'organisateur peut être
+  joint. Toute évolution de cette règle doit mettre à jour ce texte (clés
+  `legal.terms.cancellation.*` de `lib/i18n/catalogs.ts`, FR/EN/ES) et la date `updatedAt`.
 - **Données hors base non supprimées** (DartsOpen ne peut pas les effacer) : consommation de crédit
   tournoi SterPlatform (référence = `tournament.id`, reste consommée) ; paiements SterPlatform/
   Stripe des inscriptions en ligne (`externalReference` = `registration.id`, `customerEmail` du
@@ -406,7 +429,10 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
 - **Tests** : `lib/db/unfinishedTournamentPurge.test.ts` (règle pure),
   `lib/db/unfinishedTournamentPurge.db.test.ts` (vrai PostgreSQL : J+1, rappel unique, 48 h,
   suppression complète vérifiée table par table, clôture entre-temps, revérification sous verrou,
-  report de date, dry-run sans écriture, échec d'email sans horodatage),
+  report de date, dry-run sans écriture, échec d'email sans horodatage ; créateur introuvable :
+  constat conservé, rien avant J+1 00:00 UTC + 48 h, suppression sans rappel complète au premier
+  passage ensuite, jamais sur 5xx/configuration, constat tardif, clôture/report entre-temps,
+  dry-run),
   `scripts/purge-unfinished-tournaments.test.ts` (CLI : codes de sortie),
   `lib/tournament/closeReminderNotifier.test.ts` (contrat `send-to-user` : 200, 200 ambigu, 404
   `USER_NOT_FOUND` / template, 400, 401, 403, 500, réseau, variables formatées). Les tests base se
