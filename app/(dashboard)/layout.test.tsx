@@ -4,11 +4,14 @@ import { render } from "@testing-library/react";
 
 vi.mock("@/lib/api/auth", () => ({ getUser: vi.fn() }));
 vi.mock("@/lib/api/organizations", () => ({ getMyOrganizationsProducts: vi.fn() }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn(), usePathname: () => "/tournaments" }));
+vi.mock("next/navigation", () => ({ redirect: vi.fn(), usePathname: () => "/tournaments", useRouter: () => ({ refresh: vi.fn() }) }));
+vi.mock("@/lib/auth/organizationAccess", () => ({ getCurrentOrganization: vi.fn() }));
+vi.mock("@/lib/actions/currentOrganization", () => ({ selectCurrentOrganization: vi.fn() }));
 
 import DashboardLayout from "./layout";
 import { getUser } from "@/lib/api/auth";
 import { getMyOrganizationsProducts } from "@/lib/api/organizations";
+import { getCurrentOrganization } from "@/lib/auth/organizationAccess";
 
 const mockedGetUser = vi.mocked(getUser);
 const mockedGetOrganizations = vi.mocked(getMyOrganizationsProducts);
@@ -17,6 +20,8 @@ beforeEach(() => {
   mockedGetUser.mockReset();
   mockedGetUser.mockResolvedValue({ id: "u1", email: "alan@example.com", roles: [], isVerified: true });
   mockedGetOrganizations.mockResolvedValue([{ activeProducts: [{ product: "DARTSOPEN" }] }]);
+  const club = { id: "org-club", slug: "club-a", name: "Club des Flèches", role: "OWNER" as const };
+  vi.mocked(getCurrentOrganization).mockResolvedValue({ status: "OK", current: club, choices: [club], needsSelection: false });
 });
 
 /**
@@ -63,5 +68,21 @@ describe("BAPPS-UX-UNIFICATION-006-FIX-001 — padding vertical du contenu : 24p
     // "header sticky" ci-dessus pour la justification complète.
     const main = content.closest("main") as HTMLElement;
     expect(main.className).not.toMatch(/overflow-(hidden|auto)/);
+  });
+});
+
+describe("ADR-0021 / L6 — organisation active dans le header (charte §10.1)", () => {
+  it("affiche le nom de l'organisation courante", async () => {
+    const element = await DashboardLayout({ children: <div>contenu</div> });
+    const { getByText } = render(element);
+    expect(getByText("Club des Flèches")).toBeTruthy();
+  });
+
+  it("une panne de l'organisation courante ne casse jamais le layout", async () => {
+    vi.mocked(getCurrentOrganization).mockRejectedValueOnce(new Error("boom"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const element = await DashboardLayout({ children: <div data-testid="page-content">contenu</div> });
+    const { getByTestId } = render(element);
+    expect(getByTestId("page-content")).toBeTruthy();
   });
 });
