@@ -73,8 +73,8 @@ respectifs pour le détail du protocole côté SterPlatform.
   (secret client serveur `STER_SSO_CLIENT_SECRET`, jamais `NEXT_PUBLIC_`), pose les cookies de
   session existants (`ster_token`/`ster_refresh_token`, mécanisme inchangé), puis redirige
   vers `next`. Contrairement à BilletAsso, **aucune création d'organisation** n'est déclenchée
-  ici — DartsOpen n'a pas de notion d'Organization SterPlatform, `tournament.association_id`
-  compare directement au `user.id` (voir "Contrôle d'accès organisateur" ci-dessous).
+  ici — les droits sont lus dans l'organisation SterPlatform du tournoi (ADR-0021, voir
+  « Droits d'organisation » ci-dessous).
 - **`app/(auth)/login/page.tsx`** — ne rend plus de formulaire : redirige immédiatement vers
   `/api/auth/sso/start` (compat pour tout lien historique/favori vers `/login`).
 - **`proxy.ts`** — redirige toute page protégée (`/dashboard`, `/tournaments`, `/settings`)
@@ -97,13 +97,85 @@ respectifs pour le détail du protocole côté SterPlatform.
   sur le port 3002 (`SSO_CALLBACK_DARTSOPEN`/`SSO_DEFAULT_URL_DARTSOPEN` déjà configurés sur ce
   port dans `SterPlatform/.env.local` et `.env.example`).
 
-## Contrôle d'accès organisateur
+## Droits d'organisation (ADR-0021 option A, lot L6)
 
-- `getOwnedTournament(tournamentId)` (`lib/actions/access.ts`) est le point d'entrée unique : vérifie le JWT SterPlatform, charge le tournoi et compare `tournament.association_id` au `user.id` → `notFound()` sinon (404 indistinguable d'un tournoi inexistant)
-- Utilisé en première instruction par les 5 pages `(dashboard)/tournaments/[id]/**` et par toutes les Server Actions organisateur (création/édition/suppression de tournoi et manches, génération poules/bracket/bracket rapide, avancement de tour, arbitrage, gestion des joueurs)
-- **Ne jamais wrapper l'appel dans `.catch()`** : `notFound()`/`redirect()` sont des throws spéciaux Next.js qui doivent se propager
-- Volontairement laissé hors contrôle : `addPlayer`/`createRegistration` (inscription publique), `doAdvanceToNextRound`/`doAdvanceQuickTournament` (helpers internes partagés avec le flux public, protégés indirectement via leurs appelants organisateur)
-- **Saisie de score publique** (`proposeWinner`/`confirmWinner`/`disputeResult`, `lib/actions/score.ts`) — un joueur n'a pas de compte SterPlatform dédié (inscription par nom/e-mail uniquement, aucun `Registration.userId`). L'autorisation (`lib/actions/scoreAuthorization.ts::loadMatchSetChain`/`resolveAuthorizedSide`, SEC-001) recharge le set → match → tournoi réel côté serveur, rejette tout `matchSetId` dont le tournoi réel ne correspond pas au `tournamentId` transmis, puis fait correspondre l'e-mail de l'utilisateur authentifié à `Registration.playerEmail` (côté 1 ou 2) — jamais au `playerSide` déclaré par le client. `markWinnerDirect` (mode traditionnel, déjà protégé par `getOwnedTournament`) réutilise `loadMatchSetChain` pour la même cohérence d'identifiants, sans changement de son modèle d'autorisation (organisateur uniquement).
+Un seul rôle par organisation, lu dans SterPlatform : **OWNER/ADMIN gèrent, MEMBER consulte**
+(données personnelles visibles à l'écran, aucune action). Le créateur (`Tournament.userId`) reste
+enregistré (idempotence, emails, purge) mais ne donne plus de droits, sauf repli transitoire.
+
+- **Données** : `Tournament.organizationId` (UUID SterPlatform = clé d'autorité) et
+  `organizationSlug` (affichage seulement), nullables et indexés (migration
+  `20260930200000_tournament_organization`, additive, aucun backfill — rattachement = lot L7).
+- **Module unique** `lib/auth/organizationAccess.ts` :
+  - `getMyMemberships()` — `GET /api/me/organizations` (`id`, `slug`, `role`), `cache()` par rendu +
+    Map mémoire indexée par SHA-256 du jeton : relue toutes les **60 s** (retrait d'un membre
+    effectif sous 60 s). SterPlatform injoignable (réseau, délai 5 s, 5xx, réponse illisible) :
+    **dernier rôle connu gardé 15 min au plus** (D10), puis `UNAVAILABLE`. Un 401/403 n'est jamais
+    une panne (aucun repli sur l'ancien rôle).
+  - `LEGACY_SHARED_ORG_SLUGS = ["dartsopen", "billetasso"]` (`lib/auth/legacyOrganizations.ts`, module
+    pur importable par `lib/db` et les scripts) : ces organisations partagées ne donnent **jamais** de
+    droits (ni comme organisation d'un tournoi, ni comme organisation courante), même si l'UUID correspond.
+  - `getCurrentOrganization()` — cookie `do_current_org` (préférence httpOnly, toujours revérifiée
+    parmi les vraies appartenances), sinon l'unique vraie organisation, sinon aucune (compte hérité)
+    ou sélecteur si plusieurs (`needsSelection`).
+  - `getTournamentAccess(id)` → `OK {tournament, canManage, via, staleRole}` / `NOT_FOUND` /
+    `UNAUTHENTICATED` / `ROLE_UNAVAILABLE`. Tournoi avec organisation ⇒ rôle dans l'organisation
+    **du tournoi** (pas l'organisation courante) ; non-membre ⇒ 404 indiscernable d'un tournoi
+    inexistant. Sans organisation ⇒ **repli créateur** (droits complets), journalisé
+    `[organizationAccess] repli créateur … tournoi=<id>` (aucune donnée personnelle), sans appel à
+    `/api/me/organizations`.
+  - `requireTournamentReader(id)` (pages) : non connecté ⇒ SSO, pas d'accès ⇒ `notFound()`, rôle
+    invérifiable depuis plus de 15 min ⇒ `/tournaments?access=unavailable` (message D10). Un tournoi
+    d'organisation n'est alors plus consultable (appartenance improuvable) ; les tournois hérités restent accessibles.
+  - `requireTournamentManager(id)` (**toutes** les Server Actions de gestion) : throws Next.js pour
+    non connecté / pas d'accès (**ne jamais les envelopper dans un `.catch()`**) et **refus retourné**
+    `{ ok: false, error }` traduit pour un MEMBER (`orgAccess.managerRequired`) ou un rôle
+    invérifiable (`orgAccess.roleUnavailable`) — une erreur levée dans une Server Action perd son
+    message en production. Motif : `const guard = await requireTournamentManager(id); if (!guard.ok) return { error: guard.error };`.
+  - `isTournamentManager(id)` : voie organisateur de `authorizeScoring` (`lib/actions/fieldAccess.ts`) ;
+    un MEMBER retombe sur la session terrain comme n'importe quel appareil.
+- **Actions gardées** : `tournament.ts` (modification, statut, manches, confirmation de crédit),
+  `admin.ts` (arbitrage), `bracket.ts`, `quickTournament.ts`, `pool.ts`, `player.ts` (dont
+  **`addPlayer`**, ajout manuel PAID sans paiement, qui n'avait aucune garde avant L6),
+  `tournamentOps.ts`, `fieldReferee.ts` (**accès arbitre : OWNER/ADMIN, D7**), voie organisateur du
+  score. Inchangés : saisie de score publique (`proposeWinner`/`confirmWinner`/`disputeResult`),
+  sessions terrain joueur/arbitre, inscription publique (`createRegistration`). Helpers internes
+  `doAdvanceToNextRound`/`doAdvanceQuickTournament` toujours protégés par leurs appelants.
+- **Pages** `(dashboard)/tournaments/[id]/**` : lecture pour tout rôle ; `canManage` masque les
+  boutons de gestion (statut, édition, manches, joueurs, poules, bracket — y compris la génération
+  automatique à l'affichage —, arbitrage, accès arbitre, scoring, incidents) et affiche
+  `ReadOnlyNotice`. Les états paiement/crédits ne sont chargés que pour un gestionnaire.
+- **Création** (`createTournament` → `resolveTournamentCreationTarget()`) : dans l'organisation
+  courante si OWNER/ADMIN (`organizationId`/`organizationSlug` renseignés) ; MEMBER ⇒ refus ;
+  plusieurs organisations sans choix ⇒ refus (choisir dans le sélecteur) ; aucune vraie organisation
+  ⇒ création sans organisation tant que **`LEGACY_CREATION_WITHOUT_ORGANIZATION_ALLOWED`** vaut
+  `true` (D3 : Alan annoncera la date de fin ; ce jour-là, passer ce seul drapeau à `false`).
+- **Listes** (`dbListTournaments(scope)` / `dbListAllTournaments(scope)`, `scope = { userId,
+  organization }` issu de `getCurrentOrganization()`) : organisation courante (tout rôle) + tournois
+  hérités créés par l'utilisateur ; `is_mine` remplacé par `can_manage` (+ `can_view` au tableau de
+  bord : lien vers la gestion ou vers la vue publique). Pastille « Lecture seule » pour un MEMBER.
+- **Sélecteur** `components/layout/OrganizationSelector.tsx` (charte §10.1 : organisation active,
+  nom tronqué 160/240 px dans le header dès 768 px, première information du drawer mobile en
+  dessous) ; `selectCurrentOrganization` (`lib/actions/currentOrganization.ts`) revérifie l'id.
+- **Reste pour le lot L7 (volontairement non migré)** : paiement en ligne et crédits encore résolus
+  par la table locale `Organization` du **créateur** (`dbGetOrganization(userId)`) dans
+  `lib/payments/onlinePaymentGuard.ts`, `lib/entitlements/tournamentSizeGuard.ts`,
+  `lib/actions/registration.ts` (Stripe Connect à l'inscription), `lib/actions/tournament.ts`
+  (create/update/retry, commentaires « L7 ») et la page `tournaments/[id]` (liens BSsite).
+  Conséquence connue : un ADMIN qui n'est pas le créateur peut voir le paiement en ligne ou le
+  crédit « indisponible » (son JWT est interrogé sur l'organisation liée du créateur). Aussi :
+  rattachement des tournois sans organisation (simulation d'abord), rappel de clôture de la purge
+  encore envoyé au seul créateur (D6 : tous les OWNER/ADMIN), liaison `settings/page.tsx` +
+  `lib/actions/organization.ts` à remplacer par l'organisation du tournoi (L8 : suppression de la table locale).
+- **Tests** : `lib/auth/organizationAccess.test.ts` (matrice des rôles, exclusion héritée, repli
+  créateur, cache 60 s / 15 min, 401, cible de création), `lib/auth/organizationAccess.db.test.ts`
+  (vrai PostgreSQL, base jetable : OWNER/ADMIN/MEMBER/extérieur/compte hérité sur `addRound`,
+  `addPlayer`, `generateRefereeAccess`, `authorizeScoring`, listes),
+  `components/layout/OrganizationSelector.test.tsx`, `app/(dashboard)/layout.test.tsx`.
+
+### Autres règles d'accès
+
+- **Saisie de score publique** (`proposeWinner`/`confirmWinner`/`disputeResult`, `lib/actions/score.ts`) — un joueur n'a pas de compte SterPlatform dédié (inscription par nom/e-mail uniquement, aucun `Registration.userId`). L'autorisation (`lib/actions/scoreAuthorization.ts::loadMatchSetChain`/`resolveAuthorizedSide`, SEC-001) recharge le set → match → tournoi réel côté serveur, rejette tout `matchSetId` dont le tournoi réel ne correspond pas au `tournamentId` transmis, puis fait correspondre l'e-mail de l'utilisateur authentifié à `Registration.playerEmail` (côté 1 ou 2) — jamais au `playerSide` déclaré par le client. `markWinnerDirect` (mode traditionnel, protégé par `authorizeScoring` : gestionnaire ou session terrain) réutilise `loadMatchSetChain` pour la même cohérence d'identifiants, sans changement de son modèle d'autorisation (organisateur uniquement).
 - Les sous-ressources (`round`, `registration`, `match`) sont scopées par `tournamentId` côté DB (`deleteMany`/`updateMany` avec `where` composé) pour empêcher la substitution d'un identifiant appartenant à un autre tournoi
 - Transitions de statut validées côté serveur par `lib/utils/tournamentStatus.ts` (`DRAFT → OPEN → IN_PROGRESS → FINISHED`, séquentiel, `FINISHED` terminal), appliqué dans `dbUpdateTournamentStatus`
 - Clôture automatique en fin de tournoi (mode standard et mode rapide) : voir « Garde-fous »
