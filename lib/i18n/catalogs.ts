@@ -22,6 +22,10 @@ const fr = {
   "nav.openMenu": "Ouvrir le menu",
   "nav.closeMenu": "Fermer le menu",
   "nav.close": "Fermer",
+  "legal.terms.cancellation.title": "Annulation et remboursement",
+  "legal.terms.cancellation.organizerPolicy": "La politique d'annulation et de remboursement d'une inscription est définie par l'association organisatrice de chaque tournoi. DartsOpen ne rembourse pas directement les frais de plateforme déjà prélevés, sauf disposition légale contraire.",
+  "legal.terms.cancellation.cancelledTournament": "Si un tournoi est annulé ou n'a pas lieu, le remboursement des inscriptions relève de l'association organisatrice, seule bénéficiaire des sommes encaissées.",
+  "legal.terms.cancellation.unfinishedTournamentDeletion": "Un tournoi qui n'a pas été clôturé par son organisateur est supprimé avec toutes ses données (inscriptions, matchs, résultats) à partir de 48 heures après le lendemain de sa date. Lorsque l'organisateur peut être joint, un email de rappel lui est envoyé au préalable pour l'inviter à clôturer le tournoi.",
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -51,6 +55,10 @@ const en = {
   "nav.openMenu": "Open menu",
   "nav.closeMenu": "Close menu",
   "nav.close": "Close",
+  "legal.terms.cancellation.title": "Cancellation and refunds",
+  "legal.terms.cancellation.organizerPolicy": "The cancellation and refund policy for a registration is set by the organising association of each tournament. DartsOpen does not directly refund platform fees already charged, unless otherwise required by law.",
+  "legal.terms.cancellation.cancelledTournament": "If a tournament is cancelled or does not take place, refunding registrations is the responsibility of the organising association, the sole recipient of the amounts collected.",
+  "legal.terms.cancellation.unfinishedTournamentDeletion": "A tournament that has not been closed by its organiser is deleted together with all its data (registrations, matches, results) from 48 hours after the day following its date. When the organiser can be reached, a reminder email is sent beforehand asking them to close the tournament.",
 } satisfies Messages;
 
 const es = {
@@ -77,6 +85,10 @@ const es = {
   "nav.openMenu": "Abrir el menú",
   "nav.closeMenu": "Cerrar el menú",
   "nav.close": "Cerrar",
+  "legal.terms.cancellation.title": "Cancelación y reembolso",
+  "legal.terms.cancellation.organizerPolicy": "La política de cancelación y reembolso de una inscripción la define la asociación organizadora de cada torneo. DartsOpen no reembolsa directamente las comisiones de plataforma ya cobradas, salvo disposición legal en contrario.",
+  "legal.terms.cancellation.cancelledTournament": "Si un torneo se cancela o no se celebra, el reembolso de las inscripciones corresponde a la asociación organizadora, única beneficiaria de los importes cobrados.",
+  "legal.terms.cancellation.unfinishedTournamentDeletion": "Un torneo que su organizador no haya cerrado se elimina junto con todos sus datos (inscripciones, partidos, resultados) a partir de las 48 horas posteriores al día siguiente a su fecha. Cuando es posible contactar con el organizador, se le envía previamente un correo de recordatorio para invitarle a cerrar el torneo.",
 } satisfies Messages;
 
 export const catalogs = { fr, en, es } satisfies Record<string, Messages>;
