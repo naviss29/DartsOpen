@@ -1,8 +1,10 @@
 import { dbListTournaments } from "@/lib/db/tournament";
 import { getUser } from "@/lib/api/auth";
+import { getCurrentOrganization } from "@/lib/auth/organizationAccess";
+import { getI18n } from "@/lib/i18n/server";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Card, EmptyState, PageHeader } from "@naviss29/design-system";
+import { Alert, Card, EmptyState, PageHeader, Pill } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
 
@@ -21,11 +23,30 @@ type Tournament = {
   nb_pools: number;
   nb_boards: number;
   players_paid: number;
+  can_manage: boolean;
 };
 
-export default async function TournamentsPage() {
+export default async function TournamentsPage({ searchParams }: { searchParams: Promise<{ access?: string }> }) {
   const user = await getUser();
-  const tournaments = user ? await dbListTournaments(user.id).catch(() => []) as Tournament[] : [];
+  const { t: translate } = await getI18n();
+  const readOnlyLabel = translate("orgAccess.readOnly");
+  const { access } = await searchParams;
+
+  // ADR-0021 / L6 — organisation courante (tout rôle : un MEMBER voit, en lecture) + tournois
+  // hérités créés par l'utilisateur. SterPlatform injoignable ⇒ seuls les tournois hérités, avec
+  // le message D10 (aucune appartenance ne peut être prouvée).
+  const current = user ? await getCurrentOrganization() : null;
+  const organization = current?.status === "OK" && current.current
+    ? { id: current.current.id, role: current.current.role }
+    : null;
+  const roleUnavailable = access === "unavailable" || current?.status === "UNAVAILABLE";
+  const needsSelection = current?.status === "OK" && current.needsSelection;
+  const tournaments = user
+    ? await dbListTournaments({ userId: user.id, organization }).catch((err) => {
+        console.error("[TournamentsPage] liste des tournois", err);
+        return [];
+      }) as Tournament[]
+    : [];
 
   // La purge des coordonnées expirées (BAPPS-LEGAL-005 §9) n'est volontairement plus
   // déclenchée ici (RGPD-001) : elle ne s'appliquait qu'aux organisateurs qui revenaient sur
@@ -34,6 +55,9 @@ export default async function TournamentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Mes tournois" actions={<Button href="/tournaments/new">+ Nouveau tournoi</Button>} />
+
+      {roleUnavailable && <Alert tone="warning"><p>{translate("orgAccess.roleUnavailable")}</p></Alert>}
+      {needsSelection && <Alert tone="info"><p>{translate("orgAccess.chooseOrganizationNotice")}</p></Alert>}
 
       {!tournaments?.length ? (
         <EmptyState
@@ -61,7 +85,10 @@ export default async function TournamentsPage() {
                       <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
                     </div>
                   </div>
-                  <StatusBadge status={t.status} />
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                    <StatusBadge status={t.status} />
+                    {!t.can_manage && <Pill tone="neutral">{readOnlyLabel}</Pill>}
+                  </div>
                 </div>
               </Card>
             </Link>

@@ -26,6 +26,20 @@ const fr = {
   "legal.terms.cancellation.organizerPolicy": "La politique d'annulation et de remboursement d'une inscription est définie par l'association organisatrice de chaque tournoi. DartsOpen ne rembourse pas directement les frais de plateforme déjà prélevés, sauf disposition légale contraire.",
   "legal.terms.cancellation.cancelledTournament": "Si un tournoi est annulé ou n'a pas lieu, le remboursement des inscriptions relève de l'association organisatrice, seule bénéficiaire des sommes encaissées.",
   "legal.terms.cancellation.unfinishedTournamentDeletion": "Un tournoi qui n'a pas été clôturé par son organisateur est supprimé avec toutes ses données (inscriptions, matchs, résultats) à partir de 48 heures après le lendemain de sa date. Lorsque l'organisateur peut être joint, un email de rappel lui est envoyé au préalable pour l'inviter à clôturer le tournoi.",
+  "orgAccess.managerRequired": "Action réservée aux propriétaires et administrateurs de l’organisation du tournoi.",
+  "orgAccess.roleUnavailable": "Vos droits dans l’organisation ne peuvent pas être vérifiés pour le moment (service BApps Studio indisponible). Les actions de gestion sont suspendues : réessayez dans quelques minutes.",
+  "orgAccess.readOnly": "Lecture seule",
+  "orgAccess.readOnlyNotice": "Vous consultez ce tournoi en lecture seule : seuls les propriétaires et administrateurs de son organisation peuvent le modifier.",
+  "orgAccess.chooseOrganizationNotice": "Vous appartenez à plusieurs organisations : choisissez celle dans laquelle vous travaillez avec le sélecteur d’organisation.",
+  "orgAccess.creation.chooseOrganization": "Choisissez d’abord l’organisation dans laquelle créer le tournoi (sélecteur d’organisation en haut de page).",
+  "orgAccess.creation.memberOnly": "Vous êtes membre de cette organisation en lecture seule : seuls ses propriétaires et administrateurs peuvent créer un tournoi.",
+  "orgAccess.creation.organizationRequired": "La création d’un tournoi est réservée aux organisations BApps Studio. Créez ou rejoignez une organisation depuis le portail BApps Studio.",
+  "orgSelector.label": "Organisation",
+  "orgSelector.placeholder": "Choisir une organisation",
+  "orgSelector.updateError": "Impossible de changer d’organisation.",
+  "orgSelector.role.OWNER": "Propriétaire",
+  "orgSelector.role.ADMIN": "Administrateur",
+  "orgSelector.role.MEMBER": "Membre",
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -59,6 +73,20 @@ const en = {
   "legal.terms.cancellation.organizerPolicy": "The cancellation and refund policy for a registration is set by the organising association of each tournament. DartsOpen does not directly refund platform fees already charged, unless otherwise required by law.",
   "legal.terms.cancellation.cancelledTournament": "If a tournament is cancelled or does not take place, refunding registrations is the responsibility of the organising association, the sole recipient of the amounts collected.",
   "legal.terms.cancellation.unfinishedTournamentDeletion": "A tournament that has not been closed by its organiser is deleted together with all its data (registrations, matches, results) from 48 hours after the day following its date. When the organiser can be reached, a reminder email is sent beforehand asking them to close the tournament.",
+  "orgAccess.managerRequired": "Only owners and administrators of the tournament’s organisation can do this.",
+  "orgAccess.roleUnavailable": "Your organisation permissions cannot be checked right now (BApps Studio service unavailable). Management actions are paused: please try again in a few minutes.",
+  "orgAccess.readOnly": "Read only",
+  "orgAccess.readOnlyNotice": "You are viewing this tournament in read-only mode: only owners and administrators of its organisation can change it.",
+  "orgAccess.chooseOrganizationNotice": "You belong to several organisations: choose the one you are working in with the organisation selector.",
+  "orgAccess.creation.chooseOrganization": "First choose the organisation to create the tournament in (organisation selector at the top of the page).",
+  "orgAccess.creation.memberOnly": "You are a read-only member of this organisation: only its owners and administrators can create a tournament.",
+  "orgAccess.creation.organizationRequired": "Creating a tournament is reserved for BApps Studio organisations. Create or join an organisation from the BApps Studio portal.",
+  "orgSelector.label": "Organisation",
+  "orgSelector.placeholder": "Choose an organisation",
+  "orgSelector.updateError": "Unable to change organisation.",
+  "orgSelector.role.OWNER": "Owner",
+  "orgSelector.role.ADMIN": "Administrator",
+  "orgSelector.role.MEMBER": "Member",
 } satisfies Messages;
 
 const es = {
@@ -89,6 +117,20 @@ const es = {
   "legal.terms.cancellation.organizerPolicy": "La política de cancelación y reembolso de una inscripción la define la asociación organizadora de cada torneo. DartsOpen no reembolsa directamente las comisiones de plataforma ya cobradas, salvo disposición legal en contrario.",
   "legal.terms.cancellation.cancelledTournament": "Si un torneo se cancela o no se celebra, el reembolso de las inscripciones corresponde a la asociación organizadora, única beneficiaria de los importes cobrados.",
   "legal.terms.cancellation.unfinishedTournamentDeletion": "Un torneo que su organizador no haya cerrado se elimina junto con todos sus datos (inscripciones, partidos, resultados) a partir de las 48 horas posteriores al día siguiente a su fecha. Cuando es posible contactar con el organizador, se le envía previamente un correo de recordatorio para invitarle a cerrar el torneo.",
+  "orgAccess.managerRequired": "Acción reservada a los propietarios y administradores de la organización del torneo.",
+  "orgAccess.roleUnavailable": "No se pueden comprobar sus permisos en la organización en este momento (servicio BApps Studio no disponible). Las acciones de gestión están suspendidas: inténtelo de nuevo en unos minutos.",
+  "orgAccess.readOnly": "Solo lectura",
+  "orgAccess.readOnlyNotice": "Está consultando este torneo en modo de solo lectura: solo los propietarios y administradores de su organización pueden modificarlo.",
+  "orgAccess.chooseOrganizationNotice": "Pertenece a varias organizaciones: elija con el selector de organización aquella en la que trabaja.",
+  "orgAccess.creation.chooseOrganization": "Elija primero la organización en la que crear el torneo (selector de organización en la parte superior de la página).",
+  "orgAccess.creation.memberOnly": "Es miembro de esta organización con acceso de solo lectura: solo sus propietarios y administradores pueden crear un torneo.",
+  "orgAccess.creation.organizationRequired": "La creación de torneos está reservada a las organizaciones de BApps Studio. Cree una organización o únase a una desde el portal de BApps Studio.",
+  "orgSelector.label": "Organización",
+  "orgSelector.placeholder": "Elegir una organización",
+  "orgSelector.updateError": "No se ha podido cambiar de organización.",
+  "orgSelector.role.OWNER": "Propietario",
+  "orgSelector.role.ADMIN": "Administrador",
+  "orgSelector.role.MEMBER": "Miembro",
 } satisfies Messages;
 
 export const catalogs = { fr, en, es } satisfies Record<string, Messages>;
