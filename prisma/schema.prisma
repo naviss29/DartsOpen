@@ -127,6 +127,15 @@ model Tournament {
    * rejection needed.
    */
   idempotencyKey     String           @map("idempotency_key")
+  /**
+   * DO-UNFINISHED-PURGE-001 (décision Alan, 30/09/2026) — instant où le rappel « clôturez votre
+   * tournoi, sinon ses données seront supprimées sous 48 h » a été RÉELLEMENT envoyé au créateur
+   * (posé seulement après succès de l'envoi, jamais avant : sans avertissement préalable, jamais
+   * de suppression). Un rappel n'est valable que s'il est postérieur à J+1 de la `date` COURANTE
+   * du tournoi : un tournoi reporté après un rappel repart d'un rappel neuf, jamais d'une
+   * suppression immédiate. Voir lib/db/unfinishedTournamentPurge.ts.
+   */
+  closeReminderSentAt DateTime?       @map("close_reminder_sent_at")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
