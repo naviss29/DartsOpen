@@ -146,6 +146,21 @@ model Tournament {
    * template absent) ne pose cette colonne. Voir lib/db/unfinishedTournamentPurge.ts.
    */
   closeReminderRecipientNotFoundAt DateTime? @map("close_reminder_recipient_not_found_at")
+  /**
+   * ADR-0021 / lot L6 — organisation SterPlatform propriétaire du tournoi (UUID `id` renvoyé par
+   * `GET /api/me/organizations`). C'est la clé d'AUTORITÉ : les droits se lisent par le rôle de
+   * l'utilisateur dans CETTE organisation (OWNER/ADMIN gèrent, MEMBER consulte), jamais par le
+   * créateur. Nullable : les tournois créés avant L6 (ou par un compte sans vraie organisation)
+   * n'en ont pas et restent en repli transitoire sur le créateur (`userId`) jusqu'au rattachement
+   * du lot L7 (simulation d'abord). Jamais une organisation héritée partagée (`dartsopen`).
+   * Voir lib/auth/organizationAccess.ts.
+   */
+  organizationId     String?          @map("organization_id")
+  /**
+   * Slug de l'organisation au moment du rattachement — affichage et liens BSsite uniquement,
+   * jamais une clé d'autorisation (un slug peut changer, l'UUID jamais).
+   */
+  organizationSlug   String?          @map("organization_slug")
   createdAt          DateTime         @default(now()) @map("created_at")
 
   rounds        Round[]
@@ -158,6 +173,8 @@ model Tournament {
 
   @@unique([userId, idempotencyKey])
   @@index([userId])
+  @@index([organizationId])
+  @@index([organizationSlug])
   @@map("tournaments")
 }
 
