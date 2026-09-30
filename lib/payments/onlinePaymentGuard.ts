@@ -68,8 +68,14 @@ export type OnlinePaymentUiState = {
  * Utilise le JWT de la requête courante (via getPaymentAuthorization(), pas le jeton
  * serveur-à-serveur) : tous les appelants de cette fonction s'exécutent après vérification que
  * `userId` est bien l'utilisateur authentifié de la requête en cours (getUser() à la création,
- * getOwnedTournament() — donc tournament.association_id === l'utilisateur courant — à la
- * modification), donc le JWT courant correspond toujours à `userId`.
+ * requireTournamentManager() à la modification).
+ *
+ * ADR-0021 / L6 — ce n'est plus vrai à la modification : un ADMIN de l'organisation du tournoi
+ * qui n'en est pas le créateur passe ici `association_id` (le créateur) avec SON propre JWT ;
+ * SterPlatform peut alors répondre 403 (organisation liée du créateur dont il n'est pas membre)
+ * ⇒ paiement en ligne vu comme indisponible (repli prudent, jamais une autorisation). Correction
+ * prévue au lot L7 : résoudre l'organisation par `tournament.organization_id`, plus par
+ * `dbGetOrganization(userId)`.
  */
 export async function getOnlinePaymentUiState(userId: string): Promise<OnlinePaymentUiState> {
   const org = await dbGetOrganization(userId);

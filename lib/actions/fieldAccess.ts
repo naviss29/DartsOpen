@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from "crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db/client";
-import { getOwnedTournamentOrNull } from "@/lib/actions/access";
+import { isTournamentManager } from "@/lib/auth/organizationAccess";
 
 /**
  * DO-FIELD-ACCESS-001 — accès terrain temporaire (QR code de cible), sans compte SterPlatform.
@@ -168,8 +168,10 @@ export type ScoringAuthorization =
  * porte organisateur déjà existante, qui continue de fonctionner exactement comme avant.
  */
 export async function authorizeScoring(tournamentId: string, matchId: string): Promise<ScoringAuthorization> {
-  const organizer = await getOwnedTournamentOrNull(tournamentId);
-  if (organizer) return { ok: true, actor: "ORGANIZER" };
+  // ADR-0021 / L6 — voie organisateur = OWNER/ADMIN de l'organisation du tournoi (ou créateur
+  // d'un tournoi encore sans organisation). Un MEMBER, ou un rôle invérifiable (D10), n'y a pas
+  // droit : il retombe sur la session terrain comme n'importe quel appareil.
+  if (await isTournamentManager(tournamentId)) return { ok: true, actor: "ORGANIZER" };
 
   const field = await verifyFieldSession(tournamentId, matchId);
   if (!field.ok) return { ok: false, error: field.error };
@@ -184,7 +186,7 @@ export async function authorizeScoring(tournamentId: string, matchId: string): P
  * terrain (rôle PLAYER) ne doit jamais disposer de ce raccourci X01 ; un arbitre terrain (rôle
  * REFEREE) le peut, au même titre que l'organisateur — sans que cela lui donne accès aux
  * fonctions d'arbitrage organisateur proprement dites (dbArbitrateMatch reste inaccessible en
- * dehors de getOwnedTournament, jamais touché par cette mission).
+ * dehors de requireTournamentManager, jamais touché par cette mission).
  */
 export function canMarkWinnerDirect(access: ScoringAuthorization & { ok: true }, gameType: string): boolean {
   if (access.actor === "ORGANIZER") return true;
@@ -194,8 +196,8 @@ export function canMarkWinnerDirect(access: ScoringAuthorization & { ok: true },
 
 /**
  * DO-FIELD-ACCESS-002 — preuve arbitre temporaire (`FieldRefereeGrant`), jamais dérivable d'un
- * paramètre d'URL public : seul un appelant qui a déjà passé `getOwnedTournament` (propriété du
- * tournoi vérifiée côté serveur) peut en créer une — voir generateRefereeAccess()
+ * paramètre d'URL public : seul un appelant qui a déjà passé `requireTournamentManager` (OWNER/ADMIN
+ * de l'organisation du tournoi, vérifié côté serveur) peut en créer une — voir generateRefereeAccess()
  * (lib/actions/fieldReferee.ts), le seul appelant prévu de cette fonction. Distincte de
  * FieldSession dans son cycle de vie : à usage unique (voir redeemRefereeGrant), courte durée,
  * jamais elle-même une session terrain — seulement un droit d'en obtenir une.

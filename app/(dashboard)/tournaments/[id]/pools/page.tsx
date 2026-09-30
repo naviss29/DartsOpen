@@ -4,7 +4,8 @@ import { PrintButton } from "@/components/tournament/PrintButton";
 import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
 import { RefereeAccessButton } from "@/components/tournament/RefereeAccessButton";
 import { dbListPools, dbListRegistrations } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentReader } from "@/lib/auth/organizationAccess";
+import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import NavPills from "@/components/ui/NavPills";
 import Button from "@/components/ui/Button";
 import { Card, EmptyState } from "@naviss29/design-system";
@@ -43,7 +44,9 @@ type Pool = {
 export default async function PoolsPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await getOwnedTournament(id) as Tournament;
+  const access = await requireTournamentReader(id);
+  const tournament = access.tournament as Tournament;
+  const canManage = access.canManage;
 
   const [pools, registrations] = await Promise.all([
     dbListPools(id).catch(() => []) as Promise<Pool[]>,
@@ -55,7 +58,7 @@ export default async function PoolsPage({ params }: Props) {
   const registrationCount = registrations.length;
   const totalPlayers = registrationCount * tournament.players_per_team;
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
-  const canGenerate = ["OPEN", "IN_PROGRESS"].includes(tournament.status) && registrationCount >= 2 && tournament.nb_pools > 1;
+  const canGenerate = canManage && ["OPEN", "IN_PROGRESS"].includes(tournament.status) && registrationCount >= 2 && tournament.nb_pools > 1;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const showQRCodes = ["OPEN", "IN_PROGRESS", "FINISHED"].includes(tournament.status);
@@ -100,6 +103,8 @@ export default async function PoolsPage({ params }: Props) {
           </Link>
         )}
       </div>
+
+      {!canManage && <ReadOnlyNotice />}
 
       <div className="flex items-center justify-between">
         <div>
@@ -158,7 +163,8 @@ export default async function PoolsPage({ params }: Props) {
         </Card></section>
       )}
 
-      {showQRCodes && (
+      {/* D7 — délivrer un accès arbitre est réservé à OWNER/ADMIN : section absente pour un MEMBER. */}
+      {canManage && showQRCodes && (
         <section><Card className="space-y-4">
           <div>
             <h2 className="text-h2 text-brand-dark">Accès arbitre (réservé à l&apos;organisateur)</h2>
@@ -235,7 +241,7 @@ export default async function PoolsPage({ params }: Props) {
                           {m.player1.player_name} vs {m.player2.player_name}
                         </span>
                         <StatusDot status={m.status} />
-                        <ArbitrateMatchButton match={m} tournamentId={id} />
+                        {canManage && <ArbitrateMatchButton match={m} tournamentId={id} />}
                       </li>
                     ))}
                   </ul>

@@ -4,7 +4,8 @@ import { SeedToggleButton } from "@/components/tournament/SeedToggleButton";
 import { EditPlayerButton } from "@/components/tournament/EditPlayerButton";
 import { EraseRegistrationButton } from "@/components/tournament/EraseRegistrationButton";
 import { dbListRegistrations } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentReader } from "@/lib/auth/organizationAccess";
+import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import Link from "next/link";
 import type { Metadata } from "next";
 import NavPills from "@/components/ui/NavPills";
@@ -37,13 +38,16 @@ type Registration = {
 export default async function PlayersPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await getOwnedTournament(id) as Tournament;
+  // ADR-0021 / L6 — un MEMBER voit la liste (données personnelles à l'écran, D2), sans aucune action.
+  const access = await requireTournamentReader(id);
+  const tournament = access.tournament as Tournament;
+  const canManage = access.canManage;
   const registrations = await dbListRegistrations(id, "PAID").catch(() => []) as Registration[];
 
   const count = registrations.length;
   const playerCount = count * tournament.players_per_team;
-  const canEdit = ["DRAFT", "OPEN"].includes(tournament.status);
-  const canSeed = ["DRAFT", "OPEN", "IN_PROGRESS"].includes(tournament.status);
+  const canEdit = canManage && ["DRAFT", "OPEN"].includes(tournament.status);
+  const canSeed = canManage && ["DRAFT", "OPEN", "IN_PROGRESS"].includes(tournament.status);
   const isFull = playerCount >= tournament.max_players;
   const isTeam = tournament.players_per_team > 1;
   const isQuick = tournament.quick_mode;
@@ -63,6 +67,8 @@ export default async function PlayersPage({ params }: Props) {
           ]}
         />
       </div>
+
+      {!canManage && <ReadOnlyNotice />}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -122,6 +128,7 @@ export default async function PlayersPage({ params }: Props) {
 
                 {canSeed && <SeedToggleButton registrationId={reg.id} tournamentId={id} seeded={reg.seeded} />}
 
+                {canManage && (
                 <div className="flex flex-wrap gap-2 border-t border-border-muted pt-3">
                   <EditPlayerButton
                     registrationId={reg.id}
@@ -134,6 +141,7 @@ export default async function PlayersPage({ params }: Props) {
                   />
                   <EraseRegistrationButton registrationId={reg.id} tournamentId={id} />
                 </div>
+                )}
               </Card>
             ))}
           </div>
@@ -152,7 +160,7 @@ export default async function PlayersPage({ params }: Props) {
                 {!isQuick && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Email</th>}
                 {!isQuick && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Téléphone</th>}
                 {canSeed && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Tête de série</th>}
-                <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Données</th>
+                {canManage && <th className="px-4 py-3 text-left font-medium text-brand-text-secondary">Données</th>}
                 {canEdit && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -173,6 +181,7 @@ export default async function PlayersPage({ params }: Props) {
                       <SeedToggleButton registrationId={reg.id} tournamentId={id} seeded={reg.seeded} />
                     </td>
                   )}
+                  {canManage && (
                   <td className="px-4 py-3">
                     <div className="flex flex-col items-start gap-1.5">
                       <EditPlayerButton
@@ -187,6 +196,7 @@ export default async function PlayersPage({ params }: Props) {
                       <EraseRegistrationButton registrationId={reg.id} tournamentId={id} />
                     </div>
                   </td>
+                  )}
                   {canEdit && (
                     <td className="px-4 py-3 text-right">
                       <RemovePlayerButton registrationId={reg.id} tournamentId={id} />

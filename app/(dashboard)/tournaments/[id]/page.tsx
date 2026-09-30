@@ -4,7 +4,8 @@ import { TournamentStatusButton } from "@/components/tournament/TournamentStatus
 import { RetryEntitlementButton } from "@/components/tournament/RetryEntitlementButton";
 import { EditTournamentForm } from "@/components/tournament/EditTournamentForm";
 import { dbListRegistrations, dbListPools } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentReader } from "@/lib/auth/organizationAccess";
+import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
 import { getTournamentSizeUiState } from "@/lib/entitlements/tournamentSizeGuard";
 import Link from "next/link";
@@ -41,28 +42,33 @@ type Tournament = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const tournament = await getOwnedTournament(id) as Tournament;
+  const { tournament } = await requireTournamentReader(id);
   return { title: `${tournament.name} — DartsOpen` };
 }
 
 export default async function TournamentDetailPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await getOwnedTournament(id) as Tournament & { association_id: string };
+  // ADR-0021 / L6 — lecture pour tout rôle de l'organisation du tournoi ; gestion OWNER/ADMIN.
+  const access = await requireTournamentReader(id);
+  const tournament = access.tournament as Tournament & { association_id: string };
+  const canManage = access.canManage;
 
+  // États paiement/crédits : utiles au seul formulaire d'édition (gestionnaire). Un MEMBER ne
+  // déclenche donc aucun appel SterPlatform de facturation qu'il n'a pas le droit de lire.
   const [registrations, pools, paymentUiState, sizeState] = await Promise.all([
     dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
     dbListPools(id).catch(() => []) as Promise<{ id: string }[]>,
-    getOnlinePaymentUiState(tournament.association_id),
-    getTournamentSizeUiState(tournament.association_id),
+    canManage ? getOnlinePaymentUiState(tournament.association_id) : null,
+    canManage ? getTournamentSizeUiState(tournament.association_id) : null,
   ]);
-  const stripeConnectUrl = paymentUiState.organizationSlug
+  const stripeConnectUrl = paymentUiState?.organizationSlug
     ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/stripe`
     : `${BSSITE_URL}/dashboard`;
-  const subscriptionUrl = paymentUiState.organizationSlug
+  const subscriptionUrl = paymentUiState?.organizationSlug
     ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/abonnement/dartsopen`
     : `${BSSITE_URL}/dashboard`;
-  const creditPurchaseUrl = paymentUiState.organizationSlug
+  const creditPurchaseUrl = paymentUiState?.organizationSlug
     ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/credits/dartsopen`
     : `${BSSITE_URL}/dashboard`;
 
@@ -103,7 +109,7 @@ export default async function TournamentDetailPage({ params }: Props) {
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={tournament.status} />
-          {nextStatus[tournament.status] && (
+          {canManage && nextStatus[tournament.status] && (
             <TournamentStatusButton
               tournamentId={id}
               nextStatus={nextStatus[tournament.status]}
@@ -113,6 +119,8 @@ export default async function TournamentDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {!canManage && <ReadOnlyNotice />}
+
       {tournament.status === "PENDING_ENTITLEMENT" && (
         <Alert tone="warning">
           <p className="font-medium">
@@ -121,9 +129,11 @@ export default async function TournamentDetailPage({ params }: Props) {
           <p className="mt-1">
             Il n&apos;est pas encore ouvrable ni modifiable tant que cette confirmation n&apos;a pas eu lieu. Aucun crédit n&apos;a été perdu.
           </p>
-          <div className="mt-3">
-            <RetryEntitlementButton tournamentId={id} />
-          </div>
+          {canManage && (
+            <div className="mt-3">
+              <RetryEntitlementButton tournamentId={id} />
+            </div>
+          )}
         </Alert>
       )}
 
@@ -186,7 +196,7 @@ export default async function TournamentDetailPage({ params }: Props) {
         )}
       </div>
 
-      {tournament.status === "DRAFT" && (
+      {canManage && paymentUiState && sizeState && tournament.status === "DRAFT" && (
         <section>
           <Card>
             <EditTournamentForm
@@ -236,7 +246,7 @@ export default async function TournamentDetailPage({ params }: Props) {
                       Entrée : {TYPE_LABELS[round.entry_type]} · Sortie : {TYPE_LABELS[round.finish_type]}
                     </span>
                   </div>
-                  {tournament.status === "DRAFT" && (
+                  {canManage && tournament.status === "DRAFT" && (
                     <DeleteRoundButton roundId={round.id} tournamentId={id} />
                   )}
                 </div>
@@ -244,7 +254,7 @@ export default async function TournamentDetailPage({ params }: Props) {
             </div>
           )}
 
-          {tournament.status === "DRAFT" && (
+          {canManage && tournament.status === "DRAFT" && (
             <div className="border-t border-border-muted pt-4">
               <p className="mb-3 text-xs text-brand-text-secondary">Ajouter une manche</p>
               <RoundForm tournamentId={id} />

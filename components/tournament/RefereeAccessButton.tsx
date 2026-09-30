@@ -6,8 +6,8 @@ import { generateRefereeAccess } from "@/lib/actions/fieldReferee";
 /**
  * DO-FIELD-ACCESS-002 — génère la preuve arbitre à la demande (jamais pré-générée au chargement
  * de la page) : chaque clic crée une nouvelle `FieldRefereeGrant` à usage unique côté serveur
- * (organisateur déjà authentifié, propriété du tournoi vérifiée par getOwnedTournament dans
- * generateRefereeAccess) et affiche le QR résultant. Aucun secret ne transite avant ce clic —
+ * (OWNER/ADMIN de l'organisation du tournoi vérifié par requireTournamentManager dans
+ * generateRefereeAccess, ADR-0021/D7) et affiche le QR résultant. Aucun secret ne transite avant ce clic —
  * contrairement à l'ancien QR arbitre statique, affiché en permanence dès le chargement de la
  * page.
  */

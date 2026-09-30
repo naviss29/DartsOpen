@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 import {
   dbListRegistrations,
   bulkCreateMatchesTx,
@@ -34,7 +34,9 @@ import type { BracketType } from "@/lib/generated/prisma/client";
  * lieu d'entrelacer suppression et recréation.
  */
 export async function generateQuickBracket(tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
   if (!tournament.quick_mode) return { error: "Ce tournoi n'est pas en mode rapide." };
 
   const registrations = await dbListRegistrations(tournamentId, "PAID").catch((err) => {

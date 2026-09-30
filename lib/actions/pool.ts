@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { distributeWithSeeding } from "@/lib/utils/pools";
 import { generateRoundRobin } from "@/lib/utils/bracket";
 import { dbListRegistrations, dbGeneratePools, dbListMatches } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 
 const POOL_NAMES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
@@ -14,8 +14,12 @@ export async function generatePools(
   _prevState: { error?: string } | null,
   _formData: FormData
 ): Promise<{ error?: string }> {
-  const [tournament, players, existingMatches] = await Promise.all([
-    getOwnedTournament(tournamentId),
+  // L6 — garde AVANT toute lecture : un MEMBER ou un extérieur ne déclenche aucune requête.
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
+
+  const [players, existingMatches] = await Promise.all([
     dbListRegistrations(tournamentId, "PAID"),
     dbListMatches(tournamentId),
   ]);

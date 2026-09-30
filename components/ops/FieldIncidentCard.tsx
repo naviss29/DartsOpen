@@ -24,7 +24,16 @@ const REPORTER_LABEL: Record<FieldIncidentListItem["reported_by"], string> = {
  * portrait mobile. La désignation du gagnant par forfait passe par declareForfeit()
  * (lib/actions/fieldIncident.ts), qui délègue à dbDeclareForfeit — jamais recalculée ici.
  */
-export function FieldIncidentCard({ tournamentId, incident }: { tournamentId: string; incident: FieldIncidentListItem }) {
+export function FieldIncidentCard({
+  tournamentId,
+  incident,
+  readOnly = false,
+}: {
+  tournamentId: string;
+  incident: FieldIncidentListItem;
+  /** ADR-0021 / L6 — MEMBER : l'incident reste visible, sans forfait ni résolution. */
+  readOnly?: boolean;
+}) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +61,7 @@ export function FieldIncidentCard({ tournamentId, incident }: { tournamentId: st
       <p className="text-sm text-brand-dark">{matchLabel}</p>
       {incident.comment && <p className="text-xs text-brand-text-secondary italic">« {incident.comment} »</p>}
 
+      {!readOnly && (
       <div className="pt-1">
         {incident.type === "PLAYER_ABSENT" && incident.player2_id && (
           <ForfeitControl
@@ -84,6 +94,7 @@ export function FieldIncidentCard({ tournamentId, incident }: { tournamentId: st
           </button>
         )}
       </div>
+      )}
 
       {error && <p className="text-xs text-danger-solid">{error}</p>}
     </div>

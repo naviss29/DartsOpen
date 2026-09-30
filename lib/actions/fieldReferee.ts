@@ -1,6 +1,6 @@
 "use server";
 
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 import { dbListMatches } from "@/lib/db/tournament";
 import { createRefereeGrant } from "@/lib/actions/fieldAccess";
 import { parseBoardNumber } from "@/lib/utils/fieldBoard";
@@ -8,8 +8,8 @@ import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 
 /**
  * DO-FIELD-ACCESS-002 — seul point d'entrée qui peut faire naître un accès arbitre : protégé
- * par `getOwnedTournament` (throw si l'appelant n'est pas authentifié et propriétaire de CE
- * tournoi, comportement Next.js standard déjà utilisé partout ailleurs dans le dashboard —
+ * par `requireTournamentManager` (throw si l'appelant n'est pas authentifié ou ne voit pas CE
+ * tournoi, refus retourné s'il n'en est pas gestionnaire — ADR-0021/D7 ; comportement Next.js standard déjà utilisé partout ailleurs dans le dashboard —
  * jamais avalé par un `.catch()`). Corrige l'ancien défaut où `?role=referee` suffisait sur la
  * route publique : la preuve arbitre n'existe désormais que si CE parcours a été emprunté.
  *
@@ -22,7 +22,11 @@ export async function generateRefereeAccess(
   tournamentId: string,
   board: string
 ): Promise<{ error?: string; qrDataUrl?: string; url?: string; expiresInMinutes?: number }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  // D7 — délivrer un accès arbitre est une action de gestion : OWNER/ADMIN de l'organisation
+  // du tournoi (ou créateur d'un tournoi encore sans organisation), jamais un MEMBER.
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
 
   const boardNumber = parseBoardNumber(board, tournament.nb_boards);
   if (boardNumber === null) return { error: "Numéro de cible invalide." };

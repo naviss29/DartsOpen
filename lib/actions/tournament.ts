@@ -13,7 +13,7 @@ import {
   dbAddRound,
   dbDeleteRound,
 } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager, resolveTournamentCreationTarget } from "@/lib/auth/organizationAccess";
 import { isOnlinePaymentAllowed, wantsOnlinePayment, ONLINE_PAYMENT_BLOCKED_MESSAGE } from "@/lib/payments/onlinePaymentGuard";
 import {
   resolveTournamentSizeEntitlement,
@@ -118,6 +118,9 @@ export async function createTournament(prevState: TournamentState, formData: For
 
   // DO-PAYMENT-GUARD-001 : le paiement en ligne n'est proposable que si l'organisation a un
   // Stripe Connect réellement opérationnel — vérifié ici, avant toute écriture, jamais après.
+  // L7 (NON migré dans L6) — paiement en ligne et crédits encore résolus par l'Organization
+  // LOCALE de l'utilisateur (dbGetOrganization(user.id), liaison page Paramètres), pas par
+  // l'organisation courante `target` ci-dessous. À aligner au lot L7.
   if (wantsOnlinePayment(parsed.data)) {
     const authorization = await isOnlinePaymentAllowed(user.id);
     if (!authorization.allowed) {
@@ -133,6 +136,16 @@ export async function createTournament(prevState: TournamentState, formData: For
   const idempotencyKey = (formData.get("idempotency_key") as string | null)?.trim() ?? "";
   if (!idempotencyKey) {
     return { error: "Requête invalide — rechargez la page et réessayez.", fields: raw, ts: Date.now() };
+  }
+
+  // ADR-0021 / L6 — le tournoi naît dans l'organisation COURANTE, si l'utilisateur y est
+  // OWNER/ADMIN (revérifié auprès de SterPlatform, jamais une valeur du formulaire). Un compte
+  // sans vraie organisation crée encore « à l'ancienne » tant que D3 le permet (voir
+  // LEGACY_CREATION_WITHOUT_ORGANIZATION_ALLOWED). Décidé AVANT toute écriture et avant les
+  // contrôles paiement/crédits, qui restent en l'état jusqu'au lot L7.
+  const target = await resolveTournamentCreationTarget();
+  if (!target.ok) {
+    return { error: target.error, fields: raw, ts: Date.now() };
   }
 
   // DARTSOPEN-MONETIZATION-001/002 : au-delà de 10 joueurs, un abonnement actif ou un crédit
@@ -167,6 +180,7 @@ export async function createTournament(prevState: TournamentState, formData: For
     parsed.data,
     idempotencyKey,
     creditToConsume ? "PENDING_ENTITLEMENT" : "DRAFT",
+    target.organization,
   ).catch((err) => {
     console.error('[createTournament]', err);
     return null;
@@ -229,13 +243,18 @@ export async function createTournament(prevState: TournamentState, formData: For
  * même référence que celle déjà tentée par createTournament() pour ce tournoi.
  */
 export async function retryTournamentEntitlementConfirmation(tournamentId: string): Promise<{ error?: string } | void> {
-  const tournament = await getOwnedTournament(tournamentId) as { status: string; association_id: string };
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
 
   if (tournament.status !== "PENDING_ENTITLEMENT") {
     revalidatePath(`/tournaments/${tournamentId}`);
     return;
   }
 
+  // L7 (NON migré dans L6) — crédits/abonnement lus via l'Organization LOCALE du créateur
+  // (dbGetOrganization(association_id)), pas via tournament.organization_id. À remplacer par
+  // l'organisation du tournoi au lot L7 (voir DartsOpen/CLAUDE.md, « Droits d'organisation »).
   const entitlement = await resolveTournamentSizeEntitlement(tournament.association_id);
   if (entitlement.mode === "NONE") {
     return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION };
@@ -266,9 +285,11 @@ export async function retryTournamentEntitlementConfirmation(tournamentId: strin
 
 export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
-  const tournament = await getOwnedTournament(tournamentId);
-
   const raw = extractTournamentRaw(formData);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error, fields: raw, ts: Date.now() };
+  const tournament = guard.tournament;
+
   const parsed = TournamentSchema.safeParse(raw);
 
   if (!parsed.success) {
@@ -280,6 +301,8 @@ export async function updateTournament(prevState: TournamentState, formData: For
   // l'avait déjà (une organisation dont Stripe a été suspendu ne doit pas pouvoir
   // re-confirmer/étendre une configuration payante par une simple modification).
   if (wantsOnlinePayment(parsed.data)) {
+    // L7 (NON migré) — Stripe Connect encore lu via l'Organization locale du CRÉATEUR, même
+    // quand un ADMIN de l'organisation du tournoi modifie : à basculer sur organization_id en L7.
     const authorization = await isOnlinePaymentAllowed(tournament.association_id);
     if (!authorization.allowed) {
       return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
@@ -325,7 +348,8 @@ export async function updateTournamentStatus(
   tournamentId: string,
   status: string
 ): Promise<{ error?: string } | void> {
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const ok = await dbUpdateTournamentStatus(tournamentId, status).catch((err) => {
     console.error("[updateTournamentStatus]", err);
@@ -338,7 +362,8 @@ export async function updateTournamentStatus(
 
 export async function addRound(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const parsed = RoundSchema.safeParse({
     game_type: formData.get("game_type"),
@@ -357,7 +382,9 @@ export async function addRound(prevState: TournamentState, formData: FormData): 
 }
 
 export async function deleteRound(roundId: string, tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
   if (tournament.status !== "DRAFT") {
     return { error: "Impossible de supprimer une manche une fois les inscriptions ouvertes." };
   }
