@@ -516,15 +516,27 @@ export async function dbUpdateTournament(id: string, data: {
  */
 export async function dbDeleteTournament(id: string) {
   await prisma.$transaction(async (tx) => {
-    await tx.matchSetThrow.deleteMany({ where: { matchSet: { match: { tournamentId: id } } } });
-    await tx.matchSet.deleteMany({ where: { match: { tournamentId: id } } });
-    await tx.match.deleteMany({ where: { tournamentId: id } });
-    await tx.round.deleteMany({ where: { tournamentId: id } });
-    await tx.poolPlayer.deleteMany({ where: { pool: { tournamentId: id } } });
-    await tx.pool.deleteMany({ where: { tournamentId: id } });
-    await tx.registration.deleteMany({ where: { tournamentId: id } });
-    await tx.tournament.delete({ where: { id } });
+    await deleteTournamentTreeTx(tx, id);
   });
+}
+
+/**
+ * Cœur tx-scopé de dbDeleteTournament(), extrait (DO-UNFINISHED-PURGE-001) pour que la purge des
+ * tournois jamais terminés supprime dans la MÊME transaction que la revérification de sa
+ * condition (sous withTournamentLock) — une seule implémentation de l'ordre des dépendances,
+ * jamais une seconde copie qui divergerait au prochain ajout de table.
+ * `field_sessions`/`field_referee_grants`/`field_incidents` partent par CASCADE (depuis `matches`
+ * et `tournaments`) : aucune contrainte RESTRICT ne les concerne.
+ */
+export async function deleteTournamentTreeTx(tx: Prisma.TransactionClient, id: string) {
+  await tx.matchSetThrow.deleteMany({ where: { matchSet: { match: { tournamentId: id } } } });
+  await tx.matchSet.deleteMany({ where: { match: { tournamentId: id } } });
+  await tx.match.deleteMany({ where: { tournamentId: id } });
+  await tx.round.deleteMany({ where: { tournamentId: id } });
+  await tx.poolPlayer.deleteMany({ where: { pool: { tournamentId: id } } });
+  await tx.pool.deleteMany({ where: { tournamentId: id } });
+  await tx.registration.deleteMany({ where: { tournamentId: id } });
+  await tx.tournament.delete({ where: { id } });
 }
 
 /**
