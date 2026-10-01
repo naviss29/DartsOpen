@@ -40,6 +40,13 @@ const fr = {
   "orgSelector.role.OWNER": "Propriétaire",
   "orgSelector.role.ADMIN": "Administrateur",
   "orgSelector.role.MEMBER": "Membre",
+  "registerSuccess.title": "Inscription confirmée !",
+  "registerSuccess.team": "L’équipe {name} est bien inscrite.",
+  "registerSuccess.paidOnline": "Votre paiement a bien été encaissé. Rendez-vous le jour du tournoi !",
+  "registerSuccess.payOnSite": "Les droits d’inscription se règlent sur place, le jour du tournoi.",
+  "registerSuccess.seeYou": "Rendez-vous le jour du tournoi !",
+  "registerSuccess.scanHint": "Le jour J, scannez le QR code affiché sur votre cible pour saisir vos scores directement depuis votre smartphone.",
+  "registerSuccess.followLive": "Suivre le tournoi en direct →",
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -87,6 +94,13 @@ const en = {
   "orgSelector.role.OWNER": "Owner",
   "orgSelector.role.ADMIN": "Administrator",
   "orgSelector.role.MEMBER": "Member",
+  "registerSuccess.title": "Registration confirmed!",
+  "registerSuccess.team": "Team {name} is registered.",
+  "registerSuccess.paidOnline": "Your payment has been received. See you on tournament day!",
+  "registerSuccess.payOnSite": "The entry fee is paid on site, on tournament day.",
+  "registerSuccess.seeYou": "See you on tournament day!",
+  "registerSuccess.scanHint": "On the day, scan the QR code on your board to enter your scores straight from your smartphone.",
+  "registerSuccess.followLive": "Follow the tournament live →",
 } satisfies Messages;
 
 const es = {
@@ -131,6 +145,13 @@ const es = {
   "orgSelector.role.OWNER": "Propietario",
   "orgSelector.role.ADMIN": "Administrador",
   "orgSelector.role.MEMBER": "Miembro",
+  "registerSuccess.title": "¡Inscripción confirmada!",
+  "registerSuccess.team": "El equipo {name} está inscrito.",
+  "registerSuccess.paidOnline": "Hemos recibido tu pago. ¡Nos vemos el día del torneo!",
+  "registerSuccess.payOnSite": "La cuota de inscripción se paga in situ, el día del torneo.",
+  "registerSuccess.seeYou": "¡Nos vemos el día del torneo!",
+  "registerSuccess.scanHint": "El día del torneo, escanea el código QR de tu diana para introducir tus puntuaciones desde tu smartphone.",
+  "registerSuccess.followLive": "Seguir el torneo en directo →",
 } satisfies Messages;
 
 export const catalogs = { fr, en, es } satisfies Record<string, Messages>;

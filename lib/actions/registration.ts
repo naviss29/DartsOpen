@@ -11,6 +11,7 @@ import {
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
+import { immediatePaymentKind } from "@/lib/registration/successPayment";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-009) — how long a PENDING online-payment reservation
@@ -102,7 +103,7 @@ export async function createRegistration(
       joueurs: playerNames.join(', '),
     }).catch((err) => console.error('[email] Erreur envoi confirmation gratuite:', err));
 
-    redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`);
+    redirect(`/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}&paiement=${immediatePaymentKind(tournament.entry_fee)}`);
   }
 
   // Paiement en ligne — DARTSOPEN-MONETIZATION-002 (audit priorité 6) : Connect, puis droits,
@@ -165,7 +166,7 @@ export async function createRegistration(
     amountCents,
     currency: "eur",
     platformFeeCents,
-    successUrl: `${appUrl}/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}`,
+    successUrl: `${appUrl}/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}&paiement=en-ligne`,
     cancelUrl: `${appUrl}/t/${tournamentId}/register?cancelled=1`,
     customerEmail: contactEmail,
     metadata: { registration_id: registration.id, tournament_id: tournamentId },

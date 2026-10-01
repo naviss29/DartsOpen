@@ -197,6 +197,25 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("BUG-3 recette 01/10 : la page de succès sait si les droits sont à régler sur place, gratuits ou payés en ligne", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ payment_mode: "ONSITE" }) as never);
+    await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(redirect).mock.calls.at(-1)?.[0]).toContain("&paiement=sur-place");
+
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
+    await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(redirect).mock.calls.at(-1)?.[0]).toContain("&paiement=gratuit");
+
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(createPaymentCheckout).mockResolvedValue({
+      checkout: { paymentId: "pay_1", checkoutUrl: "https://checkout.example/pay_1", status: "PENDING" },
+    } as never);
+    await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(createPaymentCheckout).mock.calls[0][0].successUrl).toContain("&paiement=en-ligne");
+  });
+
   it("paiement en ligne : réserve avec le statut PENDING et une expiration future (audit DO-AUD-009 — place réservée pendant le checkout)", async () => {
     vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
