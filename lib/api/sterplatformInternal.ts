@@ -261,6 +261,7 @@ export async function sendEmailToUser(
 export type SendEmailToOrganizationOutcome =
   | { outcome: 'SENT'; recipientCount: number | null }
   | { outcome: 'NOT_FOUND'; error: string }
+  | { outcome: 'ORGANIZATION_NOT_FOUND'; error: string }
   | { outcome: 'NO_RECIPIENT'; error: string }
   | { outcome: 'CONFIGURATION_ERROR'; status: number; error: string }
   | { outcome: 'FAILED'; status?: number; error: string };
@@ -294,9 +295,19 @@ export async function sendEmailToOrganization(
       return { outcome: 'FAILED', status: res.status, error: 'Réponse 200 sans confirmation d\'envoi ("sent": true absent).' };
     }
 
-    const body = await res.json().catch(() => null) as { error?: string } | null;
+    const body = await res.json().catch(() => null) as { error?: string; code?: string } | null;
     const detail = body?.error ?? `HTTP ${res.status}`;
 
+    // Codes machine de SterPlatform (01/10/2026) : seule une organisation réellement disparue
+    // peut entraîner une action destructive côté appelant ; un template manquant est une erreur
+    // de configuration. Un 404 SANS code (SterPlatform plus ancien) reste ambigu : traité comme
+    // un échec ordinaire, jamais comme une organisation disparue.
+    if (res.status === 404 && body?.code === 'ORGANIZATION_NOT_FOUND') {
+      return { outcome: 'ORGANIZATION_NOT_FOUND', error: `Organisation introuvable côté SterPlatform (${detail}).` };
+    }
+    if (res.status === 404 && body?.code === 'TEMPLATE_NOT_FOUND') {
+      return { outcome: 'CONFIGURATION_ERROR', status: 404, error: `Template "${template}" absent de SterPlatform (${detail}).` };
+    }
     if (res.status === 404) {
       return { outcome: 'NOT_FOUND', error: `Organisation ou template "${template}" introuvable côté SterPlatform (${detail}).` };
     }

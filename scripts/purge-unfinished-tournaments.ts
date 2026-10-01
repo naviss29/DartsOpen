@@ -18,8 +18,9 @@
  *
  * Destinataires du rappel (ADR-0021 / L7, D6) : tous les OWNER/ADMIN de l'organisation du tournoi
  * (send-to-organization) ; le créateur seul (send-to-user) pour un tournoi sans organisation. Pour
- * un tournoi rattaché, un 404 (organisation ou template) ou un 422 (aucun administrateur) est un
- * rappel en échec (code 1), jamais un « destinataire introuvable » : il ne supprime rien.
+ * un tournoi rattaché, une organisation disparue (404 ORGANIZATION_NOT_FOUND) ou sans
+ * administrateur (422) compte comme un destinataire introuvable (décision d'Alan du 01/10/2026) ;
+ * un template manquant ou un 404 sans code ne supprime jamais rien.
  *
  * Créateur introuvable côté SterPlatform (404 USER_NOT_FOUND) : constat horodaté, rappel retenté à
  * chaque passage ; à partir de J+1 00:00 UTC + 48 h, si le 404 est reconfirmé, le tournoi est

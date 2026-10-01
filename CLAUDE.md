@@ -474,10 +474,12 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   (`sendEmailToOrganization()`, même client, même jeton de module, même contrat que BilletAsso)
   avec `organizationId` = `Tournament.organizationId` : SterPlatform écrit à tous ses OWNER/ADMIN
   actifs. Mêmes template et variables. Issues : 200 `{"sent":true}` → rappel horodaté ; 401/403 →
-  erreur de configuration (code 2) ; **404 (organisation ou template, indiscernables) et 422
-  (aucun OWNER/ADMIN actif) → rappel en échec (code 1), jamais « destinataire introuvable »** : ils
-  ne posent pas `closeReminderRecipientNotFoundAt` et ne suppriment jamais rien ; 400/5xx/réseau
-  → échec. Tournoi sans organisation (ou organisation héritée partagée) ⇒ comportement ci-dessous
+  erreur de configuration (code 2) ; **404 `ORGANIZATION_NOT_FOUND` (organisation disparue) et 422
+  `NO_RECIPIENT` (aucun OWNER/ADMIN actif) → « destinataire introuvable »**, exactement comme le
+  404 `USER_NOT_FOUND` d'un créateur : constat horodaté puis suppression sans rappel à l'échéance
+  (décision d'Alan du 01/10/2026) ; 404 `TEMPLATE_NOT_FOUND` → erreur de configuration (code 2) ;
+  404 sans code (SterPlatform antérieur, cause ambiguë) → échec (code 1), jamais une suppression ;
+  400/5xx/réseau → échec. Tournoi sans organisation (ou organisation héritée partagée) ⇒ comportement ci-dessous
   inchangé (créateur via `send-to-user`, règle 3). Le dry-run indique la nature des destinataires.
 - **Envoi du rappel au créateur (branché le 30/09/2026 ; depuis L7, tournois sans organisation
   seulement)** : `createCloseReminderNotifier()` appelle

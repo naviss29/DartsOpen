@@ -183,23 +183,33 @@ describe("createCloseReminderNotifier — envoi via SterPlatform send-to-organiz
     expect((await createCloseReminderNotifier().send(orgTarget)).outcome).toBe("FAILED");
   });
 
-  it("404 (organisation ou template introuvable) → FAILED, JAMAIS RECIPIENT_NOT_FOUND (un 404 ne supprime pas)", async () => {
+  // Décision d'Alan du 01/10/2026 (choix A) : organisation disparue ou sans OWNER/ADMIN =
+  // créateur introuvable → suppression sans rappel à l'échéance.
+  it("404 ORGANIZATION_NOT_FOUND → RECIPIENT_NOT_FOUND (organisation disparue)", async () => {
+    vi.mocked(fetch).mockResolvedValue(json(404, { error: "Organisation introuvable.", code: "ORGANIZATION_NOT_FOUND" }));
+    expect(await createCloseReminderNotifier().send(orgTarget)).toEqual({ outcome: "RECIPIENT_NOT_FOUND" });
+  });
+
+  it("422 (aucun OWNER/ADMIN actif) → RECIPIENT_NOT_FOUND", async () => {
+    vi.mocked(fetch).mockResolvedValue(json(422, { error: "Aucun destinataire autorisé pour cette organisation.", code: "NO_RECIPIENT" }));
+    expect(await createCloseReminderNotifier().send(orgTarget)).toEqual({ outcome: "RECIPIENT_NOT_FOUND" });
+  });
+
+  it("404 TEMPLATE_NOT_FOUND → CONFIGURATION_ERROR, jamais une suppression", async () => {
+    vi.mocked(fetch).mockResolvedValue(json(404, { error: "Template introuvable.", code: "TEMPLATE_NOT_FOUND" }));
+    expect((await createCloseReminderNotifier().send(orgTarget)).outcome).toBe("CONFIGURATION_ERROR");
+  });
+
+  it("404 sans code (SterPlatform antérieur, cause ambiguë) → FAILED, jamais une suppression", async () => {
     vi.mocked(fetch).mockResolvedValue(json(404, { error: "Organisation introuvable." }));
     const result = await createCloseReminderNotifier().send(orgTarget);
     expect(result.outcome).toBe("FAILED");
     expect(result.outcome === "FAILED" && result.error).toContain("introuvable");
   });
 
-  it("404 même avec un code USER_NOT_FOUND dans le corps → FAILED (seul send-to-user peut conclure à un destinataire introuvable)", async () => {
+  it("404 avec un code USER_NOT_FOUND dans le corps → FAILED (seul send-to-user peut conclure à un créateur introuvable)", async () => {
     vi.mocked(fetch).mockResolvedValue(json(404, { error: "x", code: "USER_NOT_FOUND" }));
     expect((await createCloseReminderNotifier().send(orgTarget)).outcome).toBe("FAILED");
-  });
-
-  it("422 (aucun OWNER/ADMIN actif) → FAILED, jamais une suppression sans rappel", async () => {
-    vi.mocked(fetch).mockResolvedValue(json(422, { error: "Aucun destinataire autorisé pour cette organisation." }));
-    const result = await createCloseReminderNotifier().send(orgTarget);
-    expect(result.outcome).toBe("FAILED");
-    expect(result.outcome === "FAILED" && result.error).toContain("administrateur");
   });
 
   it.each([401, 403])("%i → CONFIGURATION_ERROR", async (status) => {

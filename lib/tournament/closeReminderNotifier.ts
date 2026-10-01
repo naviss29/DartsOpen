@@ -36,21 +36,27 @@ type NotifierDeps = {
 };
 
 /**
- * Traduction de l'issue `send-to-organization` vers le port de la purge. Règle de sûreté : AUCUNE
- * issue d'un envoi à une organisation ne devient RECIPIENT_NOT_FOUND — seule issue qui ouvre une
- * suppression sans rappel, réservée au 404 `USER_NOT_FOUND` d'un créateur. Un 404 (organisation
- * ou template introuvable, indiscernables) ou un 422 (aucun OWNER/ADMIN actif) laisse donc le
- * tournoi sans rappel, retenté au passage suivant, jamais supprimé (« un 404 ne supprime pas »).
- * Ils sont comptés comme des échecs (code de sortie 1) pour rester visibles dans Coolify.
+ * Traduction de l'issue `send-to-organization` vers le port de la purge.
+ *
+ * Décision d'Alan (01/10/2026, choix A) : une organisation disparue (404 `ORGANIZATION_NOT_FOUND`)
+ * ou sans plus aucun OWNER/ADMIN actif (422) est traitée comme un créateur introuvable —
+ * RECIPIENT_NOT_FOUND, donc suppression sans rappel à l'échéance (même règle que le 404
+ * `USER_NOT_FOUND`). Sans cela, le tournoi ne serait jamais purgé et la tâche sortirait en
+ * échec chaque jour.
+ * Un template manquant reste une erreur de configuration (code 2) et un 404 sans code
+ * (SterPlatform antérieur, organisation et template indiscernables) un simple échec (code 1) :
+ * jamais de suppression sur une réponse ambiguë.
  */
 function fromOrganizationOutcome(result: SendEmailToOrganizationOutcome): CloseReminderSendResult {
   switch (result.outcome) {
     case "SENT":
       return { outcome: "SENT" };
+    case "ORGANIZATION_NOT_FOUND":
+    case "NO_RECIPIENT":
+      return { outcome: "RECIPIENT_NOT_FOUND" };
     case "CONFIGURATION_ERROR":
       return { outcome: "CONFIGURATION_ERROR", error: result.error };
     case "NOT_FOUND":
-    case "NO_RECIPIENT":
     case "FAILED":
       return { outcome: "FAILED", error: result.error };
   }
