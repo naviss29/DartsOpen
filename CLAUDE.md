@@ -97,7 +97,7 @@ respectifs pour le détail du protocole côté SterPlatform.
   sur le port 3002 (`SSO_CALLBACK_DARTSOPEN`/`SSO_DEFAULT_URL_DARTSOPEN` déjà configurés sur ce
   port dans `SterPlatform/.env.local` et `.env.example`).
 
-## Droits d'organisation (ADR-0021 option A, lot L6)
+## Droits d'organisation (ADR-0021 option A, lots L6 et L7)
 
 Un seul rôle par organisation, lu dans SterPlatform : **OWNER/ADMIN gèrent, MEMBER consulte**
 (données personnelles visibles à l'écran, aucune action). Le créateur (`Tournament.userId`) reste
@@ -105,7 +105,7 @@ enregistré (idempotence, emails, purge) mais ne donne plus de droits, sauf repl
 
 - **Données** : `Tournament.organizationId` (UUID SterPlatform = clé d'autorité) et
   `organizationSlug` (affichage seulement), nullables et indexés (migration
-  `20260930200000_tournament_organization`, additive, aucun backfill — rattachement = lot L7).
+  `20260930200000_tournament_organization`, additive, aucun backfill — rattachement : règle à arrêter par Alan).
 - **Module unique** `lib/auth/organizationAccess.ts` :
   - `getMyMemberships()` — `GET /api/me/organizations` (`id`, `slug`, `role`), `cache()` par rendu +
     Map mémoire indexée par SHA-256 du jeton : relue toutes les **60 s** (retrait d'un membre
@@ -157,21 +157,29 @@ enregistré (idempotence, emails, purge) mais ne donne plus de droits, sauf repl
 - **Sélecteur** `components/layout/OrganizationSelector.tsx` (charte §10.1 : organisation active,
   nom tronqué 160/240 px dans le header dès 768 px, première information du drawer mobile en
   dessous) ; `selectCurrentOrganization` (`lib/actions/currentOrganization.ts`) revérifie l'id.
-- **Reste pour le lot L7 (volontairement non migré)** : paiement en ligne et crédits encore résolus
-  par la table locale `Organization` du **créateur** (`dbGetOrganization(userId)`) dans
-  `lib/payments/onlinePaymentGuard.ts`, `lib/entitlements/tournamentSizeGuard.ts`,
-  `lib/actions/registration.ts` (Stripe Connect à l'inscription), `lib/actions/tournament.ts`
-  (create/update/retry, commentaires « L7 ») et la page `tournaments/[id]` (liens BSsite).
-  Conséquence connue : un ADMIN qui n'est pas le créateur peut voir le paiement en ligne ou le
-  crédit « indisponible » (son JWT est interrogé sur l'organisation liée du créateur). Aussi :
-  rattachement des tournois sans organisation (simulation d'abord), rappel de clôture de la purge
-  encore envoyé au seul créateur (D6 : tous les OWNER/ADMIN), liaison `settings/page.tsx` +
-  `lib/actions/organization.ts` à remplacer par l'organisation du tournoi (L8 : suppression de la table locale).
+- **Paiement en ligne et crédits (L7, BUG-4)** : résolus par l'organisation du tournoi (garde,
+  affichage, checkout d'inscription, création/modification/relance de crédit), par l'organisation
+  courante à la création, et par la liaison locale du créateur uniquement pour un tournoi sans
+  organisation (`lib/organizations/billingOrganization.ts`, voir « Inscriptions et paiement »).
+  Pages `tournaments/[id]`, `tournaments/new` (liens BSsite compris) et Paramètres alignées ;
+  `scripts/audit-online-payment-consistency.ts` suit la même règle. La création résout sa cible
+  AVANT les contrôles paiement/crédits ; la page de création affiche d'emblée le motif d'un refus.
+- **Rappel de clôture (L7, D6)** : envoyé à tous les OWNER/ADMIN de l'organisation du tournoi
+  (`send-to-organization`), au créateur seul pour un tournoi sans organisation (voir « Purge des
+  tournois jamais terminés »).
+- **Reste après L7 (code)** : rattachement des tournois sans organisation (règle de rattachement à
+  arrêter par Alan, simulation d'abord — aucun script fourni à ce stade) ; lot **L8** (feu vert
+  d'Alan) : suppression de la table locale `Organization`, de `lib/actions/organization.ts` et de
+  la liaison de la page Paramètres, une fois tous les tournois rattachés.
 - **Tests** : `lib/auth/organizationAccess.test.ts` (matrice des rôles, exclusion héritée, repli
   créateur, cache 60 s / 15 min, 401, cible de création), `lib/auth/organizationAccess.db.test.ts`
   (vrai PostgreSQL, base jetable : OWNER/ADMIN/MEMBER/extérieur/compte hérité sur `addRound`,
   `addPlayer`, `generateRefereeAccess`, `authorizeScoring`, listes),
-  `components/layout/OrganizationSelector.test.tsx`, `app/(dashboard)/layout.test.tsx`.
+  `components/layout/OrganizationSelector.test.tsx`, `app/(dashboard)/layout.test.tsx` ; L7 :
+  `lib/organizations/billingOrganization.test.ts`, `lib/payments/onlinePaymentGuard.test.ts`,
+  `lib/entitlements/tournamentSizeGuard.test.ts`, `lib/actions/tournament.test.ts`,
+  `lib/actions/registration.test.ts`, `app/(dashboard)/settings/page.test.tsx`,
+  `app/(dashboard)/tournaments/new/page.test.tsx`.
 
 ### Autres règles d'accès
 
@@ -252,16 +260,25 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   la session de paiement est créée côté SterPlatform via
   `lib/api/sterplatformInternal.ts::createPaymentCheckout`
   (`POST /api/internal/organizations/{slug}/payments/checkout`), qui encaisse pour le compte
-  du Stripe Connect de l'organisation BApps Studio liée à l'organisateur.
-- **Liaison organisation** (`lib/actions/organization.ts`, `Organization.sterOrganizationSlug`
-  en base) — un organisateur doit lier son compte à l'une de ses organisations BApps Studio
-  (rôle OWNER/ADMIN requis) avant de pouvoir accepter des paiements en ligne ; le slug soumis
-  est toujours revérifié côté serveur contre `GET /api/me/organizations` (jamais fait
-  confiance tel quel). Page Paramètres (`app/(dashboard)/settings/page.tsx`) : liaison si
-  absente, sinon statut Stripe Connect réel via
-  `lib/api/sterplatformInternal.ts::getStripeConnectStatus`
-  (`GET /api/internal/organizations/{slug}/connect/account-id`) avec lien vers la page Stripe
-  Connect de l'organisation dans BSsite (`NEXT_PUBLIC_BSSITE_URL`).
+  du Stripe Connect de **l'organisation du tournoi** (ADR-0021 / L7 ; repli : liaison locale du
+  créateur pour un tournoi sans organisation — voir le point suivant).
+- **Organisation qui encaisse et porte les droits** (`lib/organizations/billingOrganization.ts`,
+  L7) — règle unique pour Stripe Connect, abonnement et crédits tournoi : organisation du tournoi
+  (`effectiveOrganizationId`), organisation courante retenue par `resolveTournamentCreationTarget()`
+  à la création, sinon repli sur la liaison locale du créateur (tournoi sans organisation ou
+  rattaché à une organisation héritée partagée ; création sans organisation tant que D3 le
+  permet). Slug relu par UUID dans `getMyMemberships()` quand un JWT est disponible (le staff peut
+  renommer un slug dans EasyAdmin), slug enregistré sur le tournoi sinon (inscription publique).
+  Une erreur de lecture de la liaison locale lève un message clair, jamais « aucune organisation ».
+- **Liaison organisation (repli, suppression au lot L8)** (`lib/actions/organization.ts`,
+  `Organization.sterOrganizationSlug` en base) — ne sert plus qu'aux tournois sans organisation
+  et aux comptes sans vraie organisation ; le slug soumis est toujours revérifié côté serveur
+  contre `GET /api/me/organizations` (rôle OWNER/ADMIN requis). Page Paramètres
+  (`app/(dashboard)/settings/page.tsx`) : d'abord l'état Stripe Connect de l'**organisation
+  courante** (sans « Délier » : on en change avec le sélecteur), puis la liaison locale, titrée
+  « Tournois créés sans organisation » dès qu'une vraie organisation existe ; statut via
+  `getPaymentAuthorization` (JWT, même endpoint que BSsite) et lien vers la page Stripe Connect
+  de l'organisation dans BSsite (`NEXT_PUBLIC_BSSITE_URL`).
 - **Garde-fou paiement en ligne** (`lib/payments/onlinePaymentGuard.ts`, DO-PAYMENT-GUARD-001)
   — **le paiement en ligne est disponible uniquement pour une organisation disposant de
   Stripe Connect opérationnel** (`canReceivePayments` via `getStripeConnectStatus`, jamais
@@ -411,7 +428,8 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
 - **Règle** : un tournoi dont le statut n'est pas `FINISHED` (seul statut terminal de
   `TournamentStatus` ; il n'existe pas de statut « annulé » — `PENDING_ENTITLEMENT`, `DRAFT`,
   `OPEN`, `IN_PROGRESS` sont donc tous concernés) et dont la `date` est passée :
-  1. **J+1** (dès 00:00 UTC le lendemain de `date`, `@db.Date`) : rappel au créateur « clôturez le
+  1. **J+1** (dès 00:00 UTC le lendemain de `date`, `@db.Date`) : rappel aux OWNER/ADMIN de
+     l'organisation du tournoi (au créateur seul pour un tournoi sans organisation, L7) « clôturez le
      tournoi, sinon ses données seront supprimées sous 48 h » ; `Tournament.closeReminderSentAt`
      est posé **après** succès de l'envoi, sous `withTournamentLock`, seulement si le tournoi a
      encore besoin d'un rappel (conditionnel + idempotent : un seul envoi par tournoi) ;
@@ -451,7 +469,18 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   rappel ou une suppression en échec, 2 usage invalide ou configuration manquante/rejetée. Planification
   recommandée : Coolify Scheduled Task quotidienne `0 4 * * *` (UTC),
   `npm run purge:unfinished-tournaments -- --apply`.
-- **Envoi du rappel (branché le 30/09/2026)** : `createCloseReminderNotifier()` appelle
+- **Destinataires (ADR-0021 D6, lot L7)** : tournoi rattaché à une vraie organisation
+  (`effectiveOrganizationId`) ⇒ `POST {NEXT_PUBLIC_API_URL}/api/email/send-to-organization`
+  (`sendEmailToOrganization()`, même client, même jeton de module, même contrat que BilletAsso)
+  avec `organizationId` = `Tournament.organizationId` : SterPlatform écrit à tous ses OWNER/ADMIN
+  actifs. Mêmes template et variables. Issues : 200 `{"sent":true}` → rappel horodaté ; 401/403 →
+  erreur de configuration (code 2) ; **404 (organisation ou template, indiscernables) et 422
+  (aucun OWNER/ADMIN actif) → rappel en échec (code 1), jamais « destinataire introuvable »** : ils
+  ne posent pas `closeReminderRecipientNotFoundAt` et ne suppriment jamais rien ; 400/5xx/réseau
+  → échec. Tournoi sans organisation (ou organisation héritée partagée) ⇒ comportement ci-dessous
+  inchangé (créateur via `send-to-user`, règle 3). Le dry-run indique la nature des destinataires.
+- **Envoi du rappel au créateur (branché le 30/09/2026 ; depuis L7, tournois sans organisation
+  seulement)** : `createCloseReminderNotifier()` appelle
   `POST {NEXT_PUBLIC_API_URL}/api/email/send-to-user` (SterPlatform, EMAIL-SCOPE-001) via
   `sendEmailToUser()` de `lib/api/sterplatformInternal.ts` — même client et même jeton de module
   (`X-App-Token: STER_API_TOKEN`, = `SERVER_AUTH_TOKEN_DARTSOPEN` côté SterPlatform ; le jeton
@@ -506,7 +535,8 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
   passage ensuite, jamais sur 5xx/configuration, constat tardif, clôture/report entre-temps,
   dry-run),
   `scripts/purge-unfinished-tournaments.test.ts` (CLI : codes de sortie),
-  `lib/tournament/closeReminderNotifier.test.ts` (contrat `send-to-user` : 200, 200 ambigu, 404
+  `lib/tournament/closeReminderNotifier.test.ts` (contrat `send-to-organization` : 200, 200 ambigu,
+  404, 422, 400, 401, 403, 500, réseau ; contrat `send-to-user` : 200, 200 ambigu, 404
   `USER_NOT_FOUND` / template, 400, 401, 403, 500, réseau, variables formatées). Les tests base se
   lancent sur une base jetable, jamais la base locale de travail :
   `DATABASE_URL=postgresql://…@localhost:5433/dartsopen_purge_test npx vitest run lib/db/unfinishedTournamentPurge`.
@@ -640,4 +670,4 @@ Fonction uniquement du nombre de joueurs encore en vie dans le tournoi, jamais d
 - Tests : `npm run test:run`
 - Seed tournoi test : `npm run seed:players`
 - Purge RGPD planifiée : `npm run purge:expired-contacts -- --dry-run|--apply` (voir « Conservation des données personnelles »)
-- Purge des tournois jamais terminés : `npm run purge:unfinished-tournaments -- --dry-run|--apply` (voir la section dédiée ; rappel via SterPlatform `send-to-user`)
+- Purge des tournois jamais terminés : `npm run purge:unfinished-tournaments -- --dry-run|--apply` (voir la section dédiée ; rappel via SterPlatform `send-to-organization`, `send-to-user` pour un tournoi sans organisation)

@@ -7,8 +7,8 @@ import { apiFetch } from "./client";
  * lib/api/sterplatformInternal.ts (réservé au parcours d'inscription publique, sans JWT), tous
  * les appelants ici s'exécutent après getUser()/requireTournamentManager() — le JWT de la requête
  * courante est donc toujours disponible (depuis L6, c'est celui d'un OWNER/ADMIN de
- * l'organisation du tournoi, pas forcément de son créateur : alignement des crédits sur
- * l'organisation du tournoi au lot L7).
+ * l'organisation du tournoi, pas forcément de son créateur ; depuis L7, le slug interrogé est
+ * bien celui de l'organisation du tournoi, voir lib/organizations/billingOrganization.ts).
  */
 
 /**

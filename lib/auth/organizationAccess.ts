@@ -14,7 +14,7 @@ export { LEGACY_SHARED_ORG_SLUGS, isLegacySharedOrganization, effectiveOrganizat
  * ADR-0021 (option A) / lot L6 — droits DartsOpen lus dans l'organisation SterPlatform du
  * tournoi : OWNER/ADMIN gèrent, MEMBER consulte. Le créateur (`Tournament.userId`) reste
  * enregistré (idempotence, emails) mais ne donne plus de droits, SAUF repli transitoire pour un
- * tournoi encore sans organisation (créé avant L6, rattachement au lot L7).
+ * tournoi encore sans organisation (créé avant L6, rattachement à venir — règle à arrêter par Alan).
  *
  * SterPlatform reste la seule source du rôle : ce module ne stocke rien en base, il garde
  * seulement en mémoire la dernière réponse de `GET /api/me/organizations` (voir cache ci-dessous).
@@ -224,7 +224,7 @@ export async function getTournamentAccess(tournamentId: string): Promise<Tournam
   const organizationId = effectiveOrganizationId(tournament);
   if (!organizationId) {
     if (tournament.association_id !== user.id) return { status: "NOT_FOUND" };
-    // Aucune donnée personnelle : l'id du tournoi suffit à mesurer ce qu'il reste à rattacher (L7).
+    // Aucune donnée personnelle : l'id du tournoi suffit à mesurer ce qu'il reste à rattacher.
     console.info(`[organizationAccess] repli créateur (tournoi sans organisation) tournoi=${tournament.id}`);
     return { status: "OK", tournament, canManage: true, via: "CREATOR_FALLBACK", staleRole: false };
   }
