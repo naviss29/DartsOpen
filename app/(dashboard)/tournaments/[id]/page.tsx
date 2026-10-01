@@ -8,6 +8,7 @@ import { requireTournamentReader } from "@/lib/auth/organizationAccess";
 import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
 import { getTournamentSizeUiState } from "@/lib/entitlements/tournamentSizeGuard";
+import { billingSourceForTournament } from "@/lib/organizations/billingOrganization";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Alert, Card, Pill } from "@naviss29/design-system";
@@ -51,16 +52,23 @@ export default async function TournamentDetailPage({ params }: Props) {
 
   // ADR-0021 / L6 — lecture pour tout rôle de l'organisation du tournoi ; gestion OWNER/ADMIN.
   const access = await requireTournamentReader(id);
-  const tournament = access.tournament as Tournament & { association_id: string };
+  const tournament = access.tournament as Tournament & {
+    association_id: string;
+    organization_id: string | null;
+    organization_slug: string | null;
+  };
   const canManage = access.canManage;
 
   // États paiement/crédits : utiles au seul formulaire d'édition (gestionnaire). Un MEMBER ne
   // déclenche donc aucun appel SterPlatform de facturation qu'il n'a pas le droit de lire.
+  // ADR-0021 / L7 — lus dans l'organisation du TOURNOI (liens BSsite compris), plus dans la
+  // liaison locale du créateur (BUG-4) ; repli créateur pour un tournoi sans organisation.
+  const billingSource = billingSourceForTournament(tournament);
   const [registrations, pools, paymentUiState, sizeState] = await Promise.all([
     dbListRegistrations(id, "PAID").catch(() => []) as Promise<{ id: string }[]>,
     dbListPools(id).catch(() => []) as Promise<{ id: string }[]>,
-    canManage ? getOnlinePaymentUiState(tournament.association_id) : null,
-    canManage ? getTournamentSizeUiState(tournament.association_id) : null,
+    canManage ? getOnlinePaymentUiState(billingSource) : null,
+    canManage ? getTournamentSizeUiState(billingSource) : null,
   ]);
   const stripeConnectUrl = paymentUiState?.organizationSlug
     ? `${BSSITE_URL}/dashboard/organisations/${paymentUiState.organizationSlug}/stripe`
