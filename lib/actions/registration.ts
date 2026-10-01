@@ -6,8 +6,8 @@ import {
   dbGetTournament,
   dbReserveRegistrationSlot,
   dbUpdateRegistrationPaymentId,
-  dbGetOrganization,
 } from "@/lib/db/tournament";
+import { billingSourceForTournament, resolveBillingOrganizationSlug } from "@/lib/organizations/billingOrganization";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
@@ -110,11 +110,20 @@ export async function createRegistration(
   // puis capacité/réservation, dans cet ordre — jamais réserver une place pour un paiement qui
   // ne pourra de toute façon jamais être initié.
 
-  // 1. Connect : nécessite que l'organisateur ait lié une organisation BApps Studio avec un
-  // compte Stripe Connect opérationnel (mission DO-003 — DartsOpen ne dialogue plus jamais
-  // directement avec Stripe, uniquement avec SterPlatform).
-  const org = await dbGetOrganization(tournament.association_id);
-  if (!org?.sterOrganizationSlug) {
+  // 1. Connect : l'organisation qui encaisse doit avoir un compte Stripe Connect opérationnel
+  // (mission DO-003 — DartsOpen ne dialogue plus jamais directement avec Stripe, uniquement avec
+  // SterPlatform). ADR-0021 / L7 — c'est l'organisation du TOURNOI (celle dont l'organisateur a
+  // vérifié le Stripe Connect en activant le paiement en ligne), plus la liaison locale du
+  // créateur, qui ne sert que de repli pour un tournoi sans organisation. Parcours public sans
+  // JWT : slug enregistré sur le tournoi (`authenticated: false`).
+  let organizationSlug: string | null;
+  try {
+    organizationSlug = await resolveBillingOrganizationSlug(billingSourceForTournament(tournament), { authenticated: false });
+  } catch (err) {
+    console.error("[registration] Organisation du paiement en ligne introuvable (lecture impossible):", tournamentId, err);
+    return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
+  }
+  if (!organizationSlug) {
     return { error: "Les paiements en ligne ne sont pas encore configurés pour ce tournoi. Contactez l'organisateur." };
   }
 
@@ -124,8 +133,8 @@ export async function createRegistration(
   // l'inscription — une suspension Stripe après coup bloque donc immédiatement les nouveaux
   // paiements, sans dépendre d'une modification préalable du tournoi. Relit toujours l'état
   // courant depuis SterPlatform, jamais une valeur mise en cache.
-  const stripeStatus = await getStripeConnectStatus(org.sterOrganizationSlug).catch((err) => {
-    console.error("[registration] Échec lecture statut Stripe Connect SterPlatform:", org.sterOrganizationSlug, err);
+  const stripeStatus = await getStripeConnectStatus(organizationSlug).catch((err) => {
+    console.error("[registration] Échec lecture statut Stripe Connect SterPlatform:", organizationSlug, err);
     return null;
   });
   if (!stripeStatus?.canReceivePayments) {
@@ -161,7 +170,7 @@ export async function createRegistration(
   const amountCents = tournament.entry_fee * tournament.players_per_team;
 
   const { checkout, error } = await createPaymentCheckout({
-    organizationSlug: org.sterOrganizationSlug,
+    organizationSlug,
     externalReference: registration.id,
     amountCents,
     currency: "eur",

@@ -257,15 +257,15 @@ describe("updateTournament — DO-PAYMENT-GUARD-001", () => {
     expect(dbUpdateTournament).not.toHaveBeenCalled();
   });
 
-  it("interroge isOnlinePaymentAllowed avec le propriétaire réel du tournoi (association_id), jamais l'utilisateur courant seul", async () => {
-    mockManagedTournament({ id: "tournament-1", association_id: "owner-42", max_players: 10 } as never);
+  it("tournoi sans organisation : interroge isOnlinePaymentAllowed avec le créateur réel du tournoi (repli association_id), jamais l'utilisateur courant seul", async () => {
+    mockManagedTournament({ id: "tournament-1", association_id: "owner-42", organization_id: null, organization_slug: null, max_players: 10 } as never);
     vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
     const fd = tournamentFormData({ registration_mode: "ONLINE", payment_mode: "ONLINE", entry_fee: "20" });
     fd.set("tournament_id", "tournament-1");
 
     await updateTournament(undefined, fd);
 
-    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith("owner-42");
+    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith({ kind: "CREATOR_FALLBACK", creatorUserId: "owner-42" });
   });
 
   it("organisation Stripe opérationnelle : activation du paiement en ligne autorisée", async () => {
@@ -853,5 +853,102 @@ describe("ADR-0021 / L6 — organisation du tournoi et rôle", () => {
     expect(result).toEqual({ error: "Droits invérifiables" });
     expect(consumeTournamentSizeCredit).not.toHaveBeenCalled();
     expect(dbConfirmTournamentEntitlement).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * ADR-0021 / L7 (BUG-4) — paiement en ligne et crédits résolus par l'organisation du tournoi, ou
+ * par l'organisation courante à la création ; repli créateur uniquement sans organisation.
+ */
+describe("ADR-0021 / L7 — organisation qui porte le paiement en ligne et les crédits", () => {
+  const ORG_SOURCE = { kind: "ORGANIZATION", organizationId: "org-uuid-1", organizationSlug: "club-orga" };
+  const orgTournament = (overrides: Record<string, unknown> = {}) => ({
+    id: "tournament-1",
+    association_id: "creator-1",
+    organization_id: "org-uuid-1",
+    organization_slug: "club-orga",
+    max_players: 10,
+    status: "DRAFT",
+    idempotency_key: "idem-key-1",
+    ...overrides,
+  });
+
+  it("création dans l'organisation courante : Stripe Connect vérifié sur CETTE organisation, pas sur la liaison de l'utilisateur", async () => {
+    vi.mocked(resolveTournamentCreationTarget).mockResolvedValue({ ok: true, organization: { id: "org-uuid-1", slug: "club-orga" } });
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", payment_mode: "ONLINE", entry_fee: "15" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith(ORG_SOURCE);
+  });
+
+  it("création sans organisation (D3) : repli sur la liaison locale de l'utilisateur qui crée", async () => {
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", payment_mode: "ONLINE", entry_fee: "15" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith({ kind: "CREATOR_FALLBACK", creatorUserId: "user-1" });
+  });
+
+  it("création > 10 joueurs dans l'organisation courante : crédit résolu sur cette organisation", async () => {
+    vi.mocked(resolveTournamentCreationTarget).mockResolvedValue({ ok: true, organization: { id: "org-uuid-1", slug: "club-orga" } });
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-orga" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
+    const fd = tournamentFormData({ max_players: "32" });
+
+    await expect(createTournament(undefined, fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(resolveTournamentSizeEntitlement).toHaveBeenCalledWith(ORG_SOURCE);
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-orga", "tournament-1");
+  });
+
+  it("création refusée (organisation à choisir) : aucun contrôle paiement/crédit, aucune écriture", async () => {
+    vi.mocked(resolveTournamentCreationTarget).mockResolvedValue({ ok: false, error: "Choisissez d'abord l'organisation." });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", payment_mode: "ONLINE", entry_fee: "15", max_players: "32" });
+
+    const result = await createTournament(undefined, fd);
+
+    expect(result?.error).toBe("Choisissez d'abord l'organisation.");
+    expect(isOnlinePaymentAllowed).not.toHaveBeenCalled();
+    expect(resolveTournamentSizeEntitlement).not.toHaveBeenCalled();
+    expect(dbCreateTournament).not.toHaveBeenCalled();
+  });
+
+  it("modification par un ADMIN non créateur : Stripe Connect et crédits de l'organisation du tournoi", async () => {
+    mockManagedTournament(orgTournament());
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "SUBSCRIPTION" });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", payment_mode: "ONLINE", entry_fee: "20", max_players: "32" });
+    fd.set("tournament_id", "tournament-1");
+
+    await updateTournament(undefined, fd);
+
+    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith(ORG_SOURCE);
+    expect(resolveTournamentSizeEntitlement).toHaveBeenCalledWith(ORG_SOURCE);
+    expect(dbUpdateTournament).toHaveBeenCalledTimes(1);
+  });
+
+  it("relance de confirmation de crédit : organisation du tournoi", async () => {
+    mockManagedTournament(orgTournament({ status: "PENDING_ENTITLEMENT" }));
+    vi.mocked(resolveTournamentSizeEntitlement).mockResolvedValue({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-orga" });
+    vi.mocked(consumeTournamentSizeCredit).mockResolvedValue("CONFIRMED");
+
+    await retryTournamentEntitlementConfirmation("tournament-1");
+
+    expect(resolveTournamentSizeEntitlement).toHaveBeenCalledWith(ORG_SOURCE);
+    expect(consumeTournamentSizeCredit).toHaveBeenCalledWith("club-orga", "tournament-1");
+  });
+
+  it("tournoi rattaché à l'organisation héritée partagée (dartsopen) : repli créateur, comme pour les droits", async () => {
+    mockManagedTournament(orgTournament({ organization_slug: "dartsopen" }));
+    vi.mocked(isOnlinePaymentAllowed).mockResolvedValue({ allowed: true });
+    const fd = tournamentFormData({ registration_mode: "ONLINE", payment_mode: "ONLINE", entry_fee: "20" });
+    fd.set("tournament_id", "tournament-1");
+
+    await updateTournament(undefined, fd);
+
+    expect(isOnlinePaymentAllowed).toHaveBeenCalledWith({ kind: "CREATOR_FALLBACK", creatorUserId: "creator-1" });
   });
 });
