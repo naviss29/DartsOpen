@@ -589,30 +589,36 @@ describe("purgeUnfinishedTournaments — destinataires du rappel (ADR-0021 / L7,
     expect(await reminderOf(attached.id)).not.toBeNull();
   });
 
-  it("404 (organisation ou template introuvable) et 422 (aucun administrateur) : jamais de suppression, même après l'échéance et avec un ancien constat « créateur introuvable »", async () => {
-    const notFoundOrgId = randomUUID();
-    const notFoundOrg = await createOrgTournament("1995-06-14", { id: notFoundOrgId, slug: "club-404" });
+  it("choix A (01/10/2026) : organisation disparue (404 ORGANIZATION_NOT_FOUND) ou sans administrateur (422) = supprimé sans rappel à l'échéance ; 404 sans code (ambigu) = jamais supprimé", async () => {
+    const goneOrgId = randomUUID();
+    const ambiguousOrgId = randomUUID();
+    const goneOrg = await createOrgTournament("1995-06-14", { id: goneOrgId, slug: "club-404" });
     const noAdminOrg = await createOrgTournament("1995-06-14", { id: randomUUID(), slug: "club-422" });
-    // Constat 404 USER_NOT_FOUND posé avant L7 (rappel alors adressé au créateur) : à l'échéance,
-    // la classification autoriserait une suppression sans rappel si l'issue était RECIPIENT_NOT_FOUND.
-    for (const t of [notFoundOrg, noAdminOrg]) {
+    const ambiguous = await createOrgTournament("1995-06-14", { id: ambiguousOrgId, slug: "club-404-ambigu" });
+    // Constat « destinataire introuvable » déjà posé à un passage précédent : à l'échéance, un
+    // destinataire toujours introuvable déclenche la suppression sans rappel (même règle que le
+    // créateur introuvable). Le 404 sans code ne doit jamais en profiter : organisation et
+    // template y sont indiscernables, et on ne supprime jamais sur une réponse ambiguë.
+    for (const t of [goneOrg, noAdminOrg, ambiguous]) {
       await prisma.tournament.update({ where: { id: t.id }, data: { closeReminderRecipientNotFoundAt: REMINDER_RUN } });
     }
-    const sendToOrganization = vi.fn(async (_template: string, organizationId: string) =>
-      organizationId === notFoundOrgId
-        ? { outcome: "NOT_FOUND" as const, error: "Organisation ou template introuvable (simulé)" }
-        : { outcome: "NO_RECIPIENT" as const, error: "Aucun administrateur (simulé)" },
-    );
+    const sendToOrganization = vi.fn(async (_template: string, organizationId: string) => {
+      if (organizationId === goneOrgId) return { outcome: "ORGANIZATION_NOT_FOUND" as const, error: "Organisation introuvable (simulé)" };
+      if (organizationId === ambiguousOrgId) return { outcome: "NOT_FOUND" as const, error: "404 sans code (simulé)" };
+      return { outcome: "NO_RECIPIENT" as const, error: "Aucun administrateur (simulé)" };
+    });
     const notifier = createCloseReminderNotifier({ env: ENV, sendToOrganization, sendToUser: vi.fn() });
 
     const report = await purge({ notifier, now: NO_REMINDER_DEADLINE_RUN });
 
-    for (const t of [notFoundOrg, noAdminOrg]) {
-      expect(entryFor(report, t.id)?.outcome).toBe("REMINDER_FAILED");
-      expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(1);
-      expect(await reminderOf(t.id)).toBeNull();
+    for (const t of [goneOrg, noAdminOrg]) {
+      expect(entryFor(report, t.id)?.outcome).toBe("DELETED_WITHOUT_REMINDER");
+      expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(0);
     }
-    expect(report.deleted).toBe(0);
-    expect(report.remindersFailed).toBe(2);
+    expect(entryFor(report, ambiguous.id)?.outcome).toBe("REMINDER_FAILED");
+    expect(await prisma.tournament.count({ where: { id: ambiguous.id } })).toBe(1);
+    expect(await reminderOf(ambiguous.id)).toBeNull();
+    expect(report.deletedWithoutReminder).toBe(2);
+    expect(report.remindersFailed).toBe(1);
   });
 });
