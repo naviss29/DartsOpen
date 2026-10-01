@@ -10,7 +10,7 @@ export default async function CguPage() {
   // remboursement » est traduite en entier pour ne pas mêler deux langues dans un même paragraphe.
   const { t } = await getI18n();
   return (
-    <LegalLayout title="Conditions générales d'utilisation" updatedAt="30/09/2026">
+    <LegalLayout title="Conditions générales d'utilisation" updatedAt="01/10/2026">
       <h2>Objet</h2>
       <p>
         Les présentes conditions régissent l&apos;utilisation de DartsOpen, plateforme de
@@ -57,7 +57,7 @@ export default async function CguPage() {
         Les paiements d&apos;inscription sont initiés par DartsOpen mais traités et encaissés par
         Stripe via l&apos;infrastructure de paiement de BApps Studio (SterPlatform). DartsOpen
         n&apos;a accès à aucune donnée bancaire et n&apos;intervient pas dans la transaction
-        financière au-delà du prélèvement décrit ci-dessus.
+        financière.
       </p>
 
       <h2>{t("legal.terms.cancellation.title")}</h2>
