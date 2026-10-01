@@ -6,9 +6,9 @@ import { getServerToken, getUser } from "@/lib/api/auth";
 import { apiFetch } from "@/lib/api/client";
 import { dbGetTournament } from "@/lib/db/tournament";
 import { getI18n } from "@/lib/i18n/server";
-import { isLegacySharedOrganization } from "@/lib/auth/legacyOrganizations";
+import { isLegacySharedOrganization, effectiveOrganizationId } from "@/lib/auth/legacyOrganizations";
 
-export { LEGACY_SHARED_ORG_SLUGS, isLegacySharedOrganization } from "@/lib/auth/legacyOrganizations";
+export { LEGACY_SHARED_ORG_SLUGS, isLegacySharedOrganization, effectiveOrganizationId } from "@/lib/auth/legacyOrganizations";
 
 /**
  * ADR-0021 (option A) / lot L6 — droits DartsOpen lus dans l'organisation SterPlatform du
@@ -205,12 +205,6 @@ export type TournamentAccess =
   | { status: "NOT_FOUND" }
   | { status: "ROLE_UNAVAILABLE" };
 
-/** Organisation qui fait autorité sur le tournoi ; une organisation héritée ne compte jamais. */
-export function effectiveOrganizationId(tournament: { organization_id: string | null; organization_slug: string | null }): string | null {
-  if (!tournament.organization_id) return null;
-  if (isLegacySharedOrganization(tournament.organization_slug)) return null;
-  return tournament.organization_id;
-}
 
 /**
  * Règle unique d'accès (lecture pour tout rôle, gestion pour OWNER/ADMIN) :

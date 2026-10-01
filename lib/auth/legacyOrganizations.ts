@@ -14,3 +14,16 @@ export const LEGACY_SHARED_ORG_SLUGS: readonly string[] = ["dartsopen", "billeta
 export function isLegacySharedOrganization(slug: string | null | undefined): boolean {
   return !!slug && LEGACY_SHARED_ORG_SLUGS.includes(slug);
 }
+
+/**
+ * Organisation qui fait autorité sur le tournoi (droits, paiement, crédits, rappels) ; une
+ * organisation héritée partagée ne compte jamais. `null` ⇒ tournoi « sans organisation » :
+ * repli transitoire sur son créateur (ADR-0021 §3). Ici (module pur) plutôt que dans
+ * `organizationAccess.ts` pour que la purge CLI applique exactement la même règle sans importer
+ * `next/headers`.
+ */
+export function effectiveOrganizationId(tournament: { organization_id: string | null; organization_slug: string | null }): string | null {
+  if (!tournament.organization_id) return null;
+  if (isLegacySharedOrganization(tournament.organization_slug)) return null;
+  return tournament.organization_id;
+}

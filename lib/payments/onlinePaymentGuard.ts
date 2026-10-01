@@ -1,5 +1,5 @@
-import { dbGetOrganization } from "@/lib/db/tournament";
 import { getPaymentAuthorization } from "@/lib/api/organizations";
+import { resolveBillingOrganizationSlug, type BillingOrganizationSource } from "@/lib/organizations/billingOrganization";
 
 /**
  * Garde-fou serveur unique pour le paiement en ligne DartsOpen (DO-PAYMENT-GUARD-001) : une
@@ -66,39 +66,40 @@ export type OnlinePaymentUiState = {
  * getPaymentAuthorization() elle-même, jamais silencieusement avalé.
  *
  * Utilise le JWT de la requête courante (via getPaymentAuthorization(), pas le jeton
- * serveur-à-serveur) : tous les appelants de cette fonction s'exécutent après vérification que
- * `userId` est bien l'utilisateur authentifié de la requête en cours (getUser() à la création,
- * requireTournamentManager() à la modification).
+ * serveur-à-serveur) : tous les appelants s'exécutent pour un utilisateur authentifié
+ * (getUser() à la création, requireTournamentManager() à la modification).
  *
- * ADR-0021 / L6 — ce n'est plus vrai à la modification : un ADMIN de l'organisation du tournoi
- * qui n'en est pas le créateur passe ici `association_id` (le créateur) avec SON propre JWT ;
- * SterPlatform peut alors répondre 403 (organisation liée du créateur dont il n'est pas membre)
- * ⇒ paiement en ligne vu comme indisponible (repli prudent, jamais une autorisation). Correction
- * prévue au lot L7 : résoudre l'organisation par `tournament.organization_id`, plus par
- * `dbGetOrganization(userId)`.
+ * ADR-0021 / L7 — l'organisation interrogée est celle du TOURNOI (ou l'organisation courante à
+ * la création), plus la liaison locale du créateur : `source` vient de
+ * `billingSourceForTournament()` / `billingSourceForCreation()`. Le JWT de la requête est donc
+ * celui d'un membre de l'organisation interrogée (OWNER/ADMIN pour une décision), ce qui corrige
+ * BUG-4 (Stripe Connect opérationnel dans BSsite mais « configurer Stripe Connect » ici). Le
+ * repli créateur ne subsiste que pour un tournoi sans organisation. `source = null` : aucune
+ * organisation exploitable (ex. création refusée faute d'organisation choisie) ⇒ affiché comme
+ * une absence, jamais comme une autorisation.
  */
-export async function getOnlinePaymentUiState(userId: string): Promise<OnlinePaymentUiState> {
-  const org = await dbGetOrganization(userId);
-  if (!org?.sterOrganizationSlug) {
-    // Aucune organisation liée : une absence réelle et actionnable (lier une organisation dans
-    // les Paramètres), jamais un état indéterminé — pas la peine de réessayer.
+export async function getOnlinePaymentUiState(source: BillingOrganizationSource | null): Promise<OnlinePaymentUiState> {
+  const slug = source ? await resolveBillingOrganizationSlug(source, { authenticated: true }) : null;
+  if (!slug) {
+    // Aucune organisation exploitable : une absence réelle et actionnable, jamais un état
+    // indéterminé — pas la peine de réessayer.
     return { status: "NOT_OPERATIONAL", canReceivePayments: false, organizationSlug: null };
   }
 
-  const authorization = await getPaymentAuthorization(org.sterOrganizationSlug);
+  const authorization = await getPaymentAuthorization(slug);
   if (authorization === null) {
-    return { status: "INDETERMINATE", canReceivePayments: false, organizationSlug: org.sterOrganizationSlug };
+    return { status: "INDETERMINATE", canReceivePayments: false, organizationSlug: slug };
   }
 
   return {
     status: authorization.canReceivePayments ? "OPERATIONAL" : "NOT_OPERATIONAL",
     canReceivePayments: authorization.canReceivePayments === true,
-    organizationSlug: org.sterOrganizationSlug,
+    organizationSlug: slug,
   };
 }
 
-export async function isOnlinePaymentAllowed(userId: string): Promise<OnlinePaymentAuthorization> {
-  const state = await getOnlinePaymentUiState(userId);
+export async function isOnlinePaymentAllowed(source: BillingOrganizationSource | null): Promise<OnlinePaymentAuthorization> {
+  const state = await getOnlinePaymentUiState(source);
   if (!state.organizationSlug) {
     return { allowed: false, reason: "NO_ORGANIZATION" };
   }

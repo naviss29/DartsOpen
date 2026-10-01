@@ -7,9 +7,13 @@ vi.mock("@/lib/api/tournamentCredits", () => ({
   reconcileTournamentCredit: vi.fn(),
   getTournamentCreditsAvailable: vi.fn(),
 }));
+vi.mock("@/lib/auth/organizationAccess", () => ({ getMyMemberships: vi.fn() }));
 
-const { consumeTournamentCredit, reconcileTournamentCredit } = await import("@/lib/api/tournamentCredits");
-const { consumeTournamentSizeCredit } = await import("./tournamentSizeGuard");
+const { consumeTournamentCredit, reconcileTournamentCredit, getTournamentCreditsAvailable } = await import("@/lib/api/tournamentCredits");
+const { dbGetOrganization } = await import("@/lib/db/tournament");
+const { hasOptionalSubscriptionAccess } = await import("@/lib/api/organizations");
+const { getMyMemberships } = await import("@/lib/auth/organizationAccess");
+const { consumeTournamentSizeCredit, resolveTournamentSizeEntitlement, getTournamentSizeUiState } = await import("./tournamentSizeGuard");
 
 beforeEach(() => {
   vi.mocked(consumeTournamentCredit).mockReset();
@@ -70,5 +74,78 @@ describe("consumeTournamentSizeCredit — orchestration CONFIRMED/REJECTED/INDET
     const outcome = await consumeTournamentSizeCredit("club-a", "tournament-1");
 
     expect(outcome).toBe("INDETERMINATE");
+  });
+});
+
+/**
+ * ADR-0021 / L7 — abonnement et crédits appartiennent à l'organisation du tournoi (ou à
+ * l'organisation courante à la création) ; la liaison locale du créateur n'est plus qu'un repli
+ * pour un tournoi sans organisation.
+ */
+describe("resolveTournamentSizeEntitlement / getTournamentSizeUiState — organisation qui porte les droits", () => {
+  const ORGANIZATION = { kind: "ORGANIZATION", organizationId: "org-uuid-1", organizationSlug: "club-orga" } as const;
+  const CREATOR_FALLBACK = { kind: "CREATOR_FALLBACK", creatorUserId: "user-1" } as const;
+
+  beforeEach(() => {
+    vi.mocked(dbGetOrganization).mockReset();
+    vi.mocked(hasOptionalSubscriptionAccess).mockReset();
+    vi.mocked(getTournamentCreditsAvailable).mockReset();
+    vi.mocked(getMyMemberships).mockReset();
+    vi.mocked(getMyMemberships).mockResolvedValue({
+      status: "OK",
+      stale: false,
+      memberships: [{ id: "org-uuid-1", slug: "club-orga", name: "Club", role: "ADMIN" }],
+    });
+  });
+
+  it("tournoi rattaché : crédit tenté sur l'organisation du tournoi, jamais sur la liaison du créateur", async () => {
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-du-createur" } as never);
+    vi.mocked(hasOptionalSubscriptionAccess).mockResolvedValue(false);
+
+    const resolution = await resolveTournamentSizeEntitlement(ORGANIZATION);
+
+    expect(resolution).toEqual({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-orga" });
+    expect(hasOptionalSubscriptionAccess).toHaveBeenCalledWith("club-orga", "DARTSOPEN");
+    expect(dbGetOrganization).not.toHaveBeenCalled();
+  });
+
+  it("tournoi rattaché avec abonnement actif de l'organisation : SUBSCRIPTION", async () => {
+    vi.mocked(hasOptionalSubscriptionAccess).mockResolvedValue(true);
+
+    expect(await resolveTournamentSizeEntitlement(ORGANIZATION)).toEqual({ mode: "SUBSCRIPTION" });
+  });
+
+  it("tournoi sans organisation : repli sur la liaison locale du créateur", async () => {
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-du-createur" } as never);
+    vi.mocked(hasOptionalSubscriptionAccess).mockResolvedValue(false);
+
+    const resolution = await resolveTournamentSizeEntitlement(CREATOR_FALLBACK);
+
+    expect(resolution).toEqual({ mode: "CREDIT_ATTEMPT", organizationSlug: "club-du-createur" });
+    expect(dbGetOrganization).toHaveBeenCalledWith("user-1");
+  });
+
+  it("tournoi sans organisation et créateur sans liaison : NONE (NO_ORGANIZATION)", async () => {
+    vi.mocked(dbGetOrganization).mockResolvedValue(null);
+
+    expect(await resolveTournamentSizeEntitlement(CREATOR_FALLBACK)).toEqual({ mode: "NONE", reason: "NO_ORGANIZATION" });
+    expect(hasOptionalSubscriptionAccess).not.toHaveBeenCalled();
+  });
+
+  it("affichage : abonnement et crédits de l'organisation du tournoi", async () => {
+    vi.mocked(hasOptionalSubscriptionAccess).mockResolvedValue(false);
+    vi.mocked(getTournamentCreditsAvailable).mockResolvedValue(3);
+
+    const state = await getTournamentSizeUiState(ORGANIZATION);
+
+    expect(state).toEqual({ hasActiveSubscription: false, availableCredits: 3, organizationSlug: "club-orga" });
+    expect(getTournamentCreditsAvailable).toHaveBeenCalledWith("club-orga");
+  });
+
+  it("affichage sans organisation exploitable (source null) : aucun droit supposé, aucun appel SterPlatform", async () => {
+    const state = await getTournamentSizeUiState(null);
+
+    expect(state).toEqual({ hasActiveSubscription: false, availableCredits: 0, organizationSlug: null });
+    expect(hasOptionalSubscriptionAccess).not.toHaveBeenCalled();
   });
 });
