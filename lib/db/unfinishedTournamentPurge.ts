@@ -1,6 +1,7 @@
 import { prisma } from "./client";
 import type { Prisma, TournamentStatus } from "../generated/prisma/client";
 import { deleteTournamentTreeTx, withTournamentLock } from "./tournament";
+import { effectiveOrganizationId } from "../auth/legacyOrganizations";
 
 /**
  * DO-UNFINISHED-PURGE-001 — règle métier décidée par Alan le 30/09/2026 pour les tournois jamais
@@ -125,6 +126,12 @@ export type CloseReminderTarget = {
   tournamentId: string;
   /** Identifiant SterPlatform du créateur (`Tournament.userId`) — DartsOpen ne stocke pas son email. */
   creatorUserId: string;
+  /**
+   * ADR-0021 / L7 (D6) — UUID SterPlatform de l'organisation du tournoi (`effectiveOrganizationId`,
+   * jamais une organisation héritée partagée) : le rappel part alors à tous ses OWNER/ADMIN.
+   * `null` : tournoi sans organisation ⇒ rappel au seul créateur (repli transitoire).
+   */
+  organizationId: string | null;
   tournamentName: string;
   tournamentDate: Date;
   deletionNotBefore: Date;
@@ -473,6 +480,8 @@ export async function purgeUnfinishedTournaments(
         status: true,
         closeReminderSentAt: true,
         closeReminderRecipientNotFoundAt: true,
+        organizationId: true,
+        organizationSlug: true,
       },
       orderBy: { id: "asc" },
       take: batchSize,
@@ -509,6 +518,7 @@ export async function purgeUnfinishedTournaments(
           const target: CloseReminderTarget = {
             tournamentId: t.id,
             creatorUserId: t.userId,
+            organizationId: effectiveOrganizationId({ organization_id: t.organizationId, organization_slug: t.organizationSlug }),
             tournamentName: t.name,
             tournamentDate: t.date,
             deletionNotBefore: deletionNotBefore(now),
@@ -524,7 +534,9 @@ export async function purgeUnfinishedTournaments(
           } else if (dryRun) {
             entry.outcome = "REMINDER_WOULD_SEND";
             log(
-              `${prefix} ${label} : rappel de clôture À ENVOYER` +
+              `${prefix} ${label} : rappel de clôture À ENVOYER ` +
+                // Destinataires sans aucune donnée personnelle : seulement leur nature (D6).
+                (target.organizationId ? "(propriétaires et administrateurs de l'organisation)" : "(créateur, tournoi sans organisation)") +
                 (notifier.available ? "." : ` — ATTENTION : envoi impossible actuellement (${notifier.unavailableReason}).`),
             );
           } else if (report.configurationError !== null) {

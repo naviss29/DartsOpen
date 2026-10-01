@@ -130,6 +130,7 @@ describe("createCloseReminderNotifier (configuration absente)", () => {
     const result = await notifier.send({
       tournamentId: "t",
       creatorUserId: "u",
+      organizationId: null,
       tournamentName: "n",
       tournamentDate: day("2026-10-01"),
       deletionNotBefore: day("2026-10-04"),

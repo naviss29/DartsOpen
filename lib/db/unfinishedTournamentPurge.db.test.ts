@@ -528,3 +528,91 @@ describe("purgeUnfinishedTournaments — dry-run (vrai PostgreSQL)", () => {
     expect(logs.join("\n")).not.toContain("@example.com");
   });
 });
+
+/**
+ * ADR-0021 / L7 (D6) — le rappel part à tous les OWNER/ADMIN de l'organisation du tournoi ; le
+ * créateur seul ne reste destinataire que pour un tournoi sans organisation. Aucune issue d'un
+ * envoi à une organisation (404, 422) n'ouvre la suppression sans rappel.
+ */
+describe("purgeUnfinishedTournaments — destinataires du rappel (ADR-0021 / L7, vrai PostgreSQL)", () => {
+  const ENV = {
+    NEXT_PUBLIC_API_URL: "https://sterplatform.test",
+    STER_API_TOKEN: "module-token",
+    NEXT_PUBLIC_APP_URL: "https://dartsopen.test",
+  };
+
+  async function createOrgTournament(date: string, organization: { id: string; slug: string } | null) {
+    const t = await createTournament(date);
+    if (organization) {
+      await prisma.tournament.update({
+        where: { id: t.id },
+        data: { organizationId: organization.id, organizationSlug: organization.slug },
+      });
+    }
+    return t;
+  }
+
+  it("tournoi rattaché : organizationId transmis ; sans organisation ou organisation héritée : créateur seul", async () => {
+    const orgId = randomUUID();
+    const attached = await createOrgTournament("1995-06-14", { id: orgId, slug: "club-l7" });
+    const legacy = await createOrgTournament("1995-06-14", { id: randomUUID(), slug: "dartsopen" });
+    const without = await createOrgTournament("1995-06-14", null);
+    const notifier = fakeNotifier();
+
+    await purge({ notifier, now: REMINDER_RUN });
+
+    const targetOf = (id: string) => notifier.send.mock.calls.find(([t]) => t.tournamentId === id)![0];
+    expect(targetOf(attached.id).organizationId).toBe(orgId);
+    expect(targetOf(legacy.id).organizationId).toBeNull();
+    expect(targetOf(without.id).organizationId).toBeNull();
+    expect(targetOf(without.id).creatorUserId).toBe(without.userId);
+  });
+
+  it("vrai notifier : send-to-organization pour un tournoi rattaché, send-to-user sinon ; rappel horodaté sur 200 sent:true", async () => {
+    const orgId = randomUUID();
+    const attached = await createOrgTournament("1995-06-14", { id: orgId, slug: "club-l7" });
+    const without = await createOrgTournament("1995-06-14", null);
+    const sendToOrganization = vi.fn(async (_template: string, _organizationId: string, _variables: Record<string, string>) => ({
+      outcome: "SENT" as const,
+      recipientCount: 2,
+    }));
+    const sendToUser = vi.fn(async (_template: string, _userId: string, _variables: Record<string, string>) => ({ outcome: "SENT" as const }));
+    const notifier = createCloseReminderNotifier({ env: ENV, sendToOrganization, sendToUser });
+
+    const report = await purge({ notifier, now: REMINDER_RUN });
+
+    expect(sendToOrganization).toHaveBeenCalledTimes(1);
+    expect(sendToOrganization.mock.calls[0][1]).toBe(orgId);
+    expect(sendToUser).toHaveBeenCalledTimes(1);
+    expect(sendToUser.mock.calls[0][1]).toBe(without.userId);
+    expect(entryFor(report, attached.id)?.outcome).toBe("REMINDER_SENT");
+    expect(await reminderOf(attached.id)).not.toBeNull();
+  });
+
+  it("404 (organisation ou template introuvable) et 422 (aucun administrateur) : jamais de suppression, même après l'échéance et avec un ancien constat « créateur introuvable »", async () => {
+    const notFoundOrgId = randomUUID();
+    const notFoundOrg = await createOrgTournament("1995-06-14", { id: notFoundOrgId, slug: "club-404" });
+    const noAdminOrg = await createOrgTournament("1995-06-14", { id: randomUUID(), slug: "club-422" });
+    // Constat 404 USER_NOT_FOUND posé avant L7 (rappel alors adressé au créateur) : à l'échéance,
+    // la classification autoriserait une suppression sans rappel si l'issue était RECIPIENT_NOT_FOUND.
+    for (const t of [notFoundOrg, noAdminOrg]) {
+      await prisma.tournament.update({ where: { id: t.id }, data: { closeReminderRecipientNotFoundAt: REMINDER_RUN } });
+    }
+    const sendToOrganization = vi.fn(async (_template: string, organizationId: string) =>
+      organizationId === notFoundOrgId
+        ? { outcome: "NOT_FOUND" as const, error: "Organisation ou template introuvable (simulé)" }
+        : { outcome: "NO_RECIPIENT" as const, error: "Aucun administrateur (simulé)" },
+    );
+    const notifier = createCloseReminderNotifier({ env: ENV, sendToOrganization, sendToUser: vi.fn() });
+
+    const report = await purge({ notifier, now: NO_REMINDER_DEADLINE_RUN });
+
+    for (const t of [notFoundOrg, noAdminOrg]) {
+      expect(entryFor(report, t.id)?.outcome).toBe("REMINDER_FAILED");
+      expect(await prisma.tournament.count({ where: { id: t.id } })).toBe(1);
+      expect(await reminderOf(t.id)).toBeNull();
+    }
+    expect(report.deleted).toBe(0);
+    expect(report.remindersFailed).toBe(2);
+  });
+});
