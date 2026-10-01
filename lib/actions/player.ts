@@ -6,7 +6,6 @@ import {
   dbReserveRegistrationSlot,
   dbDeleteRegistration,
   dbEraseRegistration,
-  dbGetTournament,
   dbSetSeeded,
   dbUpdateRegistration,
 } from "@/lib/db/tournament";
@@ -67,8 +66,12 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: rawFields, ts: Date.now() };
   }
 
-  const tournament = await dbGetTournament(parsed.data.tournament_id);
-  if (!tournament) return { error: "Tournoi introuvable ou accès refusé." };
+  // Correctif de sécurité (30/09/2026) : cette Server Action n'avait aucun contrôle d'accès,
+  // alors qu'elle crée une inscription marquée PAID sans paiement. Une Server Action est
+  // appelable directement par son identifiant, sans passer par la page : n'importe qui pouvait
+  // donc remplir le tournoi d'un autre organisateur. Même garde que les autres actions de ce
+  // fichier (redirection vers /login si non connecté, 404 si pas le propriétaire).
+  const tournament = await getOwnedTournament(parsed.data.tournament_id);
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     return { error: "Les inscriptions sont fermées pour ce tournoi." };
   }
