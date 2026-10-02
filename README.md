@@ -172,6 +172,19 @@ la concurrence PostgreSQL, l'API interne SterPlatform et le webhook de paiements
 
 ---
 
+## Santé et version déployée
+
+| Route | Rôle | Réponse |
+|---|---|---|
+| `GET /api/health` | Liveness du standard (Deployment-Standard §8) : HEALTHCHECK Docker, Coolify, surveillance externe. **Aucune dépendance** (ni base ni SterPlatform). | `200 {"status":"ok","version":"0.1.0+9c2d6a1"}` |
+| `GET /health/live` | Liveness pure | `200 {"status":"ok"}` |
+| `GET /health/ready` | Readiness : PostgreSQL joignable | `200` ou `503` avec `checks.database` |
+
+`version` = version de `package.json` + SHA court du commit, lu au runtime dans `SOURCE_COMMIT`
+(variable prédéfinie injectée par Coolify) ou `APP_COMMIT_SHA` (prioritaire). Sans SHA valide :
+seule la version du package (`lib/deployedVersion.ts`). Vérifier après chaque déploiement que
+le SHA affiché est celui du commit livré.
+
 ## Tâches planifiées (Coolify Scheduled Tasks, conteneur DartsOpen)
 
 Aucun scheduler dans l'application : chaque tâche est un script `tsx` lancé par Coolify dans le

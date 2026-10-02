@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db/client";
+import { deployedVersion } from "@/lib/deployedVersion";
 
-// Endpoint historique conservé comme liveness Docker : il répond toujours HTTP 200,
-// tout en publiant l'état non sensible de la base pour la supervision.
+/**
+ * Liveness du standard de déploiement (Deployment-Standard §8) : consommée par le HEALTHCHECK
+ * Docker, Coolify et la surveillance externe. AUCUNE dépendance externe — une base
+ * indisponible ne doit jamais faire basculer un conteneur sain en « unhealthy » (leçon
+ * SterPlatform/Mercure). L'état de PostgreSQL est publié par `/health/ready`, pas ici.
+ */
 export async function GET() {
-  let database: "ok" | "unreachable" = "unreachable";
-
   try {
-    await prisma.$queryRaw`SELECT 1`;
-    database = "ok";
-  } catch {
-    database = "unreachable";
+    return NextResponse.json({ status: "ok", version: deployedVersion() });
+  } catch (err) {
+    // Ne jamais transformer un incident de lecture de version en panne apparente du service.
+    console.error("[health] Lecture de la version déployée impossible :", err);
+    return NextResponse.json({ status: "ok", version: "unknown" });
   }
-
-  return NextResponse.json({ status: "ok", database });
 }
