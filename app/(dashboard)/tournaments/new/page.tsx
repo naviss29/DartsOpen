@@ -1,3 +1,4 @@
+import { bappsAppUrl } from "@/lib/bappsApps";
 import { redirect } from "next/navigation";
 import { Alert } from "@naviss29/design-system";
 import { TournamentForm } from "@/components/tournament/TournamentForm";
@@ -10,7 +11,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Nouveau tournoi — DartsOpen" };
 
-const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
+const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com"); // portail du même environnement
 
 export default async function NewTournamentPage() {
   const user = await getUser();

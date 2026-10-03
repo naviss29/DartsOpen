@@ -1,3 +1,4 @@
+import { bappsAppUrl } from "@/lib/bappsApps";
 import { getUser } from "@/lib/api/auth";
 import { redirect } from "next/navigation";
 import { Alert, Card, Pill } from "@naviss29/design-system";
@@ -12,7 +13,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Paramètres — DartsOpen" };
 
-const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
+const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com"); // portail du même environnement
 
 export default async function SettingsPage() {
   const user = await getUser();

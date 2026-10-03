@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { localeLabels, supportedLocales, type Locale } from "@/lib/i18n/config";
+import { LANGUAGE_CHOICE_ENABLED, localeLabels, supportedLocales, type Locale } from "@/lib/i18n/config";
 import { useI18n } from "./I18nProvider";
 
 export default function LanguageSwitcher({ className = "" }: { className?: string }) {
@@ -27,6 +27,9 @@ export default function LanguageSwitcher({ className = "" }: { className?: strin
       setIsSaving(false);
     }
   }
+
+  // Choix de langue masqué tant que EN/ES ne sont pas finalisés (voir config.ts).
+  if (!LANGUAGE_CHOICE_ENABLED) return null;
 
   return (
     <span className={`inline-flex flex-col ${className}`}>

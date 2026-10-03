@@ -9,10 +9,13 @@ import {
   localeTags,
   selectPlural,
   type PluralForms,
+  LANGUAGE_CHOICE_ENABLED,
 } from "./config";
 
 async function resolveRequestLocale(overrideLocale?: Locale): Promise<Locale> {
   if (overrideLocale) return overrideLocale;
+  // Choix de langue désactivé (voir config.ts) : français, quel que soit le cookie.
+  if (!LANGUAGE_CHOICE_ENABLED) return defaultLocale;
 
   try {
     const store = await cookies();

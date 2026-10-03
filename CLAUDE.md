@@ -662,6 +662,21 @@ Fonction uniquement du nombre de joueurs encore en vie dans le tournoi, jamais d
 5. Désigner le gagnant via le bouton **Arbitrer** sur chaque match → `arbitrateMatch` (`lib/actions/admin.ts`) → `doAdvanceQuickTournament` déclenché automatiquement
 6. Les matchs suivants (bassin unique) se créent et s'affectent aux cibles libres automatiquement, jusqu'à ce qu'il ne reste plus qu'un joueur en vie
 
+## Choix de langue masqué (03/10/2026)
+
+Décision d'Alan : tant que EN/ES ne sont pas finalisés, `LANGUAGE_CHOICE_ENABLED = false` dans
+`lib/i18n/config.ts`. Le sélecteur (`components/i18n/LanguageSwitcher.tsx`) ne rend rien et
+`lib/i18n/server.ts` sert le français quel que soit le cookie (conservé). Une langue passée
+explicitement à `getI18n(locale)` reste servie. Réactiver = passer à `true`. Les tests du mécanisme
+multilingue réactivent le réglage par `vi.mock` ; `lib/i18n/languageChoice.test.ts` garde le blocage.
+
+## Liens vers les autres applications BApps (03/10/2026)
+
+Jamais d'adresse de production en dur : `bappsAppUrl("https://x.bapps-studio.com")`
+(`lib/bappsApps.ts`) renvoie `https://x.dev.bapps-studio.com` quand `NEXT_PUBLIC_APP_URL` est une
+adresse de test (même règle que BSsite `lib/catalog/products.ts`). Utilisé par le sélecteur
+d'applications, le repli du portail et les liens croisés Connect ↔ MarketPlace.
+
 ## Garde-fou i18n
 
 `npm run guardrail:i18n` (`scripts/check-i18n-visible-copy.mjs`, inclus dans `verify`) échoue sur tout **nouveau** texte visible codé en dur hors catalogue. La traduction du produit n'est pas terminée : les écarts historiques sont listés dans `scripts/i18n-visible-copy.baseline.json` (jamais à agrandir). Après avoir traduit des écrans, relancer avec `--update-baseline` pour réduire la baseline. Règles i18n : skill `bapps-i18n`.

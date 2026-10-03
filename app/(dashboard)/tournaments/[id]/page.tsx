@@ -1,3 +1,4 @@
+import { bappsAppUrl } from "@/lib/bappsApps";
 import { RoundForm } from "@/components/tournament/RoundForm";
 import { DeleteRoundButton } from "@/components/tournament/DeleteRoundButton";
 import { TournamentStatusButton } from "@/components/tournament/TournamentStatusButton";
@@ -16,7 +17,7 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import NavPills from "@/components/ui/NavPills";
 import Button from "@/components/ui/Button";
 
-const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
+const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com"); // portail du même environnement
 
 interface Props {
   params: Promise<{ id: string }>;
