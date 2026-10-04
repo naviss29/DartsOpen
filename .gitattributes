@@ -1,0 +1,8 @@
+# Images et polices : jamais de conversion de fins de ligne (un PNG a été corrompu ainsi).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
