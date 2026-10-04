@@ -39,7 +39,8 @@ export default function DashboardApplicationSwitcher({
       name: "BApps Studio",
       description: t("appSwitcher.portal"),
       href: `${PORTAL_URL}/dashboard`,
-      icon: <Image src="/brand/bapps-symbol.png" alt="" width={512} height={512} className="h-10 w-10 object-contain" />,
+      // Logo du portail : fichier unique, identique dans les 6 applications (charte §10.4).
+      icon: <Image src="/brand/bapps-studio-symbol.png" alt="" width={40} height={40} className="h-10 w-10 object-contain" />,
     },
     ...accessibleProducts.map((product) => ({
       id: product.id,
