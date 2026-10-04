@@ -39,7 +39,8 @@ export default function DashboardApplicationSwitcher({
       name: "BApps Studio",
       description: t("appSwitcher.portal"),
       href: `${PORTAL_URL}/dashboard`,
-      icon: <Image src="/brand/bapps-symbol.png" alt="" width={512} height={512} className="h-10 w-10 object-contain" />,
+      // Nom de fichier changé le 04/10/2026 : les navigateurs gardaient en cache l’ancien logo corrompu.
+      icon: <Image src="/brand/bapps-studio-symbol.png" alt="" width={512} height={512} className="h-10 w-10 object-contain" />,
     },
     ...accessibleProducts.map((product) => ({
       id: product.id,
