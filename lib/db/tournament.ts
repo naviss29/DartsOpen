@@ -18,6 +18,7 @@ import { seedBracket } from "../utils/bracket";
 import { computePoolStandings } from "../utils/pools";
 import { pairPlayers, shufflePlayers, getQuickModeGameFormat } from "../utils/doubleElimination";
 import { p2002ConstraintIdentifiers } from "./prismaErrors";
+import { isLegacySharedOrganization, LEGACY_SHARED_ORG_SLUGS } from "../auth/legacyOrganizations";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — vérifie qu'une erreur P2002
@@ -86,12 +87,17 @@ function mapTournament(t: {
   scoringMode: string;
   quickMode: boolean;
   idempotencyKey: string;
+  organizationId?: string | null;
+  organizationSlug?: string | null;
   createdAt: Date;
   rounds?: ReturnType<typeof mapRound>[];
 }) {
   return {
     id: t.id,
     association_id: t.userId,
+    // ADR-0021 / L6 — organisation propriétaire (null = tournoi hérité, repli créateur).
+    organization_id: t.organizationId ?? null,
+    organization_slug: t.organizationSlug ?? null,
     name: t.name,
     date: t.date.toISOString().split("T")[0],
     location: t.location,
@@ -301,9 +307,47 @@ const roundSelect = {
   finishType: true,
 };
 
-export async function dbListTournaments(userId: string) {
+/**
+ * ADR-0021 / L6 — périmètre « mes tournois » : ceux de l'organisation COURANTE (tout rôle, la
+ * lecture est ouverte au MEMBER) + les tournois hérités que l'utilisateur a créés (sans
+ * organisation, ou rattachés par erreur à une organisation partagée héritée — repli créateur).
+ * `organization` doit venir de getCurrentOrganization() (rôle revérifié auprès de SterPlatform),
+ * jamais d'une valeur fournie par le client.
+ */
+export type ListScope = {
+  userId: string;
+  organization: { id: string; role: "OWNER" | "ADMIN" | "MEMBER" } | null;
+};
+
+function scopeWhere(scope: ListScope): Prisma.TournamentWhereInput[] {
+  return [
+    { userId: scope.userId, organizationId: null },
+    { userId: scope.userId, organizationSlug: { in: [...LEGACY_SHARED_ORG_SLUGS] } },
+    ...(scope.organization ? [{ organizationId: scope.organization.id }] : []),
+  ];
+}
+
+/** Même règle que lib/auth/organizationAccess.ts::getTournamentAccess, appliquée à une ligne. */
+function rowCanManage(
+  row: { userId: string; organizationId: string | null; organizationSlug: string | null },
+  scope: ListScope,
+): boolean {
+  if (!row.organizationId || isLegacySharedOrganization(row.organizationSlug)) return row.userId === scope.userId;
+  return row.organizationId === scope.organization?.id
+    && (scope.organization.role === "OWNER" || scope.organization.role === "ADMIN");
+}
+
+function rowInScope(
+  row: { userId: string; organizationId: string | null; organizationSlug: string | null },
+  scope: ListScope,
+): boolean {
+  if (!row.organizationId || isLegacySharedOrganization(row.organizationSlug)) return row.userId === scope.userId;
+  return row.organizationId === scope.organization?.id;
+}
+
+export async function dbListTournaments(scope: ListScope) {
   const rows = await prisma.tournament.findMany({
-    where: { userId },
+    where: { OR: scopeWhere(scope) },
     include: {
       rounds: { select: roundSelect, orderBy: { roundOrder: "asc" } },
       _count: { select: { registrations: { where: { status: "PAID" } } } },
@@ -313,14 +357,20 @@ export async function dbListTournaments(userId: string) {
   return rows.map((t) => ({
     ...mapTournament({ ...t, rounds: t.rounds.map(mapRound) }),
     players_paid: t._count.registrations,
+    can_manage: rowCanManage(t, scope),
   }));
 }
 
-export async function dbListAllTournaments(currentUserId: string) {
+/**
+ * Tableau de bord : le périmètre ci-dessus + les opens publics (OPEN/IN_PROGRESS/FINISHED) de
+ * tout le monde. `can_view` : accessible dans le tableau de bord (sinon lien public) ;
+ * `can_manage` (ex-`is_mine`) : gestion permise.
+ */
+export async function dbListAllTournaments(scope: ListScope) {
   const rows = await prisma.tournament.findMany({
     where: {
       OR: [
-        { userId: currentUserId },
+        ...scopeWhere(scope),
         { status: { in: ["OPEN", "IN_PROGRESS", "FINISHED"] } },
       ],
     },
@@ -343,7 +393,8 @@ export async function dbListAllTournaments(currentUserId: string) {
     nb_pools: t.nbPools,
     nb_boards: t.nbBoards,
     players_paid: t._count.registrations,
-    is_mine: t.userId === currentUserId,
+    can_view: rowInScope(t, scope),
+    can_manage: rowCanManage(t, scope),
   }));
 }
 
@@ -373,7 +424,8 @@ export async function dbGetTournament(id: string, client: Prisma.TransactionClie
 export async function dbGetTournamentPublic(id: string) {
   const t = await dbGetTournament(id);
   if (!t) return null;
-  const { association_id: _association_id, ...publicTournament } = t;
+  // L6 — organization_id retiré lui aussi : identifiant d'autorisation, inutile à une page publique.
+  const { association_id: _association_id, organization_id: _organization_id, ...publicTournament } = t;
   return publicTournament;
 }
 
@@ -401,7 +453,10 @@ export async function dbCreateTournament(userId: string, data: {
   payment_mode: string;
   scoring_mode: string;
   quick_mode?: boolean;
-}, idempotencyKey: string, initialStatus: "DRAFT" | "PENDING_ENTITLEMENT" = "DRAFT") {
+}, idempotencyKey: string, initialStatus: "DRAFT" | "PENDING_ENTITLEMENT" = "DRAFT",
+  // ADR-0021 / L6 — organisation propriétaire (déjà revérifiée OWNER/ADMIN par l'appelant) ;
+  // null = création « à l'ancienne » d'un compte sans vraie organisation (repli créateur, D3).
+  organization: { id: string; slug: string } | null = null) {
   // DARTSOPEN-MONETIZATION-003 (P4) — scoped to (userId, idempotencyKey), never a bare
   // idempotencyKey lookup: a key submitted by a different user must never resolve to this
   // user's tournament (see Tournament.idempotencyKey's docblock in schema.prisma).
@@ -420,6 +475,8 @@ export async function dbCreateTournament(userId: string, data: {
         userId,
         idempotencyKey,
         status: initialStatus,
+        organizationId: organization?.id ?? null,
+        organizationSlug: organization?.slug ?? null,
         name: data.name,
         date: new Date(data.date),
         location: data.location,
@@ -516,15 +573,27 @@ export async function dbUpdateTournament(id: string, data: {
  */
 export async function dbDeleteTournament(id: string) {
   await prisma.$transaction(async (tx) => {
-    await tx.matchSetThrow.deleteMany({ where: { matchSet: { match: { tournamentId: id } } } });
-    await tx.matchSet.deleteMany({ where: { match: { tournamentId: id } } });
-    await tx.match.deleteMany({ where: { tournamentId: id } });
-    await tx.round.deleteMany({ where: { tournamentId: id } });
-    await tx.poolPlayer.deleteMany({ where: { pool: { tournamentId: id } } });
-    await tx.pool.deleteMany({ where: { tournamentId: id } });
-    await tx.registration.deleteMany({ where: { tournamentId: id } });
-    await tx.tournament.delete({ where: { id } });
+    await deleteTournamentTreeTx(tx, id);
   });
+}
+
+/**
+ * Cœur tx-scopé de dbDeleteTournament(), extrait (DO-UNFINISHED-PURGE-001) pour que la purge des
+ * tournois jamais terminés supprime dans la MÊME transaction que la revérification de sa
+ * condition (sous withTournamentLock) — une seule implémentation de l'ordre des dépendances,
+ * jamais une seconde copie qui divergerait au prochain ajout de table.
+ * `field_sessions`/`field_referee_grants`/`field_incidents` partent par CASCADE (depuis `matches`
+ * et `tournaments`) : aucune contrainte RESTRICT ne les concerne.
+ */
+export async function deleteTournamentTreeTx(tx: Prisma.TransactionClient, id: string) {
+  await tx.matchSetThrow.deleteMany({ where: { matchSet: { match: { tournamentId: id } } } });
+  await tx.matchSet.deleteMany({ where: { match: { tournamentId: id } } });
+  await tx.match.deleteMany({ where: { tournamentId: id } });
+  await tx.round.deleteMany({ where: { tournamentId: id } });
+  await tx.poolPlayer.deleteMany({ where: { pool: { tournamentId: id } } });
+  await tx.pool.deleteMany({ where: { tournamentId: id } });
+  await tx.registration.deleteMany({ where: { tournamentId: id } });
+  await tx.tournament.delete({ where: { id } });
 }
 
 /**
@@ -938,32 +1007,6 @@ export async function dbEraseRegistration(
     },
   });
   return { anonymized: true };
-}
-
-/** Décision Product Owner (BAPPS-LEGAL-005 §9) : durée de conservation des coordonnées de contact (email/téléphone) après la fin d'un tournoi. Le nom/pseudo et les résultats sportifs, eux, sont conservés indéfiniment — c'est le classement inter-tournois, cœur du produit. */
-export const CONTACT_RETENTION_MONTHS = 12;
-
-/**
- * Purge automatique et opportuniste des coordonnées de contact (BAPPS-LEGAL-005
- * §9) — jamais du nom/pseudo (identité sportive, conservée indéfiniment) ni des
- * résultats. Scopée aux tournois d'un seul organisateur (`userId`) : déclenchée
- * à chaque visite de son tableau de bord (`app/(dashboard)/tournaments/page.tsx`),
- * jamais un balayage global déclenché par la visite d'un organisateur différent.
- * Idempotente (une inscription déjà purgée ne correspond plus à `playerEmail !=
- * "" OR playerPhone != null`) ; ne touche jamais un tournoi non `FINISHED`.
- */
-export async function dbAnonymizeExpiredContacts(userId: string, now: Date = new Date()): Promise<number> {
-  const cutoff = new Date(now);
-  cutoff.setMonth(cutoff.getMonth() - CONTACT_RETENTION_MONTHS);
-
-  const result = await prisma.registration.updateMany({
-    where: {
-      tournament: { userId, status: "FINISHED", date: { lt: cutoff } },
-      OR: [{ playerEmail: { not: "" } }, { playerPhone: { not: null } }],
-    },
-    data: { playerEmail: "", playerPhone: null },
-  });
-  return result.count;
 }
 
 /**

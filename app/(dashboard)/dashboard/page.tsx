@@ -1,9 +1,11 @@
 import { getUser } from "@/lib/api/auth";
+import { getCurrentOrganization } from "@/lib/auth/organizationAccess";
+import { getI18n } from "@/lib/i18n/server";
 import { dbListTournaments, dbListAllTournaments } from "@/lib/db/tournament";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Card, EmptyState, PageHeader, Pill } from "@naviss29/design-system";
+import { Alert, Card, EmptyState, PageHeader, Pill } from "@naviss29/design-system";
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
 
@@ -22,16 +24,35 @@ type Tournament = {
   nb_pools: number;
   nb_boards: number;
   players_paid: number;
-  is_mine: boolean;
+  /** ADR-0021 / L6 — visible dans le tableau de bord (organisation courante ou tournoi hérité créé). */
+  can_view: boolean;
+  /** Ex-`is_mine` : gestion permise (OWNER/ADMIN de l'organisation, ou créateur d'un tournoi hérité). */
+  can_manage: boolean;
 };
 
 export default async function DashboardPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
+  const { t: translate } = await getI18n();
+  const readOnlyLabel = translate("orgAccess.readOnly");
+
+  // ADR-0021 / L6 — périmètre = organisation courante (tout rôle) + tournois hérités créés.
+  const current = await getCurrentOrganization();
+  const organization = current.status === "OK" && current.current
+    ? { id: current.current.id, role: current.current.role }
+    : null;
+  const scope = { userId: user.id, organization };
+
   const [myTournaments, allTournaments] = await Promise.all([
-    dbListTournaments(user.id).catch(() => []),
-    dbListAllTournaments(user.id).catch(() => []) as Promise<Tournament[]>,
+    dbListTournaments(scope).catch((err) => {
+      console.error("[DashboardPage] tournois de l'organisation", err);
+      return [];
+    }),
+    dbListAllTournaments(scope).catch((err) => {
+      console.error("[DashboardPage] tous les opens", err);
+      return [];
+    }) as Promise<Tournament[]>,
   ]);
 
   // DO-BETA-UX-001 — mêmes classes de couleur que Pill (DS) par souci d'un seul vocabulaire
@@ -51,6 +72,11 @@ export default async function DashboardPage() {
   return (
     <div className="min-w-0 space-y-6 sm:space-y-8">
       <PageHeader title="Tableau de bord" actions={<Button href="/tournaments/new">+ Nouveau tournoi</Button>} />
+
+      {current.status === "UNAVAILABLE" && <Alert tone="warning"><p>{translate("orgAccess.roleUnavailable")}</p></Alert>}
+      {current.status === "OK" && current.needsSelection && (
+        <Alert tone="info"><p>{translate("orgAccess.chooseOrganizationNotice")}</p></Alert>
+      )}
 
       <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4">
         {stats.map((stat) => (
@@ -73,23 +99,23 @@ export default async function DashboardPage() {
         ) : (
           <div className="grid min-w-0 gap-3">
             {sorted.map((t) => {
-              const href = t.is_mine
+              const href = t.can_view
                 ? `/tournaments/${t.id}`
                 : t.status === "OPEN"
                 ? `/t/${t.id}/register`
                 : `/t/${t.id}/live`;
 
-              const isClickable = t.is_mine || t.status !== "DRAFT";
+              const isClickable = t.can_view || t.status !== "DRAFT";
 
               return isClickable ? (
                 <Link key={t.id} href={href} className="block">
                   <Card className="min-w-0 overflow-hidden transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
-                    <TournamentRow t={t} />
+                    <TournamentRow t={t} readOnlyLabel={readOnlyLabel} />
                   </Card>
                 </Link>
               ) : (
                 <Card key={t.id} className="opacity-60">
-                  <TournamentRow t={t} />
+                  <TournamentRow t={t} readOnlyLabel={readOnlyLabel} />
                 </Card>
               );
             })}
@@ -100,14 +126,17 @@ export default async function DashboardPage() {
   );
 }
 
-function TournamentRow({ t }: { t: Tournament }) {
+function TournamentRow({ t, readOnlyLabel }: { t: Tournament; readOnlyLabel: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="truncate font-semibold text-brand-dark">{t.name}</p>
-          {t.is_mine && (
+          {t.can_manage && (
             <Pill tone="brand" className="shrink-0">Mon tournoi</Pill>
+          )}
+          {t.can_view && !t.can_manage && (
+            <Pill tone="neutral" className="shrink-0">{readOnlyLabel}</Pill>
           )}
         </div>
         <p className="mt-0.5 text-sm text-brand-text-secondary">
@@ -123,7 +152,7 @@ function TournamentRow({ t }: { t: Tournament }) {
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0 sm:flex-col sm:items-end">
         <StatusBadge status={t.status} />
-        {!t.is_mine && t.status === "OPEN" && (
+        {!t.can_view && t.status === "OPEN" && (
           <span className="text-xs font-semibold text-brand-turquoise">S&apos;inscrire →</span>
         )}
       </div>

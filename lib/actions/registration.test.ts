@@ -20,6 +20,8 @@ vi.mock("@/lib/db/tournament", () => ({
   dbUpdateRegistrationPaymentId: vi.fn(),
   dbGetOrganization: vi.fn(),
 }));
+// Parcours public : jamais d'appel /api/me/organizations (pas de JWT) — simulé pour le prouver.
+vi.mock("@/lib/auth/organizationAccess", () => ({ getMyMemberships: vi.fn() }));
 
 const { createRegistration } = await import("./registration");
 const { createPaymentCheckout, getStripeConnectStatus } = await import("@/lib/api/sterplatformInternal");
@@ -30,6 +32,7 @@ const {
   dbGetOrganization,
 } = await import("@/lib/db/tournament");
 const { redirect } = await import("next/navigation");
+const { getMyMemberships } = await import("@/lib/auth/organizationAccess");
 
 function paidTournament(overrides: Record<string, unknown> = {}) {
   return {
@@ -197,6 +200,25 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("BUG-3 recette 01/10 : la page de succès sait si les droits sont à régler sur place, gratuits ou payés en ligne", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ payment_mode: "ONSITE" }) as never);
+    await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(redirect).mock.calls.at(-1)?.[0]).toContain("&paiement=sur-place");
+
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
+    await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(redirect).mock.calls.at(-1)?.[0]).toContain("&paiement=gratuit");
+
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(createPaymentCheckout).mockResolvedValue({
+      checkout: { paymentId: "pay_1", checkoutUrl: "https://checkout.example/pay_1", status: "PENDING" },
+    } as never);
+    await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(createPaymentCheckout).mock.calls[0][0].successUrl).toContain("&paiement=en-ligne");
+  });
+
   it("paiement en ligne : réserve avec le statut PENDING et une expiration future (audit DO-AUD-009 — place réservée pendant le checkout)", async () => {
     vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
     vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
@@ -289,5 +311,66 @@ describe("createRegistration — validation d'entrée (audit pré-recette, S3)",
     ).rejects.toThrow("NEXT_REDIRECT");
 
     expect(dbGetTournament).toHaveBeenCalled();
+  });
+});
+
+describe("createRegistration — ADR-0021 / L7 : checkout sur l'organisation du tournoi", () => {
+  function organizationTournament(overrides: Record<string, unknown> = {}) {
+    return paidTournament({ organization_id: "org-uuid-1", organization_slug: "club-orga", ...overrides });
+  }
+
+  it("tournoi rattaché : statut Stripe et checkout sur l'organisation du tournoi, même sans liaison locale du créateur (BUG-4)", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(organizationTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue(null);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(createPaymentCheckout).mockResolvedValue({
+      checkout: { paymentId: "pay_1", checkoutUrl: "https://checkout.example/pay_1", status: "PENDING" },
+    } as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(getStripeConnectStatus).toHaveBeenCalledWith("club-orga");
+    expect(vi.mocked(createPaymentCheckout).mock.calls[0][0].organizationSlug).toBe("club-orga");
+    expect(dbGetOrganization).not.toHaveBeenCalled();
+    // Joueur anonyme : aucune lecture des appartenances (pas de JWT sur ce parcours).
+    expect(getMyMemberships).not.toHaveBeenCalled();
+  });
+
+  it("tournoi rattaché : la liaison locale du créateur n'est jamais utilisée pour encaisser", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(organizationTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-du-createur" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus({ canReceivePayments: false, status: "RESTRICTED" }) as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toBeDefined();
+    expect(getStripeConnectStatus).toHaveBeenCalledWith("club-orga");
+    expect(getStripeConnectStatus).not.toHaveBeenCalledWith("club-du-createur");
+  });
+
+  it("tournoi rattaché à une organisation héritée partagée (dartsopen) : repli sur la liaison du créateur, comme pour les droits", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(
+      organizationTournament({ organization_slug: "dartsopen" }) as never
+    );
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus({ canReceivePayments: false }) as never);
+
+    await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(getStripeConnectStatus).toHaveBeenCalledWith("club-a");
+  });
+
+  it("lecture de la liaison locale impossible (tournoi sans organisation) : refus clair, aucune réservation", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
+    vi.mocked(dbGetOrganization).mockRejectedValue(new Error("connexion perdue"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toMatch(/paiements en ligne ne sont pas disponibles/);
+    expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

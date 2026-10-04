@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import { LegalLayout } from "@/components/legal/LegalLayout";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Conditions générales d'utilisation — DartsOpen" };
 
-export default function CguPage() {
+export default async function CguPage() {
+  // La page n'est pas encore entièrement traduite (écarts historiques dans la baseline i18n) :
+  // tout texte ajouté passe par le catalogue, jamais par la baseline. La section « Annulation et
+  // remboursement » est traduite en entier pour ne pas mêler deux langues dans un même paragraphe.
+  const { t } = await getI18n();
   return (
-    <LegalLayout title="Conditions générales d'utilisation" updatedAt="10/08/2026">
+    <LegalLayout title="Conditions générales d'utilisation" updatedAt="01/10/2026">
       <h2>Objet</h2>
       <p>
         Les présentes conditions régissent l&apos;utilisation de DartsOpen, plateforme de
@@ -52,15 +57,16 @@ export default function CguPage() {
         Les paiements d&apos;inscription sont initiés par DartsOpen mais traités et encaissés par
         Stripe via l&apos;infrastructure de paiement de BApps Studio (SterPlatform). DartsOpen
         n&apos;a accès à aucune donnée bancaire et n&apos;intervient pas dans la transaction
-        financière au-delà du prélèvement décrit ci-dessus.
+        financière.
       </p>
 
-      <h2>Annulation et remboursement</h2>
-      <p>
-        La politique d&apos;annulation et de remboursement d&apos;une inscription est définie
-        par l&apos;association organisatrice de chaque tournoi. DartsOpen ne rembourse pas
-        directement les frais de plateforme déjà prélevés, sauf disposition légale contraire.
-      </p>
+      <h2>{t("legal.terms.cancellation.title")}</h2>
+      <p>{t("legal.terms.cancellation.organizerPolicy")}</p>
+      <p>{t("legal.terms.cancellation.cancelledTournament")}</p>
+      {/* DO-UNFINISHED-PURGE-001 (décision Alan 30/09/2026) : information honnête sur la purge
+          planifiée — rappel seulement « lorsque l'organisateur peut être joint » (404 SterPlatform ⇒
+          suppression sans rappel), voir lib/db/unfinishedTournamentPurge.ts. */}
+      <p>{t("legal.terms.cancellation.unfinishedTournamentDeletion")}</p>
 
       <h2>Résultats et classement</h2>
       <p>

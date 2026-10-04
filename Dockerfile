@@ -40,7 +40,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
-COPY --from=builder --chown=nextjs:nodejs /app/lib/generated ./lib/generated
+# `lib/` en entier (pas seulement lib/generated, le client Prisma) : les scripts opérationnels
+# planifiés (ex. purge-expired-contacts.ts, RGPD-001) s'exécutent via `tsx` dans ce conteneur et
+# importent lib/db/* — `next build` n'embarque jamais scripts/ ni leurs dépendances dans .next/.
+# Même choix que BilletAsso (reconcile-pending-orders.ts).
+COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 

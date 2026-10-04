@@ -18,6 +18,26 @@ describe("catalogues i18n", () => {
     expect(isLocale("de")).toBe(false);
   });
 
+  it("CGU : porte mot pour mot la phrase de remboursement décidée par Alan (30/09/2026) et l'information de purge", () => {
+    // Texte contractuel : une reformulation accidentelle doit casser un test, pas passer inaperçue.
+    expect(catalogs.fr["legal.terms.cancellation.cancelledTournament"]).toBe(
+      "Si un tournoi est annulé ou n'a pas lieu, le remboursement des inscriptions relève de l'association organisatrice, seule bénéficiaire des sommes encaissées.",
+    );
+    const purge = catalogs.fr["legal.terms.cancellation.unfinishedTournamentDeletion"];
+    expect(purge).toContain("48 heures après le lendemain de sa date");
+    expect(purge).toContain("Lorsque l'organisateur peut être joint");
+  });
+
+  it("CGU : ne mentionne plus de frais de plateforme prélevés (Q11, décision Alan 01/10/2026)", () => {
+    // DartsOpen ne prélève aucun frais par inscription (PLATFORM_FEE_CENTS = 0) : les CGU ne
+    // doivent pas laisser croire le contraire, dans aucune langue.
+    expect(catalogs.fr["legal.terms.cancellation.organizerPolicy"]).toBe(
+      "La politique d'annulation et de remboursement d'une inscription est définie par l'association organisatrice de chaque tournoi.",
+    );
+    expect(catalogs.en["legal.terms.cancellation.organizerPolicy"]).not.toMatch(/platform fee/i);
+    expect(catalogs.es["legal.terms.cancellation.organizerPolicy"]).not.toMatch(/plataforma/i);
+  });
+
   it("sélectionne la forme plurielle avec un nombre localisé", () => {
     expect(selectPlural("fr", 1, { one: "{count} joueur", other: "{count} joueurs" })).toBe("1 joueur");
     expect(selectPlural("es", 2, { one: "{count} jugador", other: "{count} jugadores" })).toBe("2 jugadores");

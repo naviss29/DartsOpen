@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 import { withTournamentLock, dbPromoteUnassignedMatches } from "@/lib/db/tournament";
 
 /**
@@ -13,7 +13,9 @@ import { withTournamentLock, dbPromoteUnassignedMatches } from "@/lib/db/tournam
  * matchs attendent" (lib/ops/tournamentConsole.ts::detectIncidents) — jamais un second moteur.
  */
 export async function reassignFreeBoards(tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
 
   await withTournamentLock(tournamentId, (tx) => dbPromoteUnassignedMatches(tx, tournamentId, tournament.nb_boards));
 

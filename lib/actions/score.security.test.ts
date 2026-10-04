@@ -22,9 +22,9 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/lib/api/auth", () => ({ getUser: vi.fn() }));
-vi.mock("@/lib/actions/access", () => ({
-  getOwnedTournament: vi.fn(),
-  getOwnedTournamentOrNull: vi.fn(),
+vi.mock("@/lib/auth/organizationAccess", () => ({
+  requireTournamentManager: vi.fn(),
+  isTournamentManager: vi.fn(),
 }));
 vi.mock("@/lib/actions/scoreAuthorization", () => ({
   loadMatchSetChain: vi.fn(),

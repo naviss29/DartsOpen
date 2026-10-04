@@ -31,9 +31,7 @@ import {
   dbListPools,
   dbEraseRegistration,
   dbUpdateRegistration,
-  dbAnonymizeExpiredContacts,
   dbGetTournamentPublic,
-  CONTACT_RETENTION_MONTHS,
 } from "./tournament";
 
 beforeEach(() => {
@@ -236,34 +234,6 @@ describe("dbEraseRegistration (BAPPS-LEGAL-005 §8)", () => {
     expect(data).not.toHaveProperty("platformFeeCents");
     expect(data).not.toHaveProperty("feeCollected");
     expect(data).not.toHaveProperty("qrCodeToken");
-  });
-});
-
-describe("dbAnonymizeExpiredContacts (BAPPS-LEGAL-005 §9 — rétention des coordonnées)", () => {
-  it("purge uniquement les tournois FINISHED de l'organisateur, dont la date dépasse 12 mois, et ne touche jamais le nom/pseudo", async () => {
-    updateManyRegistration.mockResolvedValue({ count: 3 });
-    const now = new Date("2027-01-01T00:00:00.000Z");
-
-    const count = await dbAnonymizeExpiredContacts("user-1", now);
-
-    expect(count).toBe(3);
-    expect(updateManyRegistration).toHaveBeenCalledTimes(1);
-    const call = updateManyRegistration.mock.calls[0][0];
-    expect(call.where.tournament).toEqual(
-      expect.objectContaining({ userId: "user-1", status: "FINISHED" })
-    );
-    expect(call.where.tournament.date.lt.toISOString()).toBe("2026-01-01T00:00:00.000Z");
-    expect(call.data).toEqual({ playerEmail: "", playerPhone: null });
-    expect(call.data).not.toHaveProperty("playerName");
-  });
-
-  it(`calcule le seuil à exactement ${CONTACT_RETENTION_MONTHS} mois avant \`now\``, async () => {
-    const now = new Date("2026-06-15T12:00:00.000Z");
-
-    await dbAnonymizeExpiredContacts("user-1", now);
-
-    const cutoff = updateManyRegistration.mock.calls[0][0].where.tournament.date.lt as Date;
-    expect(cutoff.toISOString()).toBe("2025-06-15T12:00:00.000Z");
   });
 });
 

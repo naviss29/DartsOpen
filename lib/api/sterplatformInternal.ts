@@ -4,7 +4,9 @@
  * lib/api/sterplatform.ts::sendEmail, `ServerTokenAuthenticator` côté SterPlatform accepte
  * un seul jeton par module quel que soit l'endpoint appelé). Remplace toute logique Stripe
  * locale : DartsOpen ne dialogue plus jamais directement avec Stripe, uniquement avec
- * SterPlatform, qui gère Stripe Connect pour le compte de l'organisation.
+ * SterPlatform, qui gère Stripe Connect pour le compte de l'organisation. Porte aussi
+ * `sendEmailToUser` (`/api/email/send-to-user`, hors `/api/internal`) : même jeton de module, et
+ * contrairement à `sendEmail` (lib/api/sterplatform.ts) une issue typée, jamais une exception.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL!;
@@ -177,5 +179,150 @@ export async function refundPayment(paymentId: string): Promise<RefundOutcome> {
     return { outcome: 'FAILED', error: body?.error ?? `Erreur SterPlatform (${res.status})` };
   } catch (err) {
     return { outcome: 'FAILED', error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Issue d'un envoi `send-to-user` — jamais un simple booléen : l'appelant (purge des tournois
+ * non terminés) doit distinguer ce qui autorise une suppression future (SENT uniquement), ce qui
+ * est un problème de données propre à un destinataire (RECIPIENT_NOT_FOUND), ce qui casse TOUS
+ * les envois (CONFIGURATION_ERROR : jeton refusé, template absent) et le reste, transitoire
+ * (FAILED : 400, 5xx, réseau).
+ */
+export type SendEmailToUserOutcome =
+  | { outcome: 'SENT' }
+  | { outcome: 'RECIPIENT_NOT_FOUND' }
+  | { outcome: 'CONFIGURATION_ERROR'; status: number; error: string }
+  | { outcome: 'FAILED'; status?: number; error: string };
+
+/**
+ * `POST /api/email/send-to-user` (EMAIL-SCOPE-001) — envoie un template `dartsopen_*` à UN
+ * utilisateur désigné par son identifiant SterPlatform. DartsOpen ne connaît jamais l'adresse
+ * email du créateur d'un tournoi (ARCH-001 : SterPlatform possède User) ; SterPlatform la résout
+ * et ne la renvoie pas. Même client et même jeton de module (`STER_API_TOKEN`) que les autres
+ * appels serveur-à-serveur : `ServerTokenAuthenticator` accepte un jeton par module, quel que
+ * soit l'endpoint.
+ *
+ * 404 : deux causes à ne pas confondre — `code: USER_NOT_FOUND` (utilisateur inexistant, supprimé
+ * ou membre d'aucune organisation où DartsOpen est actif : propre à CE destinataire) contre un
+ * template introuvable (non seedé côté SterPlatform : casse TOUS les envois → configuration).
+ * Ne lève jamais : toute exception (réseau, JSON) devient FAILED.
+ */
+export async function sendEmailToUser(
+  template: string,
+  userId: string,
+  variables: Record<string, string>,
+): Promise<SendEmailToUserOutcome> {
+  try {
+    const res = await internalFetch('/api/email/send-to-user', {
+      method: 'POST',
+      body: JSON.stringify({ template, userId, variables }),
+    });
+
+    if (res.status === 200) {
+      // Seul un 200 `{"sent":true}` prouve l'envoi : un autre 2xx ou un corps inattendu ne doit
+      // jamais autoriser la suppression d'un tournoi (la règle repose sur un rappel réellement parti).
+      const body = await res.json().catch(() => null) as { sent?: unknown } | null;
+      if (body?.sent === true) return { outcome: 'SENT' };
+      return { outcome: 'FAILED', status: res.status, error: 'Réponse 200 sans confirmation d\'envoi ("sent": true absent).' };
+    }
+
+    const body = await res.json().catch(() => null) as { error?: string; code?: string } | null;
+    const detail = body?.error ?? `HTTP ${res.status}`;
+
+    if (res.status === 404) {
+      if (body?.code === 'USER_NOT_FOUND') return { outcome: 'RECIPIENT_NOT_FOUND' };
+      return { outcome: 'CONFIGURATION_ERROR', status: 404, error: `Template "${template}" introuvable côté SterPlatform (${detail}).` };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return {
+        outcome: 'CONFIGURATION_ERROR',
+        status: res.status,
+        error: `SterPlatform refuse l'appel (${res.status}) : jeton de module STER_API_TOKEN invalide, legacy ou template hors périmètre (${detail}).`,
+      };
+    }
+    return { outcome: 'FAILED', status: res.status, error: `SterPlatform send-to-user ${res.status} : ${detail}` };
+  } catch (err) {
+    return { outcome: 'FAILED', error: `SterPlatform injoignable : ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+/**
+ * Issue d'un envoi `send-to-organization`. Volontairement distincte de `SendEmailToUserOutcome` :
+ * SterPlatform n'y renvoie aucun code machine sur ses 404, et un 422 signifie « aucun
+ * OWNER/ADMIN actif à prévenir ».
+ * - SENT : 200 `{"sent":true}` (au moins un administrateur a reçu l'email) ;
+ * - NOT_FOUND : 404, organisation inconnue OU template non seedé — indiscernables sans analyser
+ *   le message d'erreur (jamais fait ici) ;
+ * - NO_RECIPIENT : 422, organisation sans OWNER/ADMIN actif ;
+ * - CONFIGURATION_ERROR : 401/403 (jeton refusé, jeton legacy, template hors périmètre du module) ;
+ * - FAILED : 400, 5xx, réseau, 200 sans confirmation.
+ */
+export type SendEmailToOrganizationOutcome =
+  | { outcome: 'SENT'; recipientCount: number | null }
+  | { outcome: 'NOT_FOUND'; error: string }
+  | { outcome: 'ORGANIZATION_NOT_FOUND'; error: string }
+  | { outcome: 'NO_RECIPIENT'; error: string }
+  | { outcome: 'CONFIGURATION_ERROR'; status: number; error: string }
+  | { outcome: 'FAILED'; status?: number; error: string };
+
+/**
+ * `POST /api/email/send-to-organization` (EMAIL-SCOPE-001, D6 d'ADR-0021) — envoie un template
+ * `dartsopen_*` à TOUS les OWNER/ADMIN actifs d'une organisation, désignée par son UUID
+ * SterPlatform (`Tournament.organizationId`). Même contrat que celui déjà utilisé par BilletAsso
+ * (`billetasso_remboursement_echoue`) : DartsOpen ne connaît ni ne reçoit aucune adresse
+ * (ARCH-001). Même jeton de module que `sendEmailToUser` (`STER_API_TOKEN`) ; le jeton legacy
+ * est refusé en 403. Ne lève jamais : toute exception (réseau, JSON) devient FAILED.
+ */
+export async function sendEmailToOrganization(
+  template: string,
+  organizationId: string,
+  variables: Record<string, string>,
+): Promise<SendEmailToOrganizationOutcome> {
+  try {
+    const res = await internalFetch('/api/email/send-to-organization', {
+      method: 'POST',
+      body: JSON.stringify({ template, organizationId, variables }),
+    });
+
+    if (res.status === 200) {
+      // Même exigence que send-to-user : seul `sent: true` prouve un envoi réel (la purge ne
+      // supprime un tournoi qu'après un rappel réellement parti).
+      const body = await res.json().catch(() => null) as { sent?: unknown; recipientCount?: unknown } | null;
+      if (body?.sent === true) {
+        return { outcome: 'SENT', recipientCount: typeof body.recipientCount === 'number' ? body.recipientCount : null };
+      }
+      return { outcome: 'FAILED', status: res.status, error: 'Réponse 200 sans confirmation d\'envoi ("sent": true absent).' };
+    }
+
+    const body = await res.json().catch(() => null) as { error?: string; code?: string } | null;
+    const detail = body?.error ?? `HTTP ${res.status}`;
+
+    // Codes machine de SterPlatform (01/10/2026) : seule une organisation réellement disparue
+    // peut entraîner une action destructive côté appelant ; un template manquant est une erreur
+    // de configuration. Un 404 SANS code (SterPlatform plus ancien) reste ambigu : traité comme
+    // un échec ordinaire, jamais comme une organisation disparue.
+    if (res.status === 404 && body?.code === 'ORGANIZATION_NOT_FOUND') {
+      return { outcome: 'ORGANIZATION_NOT_FOUND', error: `Organisation introuvable côté SterPlatform (${detail}).` };
+    }
+    if (res.status === 404 && body?.code === 'TEMPLATE_NOT_FOUND') {
+      return { outcome: 'CONFIGURATION_ERROR', status: 404, error: `Template "${template}" absent de SterPlatform (${detail}).` };
+    }
+    if (res.status === 404) {
+      return { outcome: 'NOT_FOUND', error: `Organisation ou template "${template}" introuvable côté SterPlatform (${detail}).` };
+    }
+    if (res.status === 422) {
+      return { outcome: 'NO_RECIPIENT', error: `Aucun propriétaire ni administrateur actif à prévenir dans l'organisation (${detail}).` };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return {
+        outcome: 'CONFIGURATION_ERROR',
+        status: res.status,
+        error: `SterPlatform refuse l'appel (${res.status}) : jeton de module STER_API_TOKEN invalide, legacy ou template hors périmètre (${detail}).`,
+      };
+    }
+    return { outcome: 'FAILED', status: res.status, error: `SterPlatform send-to-organization ${res.status} : ${detail}` };
+  } catch (err) {
+    return { outcome: 'FAILED', error: `SterPlatform injoignable : ${err instanceof Error ? err.message : String(err)}` };
   }
 }

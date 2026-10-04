@@ -172,6 +172,34 @@ la concurrence PostgreSQL, l'API interne SterPlatform et le webhook de paiements
 
 ---
 
+## Santé et version déployée
+
+| Route | Rôle | Réponse |
+|---|---|---|
+| `GET /api/health` | Liveness du standard (Deployment-Standard §8) : HEALTHCHECK Docker, Coolify, surveillance externe. **Aucune dépendance** (ni base ni SterPlatform). | `200 {"status":"ok","version":"0.1.0+9c2d6a1"}` |
+| `GET /health/live` | Liveness pure | `200 {"status":"ok"}` |
+| `GET /health/ready` | Readiness : PostgreSQL joignable | `200` ou `503` avec `checks.database` |
+
+`version` = version de `package.json` + SHA court du commit, lu au runtime dans `SOURCE_COMMIT`
+(variable prédéfinie injectée par Coolify) ou `APP_COMMIT_SHA` (prioritaire). Sans SHA valide :
+seule la version du package (`lib/deployedVersion.ts`). Vérifier après chaque déploiement que
+le SHA affiché est celui du commit livré.
+
+## Tâches planifiées (Coolify Scheduled Tasks, conteneur DartsOpen)
+
+Aucun scheduler dans l'application : chaque tâche est un script `tsx` lancé par Coolify dans le
+conteneur (staging puis production). Un mode explicite est obligatoire (sans `--dry-run` ni
+`--apply` : refus, code 2). Codes de sortie : 0 succès, 1 échec partiel, 2 usage/config invalide.
+
+| Commande | Rôle | Planification recommandée |
+|---|---|---|
+| `npm run purge:expired-contacts -- --apply` | Vide email/téléphone des inscriptions 12 mois après un tournoi terminé (RGPD-001) | quotidienne, ex. `0 3 * * *` (UTC) |
+| `npm run purge:unfinished-tournaments -- --apply` | Tournoi jamais terminé : rappel au créateur à J+1, puis suppression complète 48 h après le rappel ; créateur introuvable côté SterPlatform (404 `USER_NOT_FOUND` reconfirmé) : suppression sans rappel dès J+1 00:00 UTC + 48 h (DO-UNFINISHED-PURGE-001) | quotidienne, `0 4 * * *` (UTC) — nécessite au runtime `NEXT_PUBLIC_API_URL`, `STER_API_TOKEN`, `NEXT_PUBLIC_APP_URL` ; code 2 = configuration SterPlatform rejetée (voir CLAUDE.md) |
+
+Toujours lancer `-- --dry-run` d'abord (liste ce qui serait envoyé/supprimé, n'écrit rien).
+
+---
+
 ## Variables d'environnement
 
 | Variable | Description |

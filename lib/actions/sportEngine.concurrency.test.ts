@@ -17,13 +17,13 @@ import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
 // réimplémentation) sans dépendre du SSO/cookies : seule la frontière d'autorisation est
 // remplacée par une lecture DB directe, la logique métier de generateBracket() elle-même tourne
 // intégralement, contre le vrai Postgres.
-vi.mock("@/lib/actions/access", async () => {
+vi.mock("@/lib/auth/organizationAccess", async () => {
   const { dbGetTournament } = await import("@/lib/db/tournament");
   return {
-    getOwnedTournament: async (id: string) => {
+    requireTournamentManager: async (id: string) => {
       const t = await dbGetTournament(id);
-      if (!t) throw new Error("Tournoi introuvable (mock getOwnedTournament).");
-      return t;
+      if (!t) throw new Error("Tournoi introuvable (mock requireTournamentManager).");
+      return { ok: true, tournament: t, access: {} };
     },
   };
 });

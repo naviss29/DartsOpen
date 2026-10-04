@@ -1,4 +1,5 @@
 "use client";
+import { bappsAppUrl } from "@/lib/bappsApps";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -6,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import type { MessageKey } from "@/lib/i18n/catalogs";
 
-const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
+const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com"); // portail du même environnement
 
 export const dashboardNavLinks: Array<{
   href: string;

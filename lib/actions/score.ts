@@ -155,7 +155,7 @@ export async function markWinnerDirect(
 
 /**
  * DO-SCORING-001/002, autorisation revue par DO-FIELD-ACCESS-001 — enregistre une volée X01 en
- * mode traditionnel. Organisateur (`getOwnedTournament`, inchangé) OU accès terrain valide pour
+ * mode traditionnel. Organisateur (OWNER/ADMIN de l'organisation du tournoi, `authorizeScoring`) OU accès terrain valide pour
  * CE match (QR de cible scanné, sans compte SterPlatform requis) : la saisie traditionnelle se
  * fait sur l'appareil partagé posé à la cible, potentiellement tenu par un joueur ou un
  * marqueur bénévole plutôt que par l'organisateur en personne (voir le mode ÉLECTRONIQUE pour

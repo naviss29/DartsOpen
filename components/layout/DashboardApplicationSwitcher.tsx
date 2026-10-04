@@ -3,15 +3,17 @@
 import Image from "next/image";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ApplicationSwitcher } from "@naviss29/design-system";
+import { bappsAppUrl } from "@/lib/bappsApps";
 import type { OrganizationProductsSummary } from "@/lib/api/organizations";
 
-const PORTAL_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? "https://bapps-studio.com";
+// Portail : variable dédiée si présente, sinon le portail du même environnement.
+const PORTAL_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com");
 
 const PRODUCTS = [
-  { id: "billetasso", name: "BilletAsso", activationKey: "BILLETASSO", href: "https://billetasso.bapps-studio.com", icon: "/brand/apps/billetasso.svg", descriptionKey: "appSwitcher.billetasso" },
-  { id: "eventmanager", name: "EventManager", activationKey: "EVENTMANAGER", href: "https://eventmanager.bapps-studio.com", icon: "/brand/apps/eventmanager.svg", descriptionKey: "appSwitcher.eventmanager" },
-  { id: "marketplace", name: "Marketplace", activationKey: "MARKETPLACE", href: "https://marketplace.bapps-studio.com", icon: "/brand/apps/marketplace.svg", descriptionKey: "appSwitcher.marketplace" },
-  { id: "connect", name: "Connect", activationKey: "CONNECT", href: "https://connect.bapps-studio.com", icon: "/brand/apps/connect.svg", descriptionKey: "appSwitcher.connect" },
+  { id: "billetasso", name: "BilletAsso", activationKey: "BILLETASSO", href: bappsAppUrl("https://billetasso.bapps-studio.com"), icon: "/brand/apps/billetasso.svg", descriptionKey: "appSwitcher.billetasso" },
+  { id: "eventmanager", name: "EventManager", activationKey: "EVENTMANAGER", href: bappsAppUrl("https://eventmanager.bapps-studio.com"), icon: "/brand/apps/eventmanager.svg", descriptionKey: "appSwitcher.eventmanager" },
+  { id: "marketplace", name: "Marketplace", activationKey: "MARKETPLACE", href: bappsAppUrl("https://marketplace.bapps-studio.com"), icon: "/brand/apps/marketplace.svg", descriptionKey: "appSwitcher.marketplace" },
+  { id: "connect", name: "Connect", activationKey: "CONNECT", href: bappsAppUrl("https://connect.bapps-studio.com"), icon: "/brand/apps/connect.svg", descriptionKey: "appSwitcher.connect" },
   { id: "dartsopen", name: "DartsOpen", activationKey: "DARTSOPEN", href: "/dashboard", icon: "/brand/dartsopen-symbol.svg", descriptionKey: "appSwitcher.dartsopen" },
 ] as const;
 

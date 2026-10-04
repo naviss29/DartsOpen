@@ -7,6 +7,8 @@ import LogoutButton from "@/components/LogoutButton";
 import DashboardApplicationSwitcher from "@/components/layout/DashboardApplicationSwitcher";
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher";
 import { getMyOrganizationsProducts } from "@/lib/api/organizations";
+import { getCurrentOrganization, type CurrentOrganization } from "@/lib/auth/organizationAccess";
+import OrganizationSelector from "@/components/layout/OrganizationSelector";
 
 /**
  * DO-OPS-001 — `LandscapeGuard` (overlay bloquant "Tournez votre téléphone") enveloppait
@@ -21,6 +23,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const user = await getUser();
   if (!user) redirect('/login');
   const organizations = await getMyOrganizationsProducts();
+
+  // ADR-0021 / L6 — organisation active (charte §10.1). Un échec ici ne doit jamais casser tout
+  // le tableau de bord : sans réponse, pas de sélecteur (les pages affichent le message D10).
+  let currentOrganization: CurrentOrganization = { status: "UNAVAILABLE" };
+  try {
+    currentOrganization = await getCurrentOrganization();
+  } catch (err) {
+    console.error("[DashboardLayout] organisation courante indisponible", err);
+  }
+  const organizationChoices = currentOrganization.status === "OK"
+    ? currentOrganization.choices.map(({ id, name, role }) => ({ id, name, role }))
+    : [];
+  const currentOrganizationId = currentOrganization.status === "OK" ? currentOrganization.current?.id ?? null : null;
 
   return (
     <div className="flex min-h-screen bg-brand-light">
@@ -46,7 +61,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
             simple `className` sans effet réel. `z-10` garantit que le header reste au-dessus
             du contenu qui défile sous lui. */}
         <AppHeader
-          start={<DashboardMobileNav />}
+          start={
+            <>
+              <DashboardMobileNav
+                organizationSlot={
+                  <OrganizationSelector organizations={organizationChoices} currentId={currentOrganizationId} variant="drawer" />
+                }
+              />
+              <OrganizationSelector organizations={organizationChoices} currentId={currentOrganizationId} variant="header" />
+            </>
+          }
           className="sticky top-0 z-10"
           end={
             <>

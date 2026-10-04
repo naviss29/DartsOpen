@@ -7,6 +7,8 @@ import { getServerToken } from './auth';
  * par le JWT de l'organisateur (`ster_token`), pas par le jeton serveur-à-serveur.
  */
 export type MyOrganization = {
+  /** UUID SterPlatform — clé d'autorité (Tournament.organizationId), jamais le slug. */
+  id: string;
   slug: string;
   name: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';

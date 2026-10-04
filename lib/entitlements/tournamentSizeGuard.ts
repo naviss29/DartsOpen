@@ -1,7 +1,7 @@
-import { dbGetOrganization } from "@/lib/db/tournament";
 import { hasOptionalSubscriptionAccess } from "@/lib/api/organizations";
 import { consumeTournamentCredit, reconcileTournamentCredit, getTournamentCreditsAvailable } from "@/lib/api/tournamentCredits";
 import { FREE_TIER_MAX_PLAYERS } from "./constants";
+import { resolveBillingOrganizationSlug, type BillingOrganizationSource } from "@/lib/organizations/billingOrganization";
 
 export { FREE_TIER_MAX_PLAYERS };
 
@@ -34,22 +34,24 @@ export type TournamentSizeResolution =
  * DO-AUD-001: "le crédit ne doit devenir définitivement consommé que lorsque le tournoi existe
  * réellement" — see lib/actions/tournament.ts).
  *
- * Réutilise Organization.sterOrganizationSlug (DO-003, lien unique existant vers une
- * organisation SterPlatform, jusqu'ici réservé au seul Stripe Connect) comme unique ancrage
- * pour la monétisation aussi.
+ * ADR-0021 / L7 — abonnement et crédits appartiennent à l'organisation du TOURNOI (ou à
+ * l'organisation courante à la création, `billingSourceForCreation()`), plus à la liaison locale
+ * `Organization.sterOrganizationSlug` du créateur, qui ne sert plus que de repli pour un tournoi
+ * sans organisation (voir lib/organizations/billingOrganization.ts). Un crédit est donc toujours
+ * consommé sur l'organisation qui possède le tournoi, quel que soit l'OWNER/ADMIN qui agit.
  */
-export async function resolveTournamentSizeEntitlement(userId: string): Promise<TournamentSizeResolution> {
-  const org = await dbGetOrganization(userId);
-  if (!org?.sterOrganizationSlug) {
+export async function resolveTournamentSizeEntitlement(source: BillingOrganizationSource): Promise<TournamentSizeResolution> {
+  const slug = await resolveBillingOrganizationSlug(source, { authenticated: true });
+  if (!slug) {
     return { mode: "NONE", reason: "NO_ORGANIZATION" };
   }
 
-  const hasSubscriptionAccess = await hasOptionalSubscriptionAccess(org.sterOrganizationSlug, "DARTSOPEN");
+  const hasSubscriptionAccess = await hasOptionalSubscriptionAccess(slug, "DARTSOPEN");
   if (hasSubscriptionAccess) {
     return { mode: "SUBSCRIPTION" };
   }
 
-  return { mode: "CREDIT_ATTEMPT", organizationSlug: org.sterOrganizationSlug };
+  return { mode: "CREDIT_ATTEMPT", organizationSlug: slug };
 }
 
 /**
@@ -97,16 +99,18 @@ export type TournamentSizeUiState = {
  * Lecture pour l'affichage uniquement (mission §10) — jamais utilisée pour la décision
  * d'autorisation elle-même (voir resolveTournamentSizeEntitlement()/consumeTournamentSizeCredit()).
  */
-export async function getTournamentSizeUiState(userId: string): Promise<TournamentSizeUiState> {
-  const org = await dbGetOrganization(userId);
-  if (!org?.sterOrganizationSlug) {
+export async function getTournamentSizeUiState(source: BillingOrganizationSource | null): Promise<TournamentSizeUiState> {
+  // `source = null` : aucune organisation exploitable (création refusée faute de choix) — même
+  // affichage qu'une absence de liaison, jamais un droit supposé.
+  const slug = source ? await resolveBillingOrganizationSlug(source, { authenticated: true }) : null;
+  if (!slug) {
     return { hasActiveSubscription: false, availableCredits: 0, organizationSlug: null };
   }
 
   const [hasActiveSubscription, availableCredits] = await Promise.all([
-    hasOptionalSubscriptionAccess(org.sterOrganizationSlug, "DARTSOPEN"),
-    getTournamentCreditsAvailable(org.sterOrganizationSlug),
+    hasOptionalSubscriptionAccess(slug, "DARTSOPEN"),
+    getTournamentCreditsAvailable(slug),
   ]);
 
-  return { hasActiveSubscription, availableCredits, organizationSlug: org.sterOrganizationSlug };
+  return { hasActiveSubscription, availableCredits, organizationSlug: slug };
 }

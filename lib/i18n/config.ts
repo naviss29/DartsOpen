@@ -2,6 +2,16 @@ import { catalogs, type Locale } from "./catalogs";
 
 export type { Locale } from "./catalogs";
 export const defaultLocale: Locale = "fr";
+
+/**
+ * Choix de la langue proposé à l'utilisateur (FR / EN / ES).
+ *
+ * Désactivé à la demande d'Alan (03/10/2026) tant que les traductions anglaise et espagnole ne
+ * sont pas finalisées : le sélecteur de langue est masqué et l'application est servie en
+ * français, même si un autre choix avait été enregistré (cookie conservé, il reviendra si on
+ * réactive). Pour réactiver : passer à `true`, rien d'autre à changer.
+ */
+export const LANGUAGE_CHOICE_ENABLED = false;
 export const localeCookieName = "bapps_locale_shared";
 export const legacyLocaleCookieName = "bapps_locale";
 export const supportedLocales = Object.keys(catalogs) as Locale[];

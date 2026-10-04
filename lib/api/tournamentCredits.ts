@@ -5,8 +5,10 @@ import { apiFetch } from "./client";
  * DARTSOPEN-MONETIZATION-001 — client JWT (organisateur authentifié, jamais serveur-à-serveur)
  * vers les routes crédit tournoi de SterPlatform. Contrairement à
  * lib/api/sterplatformInternal.ts (réservé au parcours d'inscription publique, sans JWT), tous
- * les appelants ici s'exécutent après getUser()/getOwnedTournament() — le JWT de la requête
- * courante est donc toujours disponible et correspond à l'organisateur concerné.
+ * les appelants ici s'exécutent après getUser()/requireTournamentManager() — le JWT de la requête
+ * courante est donc toujours disponible (depuis L6, c'est celui d'un OWNER/ADMIN de
+ * l'organisation du tournoi, pas forcément de son créateur ; depuis L7, le slug interrogé est
+ * bien celui de l'organisation du tournoi, voir lib/organizations/billingOrganization.ts).
  */
 
 /**

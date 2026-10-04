@@ -13,7 +13,7 @@ import {
   dbAddRound,
   dbDeleteRound,
 } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager, resolveTournamentCreationTarget } from "@/lib/auth/organizationAccess";
 import { isOnlinePaymentAllowed, wantsOnlinePayment, ONLINE_PAYMENT_BLOCKED_MESSAGE } from "@/lib/payments/onlinePaymentGuard";
 import {
   resolveTournamentSizeEntitlement,
@@ -23,6 +23,7 @@ import {
   TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ENTITLEMENT,
 } from "@/lib/entitlements/tournamentSizeGuard";
 import { DEFAULT_MAX_PLAYERS, DEFAULT_NB_POOLS, DEFAULT_NB_BOARDS } from "@/lib/tournament/defaults";
+import { billingSourceForCreation, billingSourceForTournament } from "@/lib/organizations/billingOrganization";
 
 // DARTSOPEN-MONETIZATION-003 (P5, contre-audit) — message renvoyé quand la réconciliation
 // (voir retryTournamentEntitlementConfirmation() et createTournament() ci-dessous) ne peut
@@ -116,15 +117,6 @@ export async function createTournament(prevState: TournamentState, formData: For
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: raw, ts: Date.now() };
   }
 
-  // DO-PAYMENT-GUARD-001 : le paiement en ligne n'est proposable que si l'organisation a un
-  // Stripe Connect réellement opérationnel — vérifié ici, avant toute écriture, jamais après.
-  if (wantsOnlinePayment(parsed.data)) {
-    const authorization = await isOnlinePaymentAllowed(user.id);
-    if (!authorization.allowed) {
-      return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
-    }
-  }
-
   // DARTSOPEN-MONETIZATION-002 (audit DO-AUD-001/DO-AUD-002) — clé d'idempotence stable générée
   // une seule fois côté client (TournamentForm.tsx, à l'instanciation du formulaire, jamais
   // régénérée par requête) : un double-clic ou une relance réseau soumet la même clé, jamais une
@@ -133,6 +125,30 @@ export async function createTournament(prevState: TournamentState, formData: For
   const idempotencyKey = (formData.get("idempotency_key") as string | null)?.trim() ?? "";
   if (!idempotencyKey) {
     return { error: "Requête invalide — rechargez la page et réessayez.", fields: raw, ts: Date.now() };
+  }
+
+  // ADR-0021 / L6 — le tournoi naît dans l'organisation COURANTE, si l'utilisateur y est
+  // OWNER/ADMIN (revérifié auprès de SterPlatform, jamais une valeur du formulaire). Un compte
+  // sans vraie organisation crée encore « à l'ancienne » tant que D3 le permet (voir
+  // LEGACY_CREATION_WITHOUT_ORGANIZATION_ALLOWED). Décidé AVANT toute écriture.
+  const target = await resolveTournamentCreationTarget();
+  if (!target.ok) {
+    return { error: target.error, fields: raw, ts: Date.now() };
+  }
+
+  // ADR-0021 / L7 — paiement en ligne et crédits se lisent dans l'organisation où le tournoi va
+  // naître (`target`), plus dans la liaison locale du créateur (BUG-4) ; repli sur cette liaison
+  // seulement pour une création sans organisation (D3). D'où la résolution de `target` AVANT ces
+  // contrôles : on ne peut pas vérifier le Stripe Connect d'une organisation pas encore choisie.
+  const billingSource = billingSourceForCreation(user.id, target.organization);
+
+  // DO-PAYMENT-GUARD-001 : le paiement en ligne n'est proposable que si l'organisation a un
+  // Stripe Connect réellement opérationnel — vérifié ici, avant toute écriture, jamais après.
+  if (wantsOnlinePayment(parsed.data)) {
+    const authorization = await isOnlinePaymentAllowed(billingSource);
+    if (!authorization.allowed) {
+      return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
+    }
   }
 
   // DARTSOPEN-MONETIZATION-001/002 : au-delà de 10 joueurs, un abonnement actif ou un crédit
@@ -145,7 +161,7 @@ export async function createTournament(prevState: TournamentState, formData: For
   // encore été touché à ce stade).
   let creditToConsume: { organizationSlug: string } | null = null;
   if (requiresEntitlementCheck(parsed.data.max_players, 0)) {
-    const entitlement = await resolveTournamentSizeEntitlement(user.id);
+    const entitlement = await resolveTournamentSizeEntitlement(billingSource);
     if (entitlement.mode === "NONE") {
       return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION, fields: raw, ts: Date.now() };
     }
@@ -167,6 +183,7 @@ export async function createTournament(prevState: TournamentState, formData: For
     parsed.data,
     idempotencyKey,
     creditToConsume ? "PENDING_ENTITLEMENT" : "DRAFT",
+    target.organization,
   ).catch((err) => {
     console.error('[createTournament]', err);
     return null;
@@ -229,14 +246,19 @@ export async function createTournament(prevState: TournamentState, formData: For
  * même référence que celle déjà tentée par createTournament() pour ce tournoi.
  */
 export async function retryTournamentEntitlementConfirmation(tournamentId: string): Promise<{ error?: string } | void> {
-  const tournament = await getOwnedTournament(tournamentId) as { status: string; association_id: string };
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
 
   if (tournament.status !== "PENDING_ENTITLEMENT") {
     revalidatePath(`/tournaments/${tournamentId}`);
     return;
   }
 
-  const entitlement = await resolveTournamentSizeEntitlement(tournament.association_id);
+  // ADR-0021 / L7 — crédits/abonnement de l'organisation du TOURNOI (celle sur laquelle
+  // createTournament() a déjà tenté la consommation, même référence `tournamentId`), quel que
+  // soit l'OWNER/ADMIN qui relance ; repli sur la liaison du créateur sans organisation.
+  const entitlement = await resolveTournamentSizeEntitlement(billingSourceForTournament(tournament));
   if (entitlement.mode === "NONE") {
     return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION };
   }
@@ -266,9 +288,11 @@ export async function retryTournamentEntitlementConfirmation(tournamentId: strin
 
 export async function updateTournament(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
-  const tournament = await getOwnedTournament(tournamentId);
-
   const raw = extractTournamentRaw(formData);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error, fields: raw, ts: Date.now() };
+  const tournament = guard.tournament;
+
   const parsed = TournamentSchema.safeParse(raw);
 
   if (!parsed.success) {
@@ -280,7 +304,9 @@ export async function updateTournament(prevState: TournamentState, formData: For
   // l'avait déjà (une organisation dont Stripe a été suspendu ne doit pas pouvoir
   // re-confirmer/étendre une configuration payante par une simple modification).
   if (wantsOnlinePayment(parsed.data)) {
-    const authorization = await isOnlinePaymentAllowed(tournament.association_id);
+    // ADR-0021 / L7 — Stripe Connect de l'organisation du tournoi (celle qui encaissera), pas
+    // celui de la liaison locale du créateur : un ADMIN non créateur voit le même état que BSsite.
+    const authorization = await isOnlinePaymentAllowed(billingSourceForTournament(tournament));
     if (!authorization.allowed) {
       return { error: ONLINE_PAYMENT_BLOCKED_MESSAGE, fields: raw, ts: Date.now() };
     }
@@ -294,7 +320,7 @@ export async function updateTournament(prevState: TournamentState, formData: For
   // réel du tournoi, stable d'une relance à l'autre par construction) sert directement de
   // référence idempotente, sans clé séparée à générer.
   if (requiresEntitlementCheck(parsed.data.max_players, tournament.max_players)) {
-    const entitlement = await resolveTournamentSizeEntitlement(tournament.association_id);
+    const entitlement = await resolveTournamentSizeEntitlement(billingSourceForTournament(tournament));
     if (entitlement.mode === "NONE") {
       return { error: TOURNAMENT_SIZE_BLOCKED_MESSAGE_NO_ORGANIZATION, fields: raw, ts: Date.now() };
     }
@@ -325,7 +351,8 @@ export async function updateTournamentStatus(
   tournamentId: string,
   status: string
 ): Promise<{ error?: string } | void> {
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const ok = await dbUpdateTournamentStatus(tournamentId, status).catch((err) => {
     console.error("[updateTournamentStatus]", err);
@@ -338,7 +365,8 @@ export async function updateTournamentStatus(
 
 export async function addRound(prevState: TournamentState, formData: FormData): Promise<TournamentState> {
   const tournamentId = formData.get("tournament_id") as string;
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const parsed = RoundSchema.safeParse({
     game_type: formData.get("game_type"),
@@ -357,7 +385,9 @@ export async function addRound(prevState: TournamentState, formData: FormData): 
 }
 
 export async function deleteRound(roundId: string, tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
   if (tournament.status !== "DRAFT") {
     return { error: "Impossible de supprimer une manche une fois les inscriptions ouvertes." };
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { dashboardNavLinks, navIcons } from "@/components/layout/DashboardSidebar";
@@ -31,7 +31,7 @@ import { useI18n } from "@/components/i18n/I18nProvider";
  * `Dialog`/`ConfirmDialog` du design system, jamais une nouvelle couleur). Chaque lien referme
  * le panneau à la sélection (comportement déjà existant, conservé).
  */
-export default function DashboardMobileNav() {
+export default function DashboardMobileNav({ organizationSlot }: { organizationSlot?: ReactNode } = {}) {
   const [open, setOpen] = useState(false);
   const { t } = useI18n();
 
@@ -96,6 +96,9 @@ export default function DashboardMobileNav() {
                 <span className="sr-only">{t("nav.close")}</span>
               </Button>
             </div>
+
+            {/* ADR-0021 / L6 — organisation active : première information du drawer (charte §4.1). */}
+            {organizationSlot}
 
             <div className="flex flex-col gap-1 px-3 py-4">
               {dashboardNavLinks.map((link) => (

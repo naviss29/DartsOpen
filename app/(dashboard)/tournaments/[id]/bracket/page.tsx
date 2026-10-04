@@ -4,7 +4,8 @@ import { generateQuickBracket } from "@/lib/actions/quickTournament";
 import { BracketView } from "@/components/tournament/BracketView";
 import { QuickBracketView } from "@/components/tournament/QuickBracketView";
 import { dbListMatches } from "@/lib/db/tournament";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentReader } from "@/lib/auth/organizationAccess";
+import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import Button from "@/components/ui/Button";
 import NavPills from "@/components/ui/NavPills";
 import { LandscapeGuard } from "@/components/ui/LandscapeGuard";
@@ -43,7 +44,9 @@ type BracketMatch = {
 export default async function BracketPage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = await getOwnedTournament(id) as Tournament;
+  const access = await requireTournamentReader(id);
+  const tournament = access.tournament as Tournament;
+  const canManage = access.canManage;
   if (!["IN_PROGRESS", "FINISHED"].includes(tournament.status)) {
     redirect(`/tournaments/${id}/pools`);
   }
@@ -57,7 +60,10 @@ export default async function BracketPage({ params }: Props) {
     : poolMatches.length === 0 || poolMatches.some((m) => m.status !== "FINISHED");
 
   // Auto-génération du bracket pour les tournois à poule unique (mode STANDARD uniquement)
+  // Écriture déclenchée par le simple affichage : réservée à un gestionnaire (un MEMBER qui ouvre
+  // la page ne doit rien générer, generateBracket le refuserait de toute façon).
   if (
+    canManage &&
     !tournament.quick_mode &&
     tournament.nb_pools === 1 &&
     tournament.status === "IN_PROGRESS" &&
@@ -155,7 +161,7 @@ export default async function BracketPage({ params }: Props) {
           )}
         </div>
 
-        {tournament.status === "IN_PROGRESS" && !hasBracket && (
+        {canManage && tournament.status === "IN_PROGRESS" && !hasBracket && (
           <div className="flex flex-col items-end gap-2">
             {tournament.quick_mode ? (
               <form action={doGenerateQuickBracket}>
@@ -184,7 +190,9 @@ export default async function BracketPage({ params }: Props) {
       </div>
 
       {/* Bouton "Tour suivant" uniquement en mode standard */}
-      {!tournament.quick_mode && hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS" && (
+      {!canManage && <ReadOnlyNotice />}
+
+      {canManage && !tournament.quick_mode && hasBracket && currentRoundFinished && !tournamentFinished && tournament.status === "IN_PROGRESS" && (
         <div className="flex justify-end">
           <form action={doAdvanceToNextRound}>
             <Button type="submit">Tour suivant →</Button>
@@ -208,7 +216,8 @@ export default async function BracketPage({ params }: Props) {
             // QuickBracketView), jamais un arbre large : contrairement à BracketView
             // ci-dessous, cette vue est déjà utilisable en portrait, l'arbitrage ne doit
             // donc jamais être bloqué par LandscapeGuard.
-            <QuickBracketView matches={bracketMatches} tournamentId={id} />
+            // tournamentId absent ⇒ pas de bouton d'arbitrage (même convention que la vue publique).
+            <QuickBracketView matches={bracketMatches} tournamentId={canManage ? id : undefined} />
           ) : (
             // Arbre à largeur fixe (CARD_W/CONN_W, overflow-x-auto) — seule vue
             // effectivement optimisée pour le paysage, voir mobile.test.ts.
@@ -216,7 +225,7 @@ export default async function BracketPage({ params }: Props) {
               <BracketView
                 matches={bracketMatches}
                 maxRound={maxRound}
-                tournamentId={id}
+                tournamentId={canManage ? id : undefined}
               />
             </LandscapeGuard>
           )}

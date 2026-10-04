@@ -9,6 +9,7 @@ vi.mock("@/lib/actions/organization", () => ({
 
 function org(overrides: Partial<MyOrganization>): MyOrganization {
   return {
+    id: "org-uuid-1",
     slug: "dartsopen-club",
     name: "DartsOpen Club",
     role: "OWNER",

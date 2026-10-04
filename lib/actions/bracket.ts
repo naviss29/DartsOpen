@@ -1,7 +1,7 @@
 "use server";
 
 import { seedBracket } from "@/lib/utils/bracket";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 import {
   dbBulkCreateMatches,
   bulkCreateMatchesTx,
@@ -18,7 +18,9 @@ import {
  * filet de sécurité DB si ce raisonnement applicatif avait un trou.
  */
 export async function generateBracket(tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
 
   const advancingPlayers = await getAdvancingPlayerIds(tournamentId, tournament);
 
@@ -72,7 +74,8 @@ export async function advanceToNextRound(
   tournamentId: string,
   currentBracketRound: number
 ): Promise<{ error?: string; finished?: boolean }> {
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   return doAdvanceToNextRound(tournamentId, currentBracketRound);
 }

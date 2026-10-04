@@ -11,7 +11,7 @@ import {
 } from "@/lib/db/tournament";
 import { PLATFORM_FEE_CENTS } from "@/lib/platformFee";
 import { sendEmail } from "@/lib/api/sterplatform";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 
 // Email facultatif : les tournois rapides n'ont pas de champ email dans le formulaire.
 // La chaîne vide "" est acceptée (valeur soumise par un <input type="hidden"> absent).
@@ -66,12 +66,12 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
     return { errors: parsed.error.flatten().fieldErrors as Record<string, string[]>, fields: rawFields, ts: Date.now() };
   }
 
-  // Correctif de sécurité (30/09/2026) : cette Server Action n'avait aucun contrôle d'accès,
-  // alors qu'elle crée une inscription marquée PAID sans paiement. Une Server Action est
-  // appelable directement par son identifiant, sans passer par la page : n'importe qui pouvait
-  // donc remplir le tournoi d'un autre organisateur. Même garde que les autres actions de ce
-  // fichier (redirection vers /login si non connecté, 404 si pas le propriétaire).
-  const tournament = await getOwnedTournament(parsed.data.tournament_id);
+  // ADR-0021 / L6 — l'ajout manuel crée une inscription PAID sans paiement : c'est une action
+  // de gestion (OWNER/ADMIN), pas l'inscription publique (createRegistration). Elle n'avait
+  // aucune garde jusqu'ici ; un MEMBER (lecture seule) ou un extérieur ne doit pas pouvoir l'appeler.
+  const guard = await requireTournamentManager(parsed.data.tournament_id);
+  if (!guard.ok) return { error: guard.error, fields: rawFields, ts: Date.now() };
+  const tournament = guard.tournament;
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     return { error: "Les inscriptions sont fermées pour ce tournoi." };
   }
@@ -125,7 +125,8 @@ export async function setSeedStatus(
   tournamentId: string,
   seeded: boolean
 ): Promise<{ error?: string }> {
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const ok = await dbSetSeeded(registrationId, tournamentId, seeded).then(() => true).catch(() => null);
   if (!ok) return { error: "Erreur lors de la mise à jour." };
@@ -134,7 +135,9 @@ export async function setSeedStatus(
 }
 
 export async function removePlayer(registrationId: string, tournamentId: string): Promise<{ error?: string }> {
-  const tournament = await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
+  const tournament = guard.tournament;
   if (!["DRAFT", "OPEN"].includes(tournament.status)) {
     return { error: "Impossible de retirer un joueur une fois le tournoi démarré." };
   }
@@ -158,7 +161,8 @@ export async function updateRegistration(
   tournamentId: string,
   data: { playerName: string; playerEmail: string; playerPhone: string; playerNames: string[] }
 ): Promise<{ error?: string }> {
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const playerName = data.playerName.trim();
   if (playerName.length < 2) {
@@ -189,7 +193,8 @@ export async function updateRegistration(
  * suppression réelle vs anonymisation. Disponible à tout statut de tournoi.
  */
 export async function eraseRegistration(registrationId: string, tournamentId: string): Promise<{ error?: string }> {
-  await getOwnedTournament(tournamentId);
+  const guard = await requireTournamentManager(tournamentId);
+  if (!guard.ok) return { error: guard.error };
 
   const result = await dbEraseRegistration(registrationId, tournamentId).catch(() => null);
   if (!result) return { error: "Erreur lors de l'effacement des données." };

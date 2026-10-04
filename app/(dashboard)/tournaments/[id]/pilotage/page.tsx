@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Alert, Card, EmptyState, Pill } from "@naviss29/design-system";
-import { getOwnedTournament } from "@/lib/actions/access";
+import { requireTournamentReader } from "@/lib/auth/organizationAccess";
+import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import { loadTournamentConsoleData } from "@/lib/ops/loadConsoleData";
 import {
   buildConsoleSummary,
@@ -41,7 +42,7 @@ type Tournament = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const tournament = (await getOwnedTournament(id)) as Tournament;
+  const { tournament } = await requireTournamentReader(id);
   return { title: `Pilotage — ${tournament.name} — DartsOpen` };
 }
 
@@ -67,7 +68,9 @@ const BOARD_STYLES: Record<BoardStatus, string> = {
 export default async function TournamentPilotagePage({ params }: Props) {
   const { id } = await params;
 
-  const tournament = (await getOwnedTournament(id)) as Tournament;
+  const access = await requireTournamentReader(id);
+  const tournament = access.tournament as Tournament;
+  const canManage = access.canManage;
 
   // DO-OPS-002 (défaut 2) — la console agrège l'existant : mêmes fonctions db* que le reste du
   // dashboard (page.tsx, players/page.tsx, pools/page.tsx), jamais une seconde source de vérité.
@@ -113,6 +116,8 @@ export default async function TournamentPilotagePage({ params }: Props) {
         />
       </div>
 
+      {!canManage && <ReadOnlyNotice />}
+
       {/* ── Vue synthétique (§3) ─────────────────────────────────────────── */}
       <Card className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -121,14 +126,14 @@ export default async function TournamentPilotagePage({ params }: Props) {
             <StatusBadge status={tournament.status} />
             {tournament.quick_mode && <Pill tone="success">⚡ Rapide</Pill>}
           </div>
-          {NEXT_STATUS[tournament.status] && !closureBlocked && (
+          {canManage && NEXT_STATUS[tournament.status] && !closureBlocked && (
             <TournamentStatusButton
               tournamentId={id}
               nextStatus={NEXT_STATUS[tournament.status]}
               label={NEXT_STATUS_LABEL[tournament.status]}
             />
           )}
-          {closureBlocked && (
+          {canManage && closureBlocked && (
             <p className="text-xs text-brand-text-secondary text-right max-w-[200px]">
               Clôture indisponible : {summary.matchesInProgress} match(s) en cours, {summary.matchesPending} en attente.
             </p>
@@ -168,7 +173,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
         <p className="text-xs font-medium uppercase tracking-wider text-brand-text-secondary">Que dois-je faire maintenant ?</p>
         <p className="mt-1 text-lg font-bold text-brand-dark">{nextAction.title}</p>
         <p className="mt-1 text-sm text-brand-text-secondary">{nextAction.description}</p>
-        {nextAction.href && (
+        {canManage && nextAction.href && (
           <div className="mt-3">
             <Button href={nextAction.href} variant="primary">
               Ouvrir
@@ -183,7 +188,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
           <h2 className="text-h2 text-brand-dark">Interventions demandées ({openFieldIncidents.length})</h2>
           <div className="space-y-2">
             {openFieldIncidents.map((fi) => (
-              <FieldIncidentCard key={fi.id} tournamentId={id} incident={fi} />
+              <FieldIncidentCard key={fi.id} tournamentId={id} incident={fi} readOnly={!canManage} />
             ))}
           </div>
         </section>
@@ -196,7 +201,7 @@ export default async function TournamentPilotagePage({ params }: Props) {
           {incidents.map((incident) => (
             <Alert key={incident.id} tone={incident.severity === "critical" ? "error" : "warning"}>
               <p>{incident.message}</p>
-              {incident.id === "free-board-with-queue" && (
+              {canManage && incident.id === "free-board-with-queue" && (
                 <div className="mt-2">
                   <ReassignBoardsButton tournamentId={id} />
                 </div>
@@ -253,12 +258,15 @@ export default async function TournamentPilotagePage({ params }: Props) {
                       <p className="text-sm text-brand-dark">
                         {b.match.player1?.player_name ?? "?"} <span className="text-brand-text-secondary">vs</span> {b.match.player2?.player_name ?? "?"}
                       </p>
+                      {/* Scoring organisateur et accès arbitre (D7) : gestionnaires uniquement. */}
+                      {canManage && (
                       <div className="flex flex-wrap gap-2 pt-1">
                         <Button href={`/t/${id}/score?board=${b.board}`} variant="secondary">
                           Scoring
                         </Button>
                         <RefereeAccessButton tournamentId={id} board={b.board} />
                       </div>
+                      )}
                     </>
                   ) : (
                     <>

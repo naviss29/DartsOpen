@@ -15,6 +15,7 @@ import * as path from "path";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../lib/generated/prisma/client";
+import { effectiveOrganizationId } from "../lib/auth/legacyOrganizations";
 
 const envPath = path.resolve(process.cwd(), ".env.local");
 if (fs.existsSync(envPath)) {
@@ -54,7 +55,7 @@ async function getStripeConnectStatus(slug: string): Promise<StripeConnectStatus
 async function main() {
   const onlinePaidTournaments = await prisma.tournament.findMany({
     where: { registrationMode: "ONLINE", entryFee: { gt: 0 } },
-    select: { id: true, name: true, status: true, entryFee: true, userId: true },
+    select: { id: true, name: true, status: true, entryFee: true, userId: true, organizationId: true, organizationSlug: true },
   });
 
   console.log(`Tournois configurés en paiement en ligne (registration_mode=ONLINE, entry_fee>0) : ${onlinePaidTournaments.length}`);
@@ -71,8 +72,16 @@ async function main() {
   });
   const orgByUserId = new Map(organizations.map((o) => [o.userId, o.sterOrganizationSlug]));
 
+  // ADR-0021 / L7 — même règle que l'application : l'organisation du tournoi encaisse ; la
+  // liaison locale du créateur ne vaut que pour un tournoi sans organisation (ou rattaché à une
+  // organisation héritée partagée). Sinon l'audit signalerait à tort des tournois rattachés.
+  const slugOf = (t: (typeof onlinePaidTournaments)[number]): string | null =>
+    effectiveOrganizationId({ organization_id: t.organizationId, organization_slug: t.organizationSlug })
+      ? t.organizationSlug
+      : orgByUserId.get(t.userId) ?? null;
+
   // Un seul appel SterPlatform par organisation distincte, jamais un appel par tournoi.
-  const uniqueSlugs = [...new Set([...orgByUserId.values()].filter((s): s is string => !!s))];
+  const uniqueSlugs = [...new Set(onlinePaidTournaments.map(slugOf).filter((s): s is string => !!s))];
   const statusBySlug = new Map<string, StripeConnectStatus | null>();
   for (const slug of uniqueSlugs) {
     statusBySlug.set(slug, await getStripeConnectStatus(slug).catch((err) => {
@@ -85,7 +94,7 @@ async function main() {
   const noOrganization: typeof onlinePaidTournaments = [];
 
   for (const t of onlinePaidTournaments) {
-    const slug = orgByUserId.get(t.userId);
+    const slug = slugOf(t);
     if (!slug) {
       noOrganization.push(t);
       continue;
@@ -104,7 +113,7 @@ async function main() {
 
   console.log(`\nTournois payables en ligne dont l'organisation n'a PAS Stripe Connect opérationnel : ${inconsistent.length}`);
   for (const t of inconsistent) {
-    const slug = orgByUserId.get(t.userId);
+    const slug = slugOf(t);
     const status = slug ? statusBySlug.get(slug) : null;
     console.log(
       `  - ${t.id} "${t.name}" (statut ${t.status}, ${(t.entryFee / 100).toFixed(2)} €/joueur, organisation=${slug}, ` +
