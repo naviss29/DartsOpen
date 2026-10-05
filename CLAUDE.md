@@ -333,6 +333,17 @@ l'inscription publique, `["DRAFT","OPEN"]` pour l'ajout organisateur). Règle de
 qui laissait passer une équipe de trop quand `maxPlayers` n'est pas un multiple de
 `playersPerTeam`).
 
+**Inscription publique (F17/F18, audit du 04/10/2026)** — `createRegistration()` passe
+`{ publicRegistration: true }` : sous le même verrou, `dbReserveRegistrationSlot()` refuse
+`ONLINE_REGISTRATION_DISABLED` si `registrationMode` n'est pas `ONLINE` (la page publique masque le
+formulaire, mais une Server Action s'appelle directement) et `INVALID_TEAM_SIZE` si le nombre de
+noms n'est pas exactement `playersPerTeam` (relu sous verrou). Le schéma borne le tableau à 10 noms
+(borne de `players_per_team` à la création). L'ajout organisateur (`addPlayer`) n'est pas concerné.
+Avant toute lecture, l'action applique une limite propre (`checkRateLimit`, clé
+`registration:<IP>:<tournoi>`, 10 tentatives / 10 min, valides ou non ; fail-open si la table est
+indisponible) en plus de la limite générale du proxy sur `/t/`. Messages `registration.*` FR/EN/ES.
+Tests : `lib/actions/registration.test.ts`, `lib/db/registrationGuards.db.test.ts` (vrai PostgreSQL).
+
 Mais un paiement en ligne peut arriver **après** l'expiration de sa réservation (place reprise
 par quelqu'un d'autre) ou **après** le démarrage du tournoi (`IN_PROGRESS`) — `dbConfirmPendingPayment()`
 (`lib/db/tournament.ts`) est le seul point qui peut faire passer une inscription PENDING → PAID
