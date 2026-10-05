@@ -12,7 +12,9 @@ import { billingSourceForTournament, resolveBillingOrganizationSlug } from "@/li
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { immediatePaymentKind } from "@/lib/registration/successPayment";
+import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 import { getI18n } from "@/lib/i18n/server";
 
 /**
@@ -31,6 +33,14 @@ const RESERVATION_TTL_MINUTES = 30;
  * (dbReserveRegistrationSlot) ; cette borne empêche seulement d'envoyer un tableau démesuré.
  */
 const MAX_PLAYER_NAMES = 10;
+
+/**
+ * F18 (audit 04/10/2026) — limite propre à l'action d'inscription publique, en plus de la
+ * limite générale du proxy sur /t/ (300 requêtes / 5 min / IP, qui laisse passer des centaines de
+ * soumissions). Clé = IP + tournoi : un même club peut inscrire plusieurs équipes, mais un robot
+ * ne peut pas remplir un tournoi (ni multiplier les sessions de paiement). Seuil ajustable.
+ */
+const REGISTRATION_RATE_LIMIT = { windowMs: 10 * 60_000, max: 10 };
 
 // Sécurité pré-recette (S3) — createRegistration() est la seule Server Action véritablement
 // publique et non authentifiée du produit (auto-inscription) : avant ce schéma, seul le
@@ -58,6 +68,21 @@ export async function createRegistration(
   phone: string | null,
   playerNames: string[]
 ): Promise<{ error?: string }> {
+  // F18 — avant toute lecture ou écriture : chaque tentative compte, valide ou non. Le limiteur
+  // est fail-open si sa table est indisponible (voir lib/rateLimit.ts), il ne bloque donc jamais
+  // une inscription légitime à cause d'une panne.
+  let ip = "unknown";
+  try {
+    ip = clientIp(await headers());
+  } catch (err) {
+    console.error("[createRegistration] En-têtes de requête illisibles, limite appliquée à la clé « unknown »:", err);
+  }
+  const limit = await checkRateLimit(`registration:${ip}:${tournamentId}`, REGISTRATION_RATE_LIMIT);
+  if (!limit.allowed) {
+    const { t } = await getI18n();
+    return { error: t("registration.rateLimited", { minutes: Math.max(1, Math.ceil(limit.retryAfterSeconds / 60)) }) };
+  }
+
   const parsed = RegistrationSchema.safeParse({ teamName, contactEmail, phone, playerNames });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données d'inscription invalides." };
