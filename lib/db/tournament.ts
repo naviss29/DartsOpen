@@ -732,7 +732,11 @@ export type ReserveSlotResult =
   | { outcome: "RESERVED"; registration: ReturnType<typeof mapRegistration> }
   | { outcome: "FULL" }
   | { outcome: "NOT_OPEN" }
-  | { outcome: "NOT_FOUND" };
+  | { outcome: "NOT_FOUND" }
+  /** F17 — inscription publique sur un tournoi en inscription sur place (registration_mode ONSITE). */
+  | { outcome: "ONLINE_REGISTRATION_DISABLED" }
+  /** F17 — inscription publique dont le nombre de noms ne correspond pas à playersPerTeam. */
+  | { outcome: "INVALID_TEAM_SIZE"; expected: number };
 
 /**
  * DARTSOPEN-MONETIZATION-002/004 (audit DO-AUD-003/DO-AUD-004/DO-AUD-009, contre-audit P3/P4) —
@@ -764,6 +768,13 @@ export type ReserveSlotResult =
  * maxPlayers` (the old formula only checked capacity *before* adding this registration, so with
  * e.g. maxPlayers=10/playersPerTeam=3, three teams already in — 9 players — a fourth team was
  * wrongly accepted, reaching 12).
+ *
+ * F17 (audit 04/10/2026) — `options.publicRegistration` (auto-inscription publique uniquement) :
+ * refuse aussi, sous le même verrou, un tournoi dont `registrationMode` n'est pas ONLINE (la page
+ * publique masque le formulaire, mais une Server Action s'appelle directement) et une liste de
+ * noms dont la taille n'est pas exactement `playersPerTeam` (lu ici, jamais la valeur de
+ * l'appelant : l'organisateur peut l'avoir modifié entre-temps). L'ajout organisateur n'est pas
+ * concerné (inscription sur place par construction).
  */
 export async function dbReserveRegistrationSlot(
   tournamentId: string,
@@ -777,6 +788,7 @@ export async function dbReserveRegistrationSlot(
     status: "PAID" | "PENDING";
     reservationExpiresAt?: Date | null;
   },
+  options: { publicRegistration?: boolean } = {},
 ): Promise<ReserveSlotResult> {
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM tournaments WHERE id = ${tournamentId} FOR UPDATE`;
@@ -784,6 +796,12 @@ export async function dbReserveRegistrationSlot(
     const tournament = await tx.tournament.findUnique({ where: { id: tournamentId } });
     if (!tournament) return { outcome: "NOT_FOUND" };
     if (!allowedStatuses.includes(tournament.status)) return { outcome: "NOT_OPEN" };
+    if (options.publicRegistration) {
+      if (tournament.registrationMode !== "ONLINE") return { outcome: "ONLINE_REGISTRATION_DISABLED" };
+      if (data.playerNames.length !== tournament.playersPerTeam) {
+        return { outcome: "INVALID_TEAM_SIZE", expected: tournament.playersPerTeam };
+      }
+    }
 
     const now = new Date();
     const occupied = await tx.registration.count({
