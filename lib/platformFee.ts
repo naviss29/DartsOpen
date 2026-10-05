@@ -10,5 +10,9 @@
  * économique repose exclusivement sur la limite gratuite (≤10 joueurs) et le crédit
  * tournoi/abonnement au-delà (DARTSOPEN-MONETIZATION-001). Auparavant 10 (0,10 €/joueur),
  * jamais réellement retiré depuis son introduction (DO-003) malgré cette décision.
+ *
+ * ADR-0022 (05/10/2026) : les inscriptions sont encaissées directement sur le compte Stripe de
+ * l'organisation et BApps ne prélève AUCUNE commission sur une vente — cette valeur doit rester
+ * à 0 (garde-fou : platformFee.test.ts). La lever exigerait une nouvelle décision du fondateur.
  */
 export const PLATFORM_FEE_CENTS = 0;

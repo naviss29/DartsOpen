@@ -38,6 +38,16 @@ describe("catalogues i18n", () => {
     expect(catalogs.es["legal.terms.cancellation.organizerPolicy"]).not.toMatch(/plataforma/i);
   });
 
+  it("CGU : l'argent des inscriptions va directement à l'organisation, jamais via BApps (ADR-0022)", () => {
+    expect(catalogs.fr["legal.terms.payment.body"]).toContain("directement par Stripe sur le compte Stripe de l'association organisatrice");
+    expect(catalogs.fr["legal.terms.payment.body"]).toContain("ne transite jamais par DartsOpen ni par BApps Studio");
+    for (const locale of ["fr", "en", "es"] as const) {
+      // « reversé » laisserait croire que l'argent passe d'abord par BApps.
+      expect(catalogs[locale]["legal.terms.fees.body"]).not.toMatch(/revers|paid (back|over)|reembols/i);
+      expect(catalogs[locale]["legal.terms.payment.body"]).not.toMatch(/SterPlatform|infrastructure/i);
+    }
+  });
+
   it("sélectionne la forme plurielle avec un nombre localisé", () => {
     expect(selectPlural("fr", 1, { one: "{count} joueur", other: "{count} joueurs" })).toBe("1 joueur");
     expect(selectPlural("es", 2, { one: "{count} jugador", other: "{count} jugadores" })).toBe("2 jugadores");

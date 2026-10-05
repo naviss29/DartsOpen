@@ -259,9 +259,19 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   aucun paiement. Tournoi payant : DartsOpen ne dialogue **jamais** directement avec Stripe —
   la session de paiement est créée côté SterPlatform via
   `lib/api/sterplatformInternal.ts::createPaymentCheckout`
-  (`POST /api/internal/organizations/{slug}/payments/checkout`), qui encaisse pour le compte
-  du Stripe Connect de **l'organisation du tournoi** (ADR-0021 / L7 ; repli : liaison locale du
+  (`POST /api/internal/organizations/{slug}/payments/checkout`), qui encaisse **directement sur
+  le compte Stripe de l'organisation du tournoi** (ADR-0021 / L7 ; repli : liaison locale du
   créateur pour un tournoi sans organisation — voir le point suivant).
+- **Qui encaisse quoi (ADR-0022)** : BApps ne touche jamais l'argent des inscriptions — session
+  créée par SterPlatform sur le compte connecté de l'organisation (*direct charge*), `payee`
+  absent = `ORGANIZATION` (défaut SterPlatform, jamais `PLATFORM` ici : test dans
+  `lib/api/sterplatformInternal.test.ts`), aucune commission (`PLATFORM_FEE_CENTS = 0`, garde-fou
+  `lib/platformFee.test.ts`). Les **crédits tournoi** et l'**abonnement** DartsOpen ne passent
+  pas par DartsOpen : achetés sur BSsite (`/dashboard/organisations/{slug}/credits/dartsopen`,
+  `/abonnement/dartsopen`), session Stripe créée par SterPlatform sur le compte Stripe de
+  **BApps** (`TournamentCreditService`/Billing, webhook plateforme) ; DartsOpen ne fait que
+  consommer/lire les crédits (`lib/api/tournamentCredits.ts`). CGU : textes
+  `legal.terms.fees.*` / `legal.terms.payment.*` (`lib/i18n/catalogs.ts`).
 - **Organisation qui encaisse et porte les droits** (`lib/organizations/billingOrganization.ts`,
   L7) — règle unique pour Stripe Connect, abonnement et crédits tournoi : organisation du tournoi
   (`effectiveOrganizationId`), organisation courante retenue par `resolveTournamentCreationTarget()`
