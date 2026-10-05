@@ -7,15 +7,19 @@
  * REFUND_PENDING indéfiniment. Ce balayage relit l'état réel de chaque paiement concerné et
  * applique exactement la même règle que le webhook (lib/payments/refundSync.ts).
  *
- * Ce qu'il ne fait JAMAIS : demander un remboursement. Un échec confirmé est signalé ; un
- * remboursement jamais demandé (NOT_REQUESTED) est seulement compté et journalisé — la relance
- * est une décision humaine (voir CLAUDE.md, points ouverts).
+ * Remboursement jamais demandé (NOT_REQUESTED) : la demande est RELANCÉE (décision du fondateur du
+ * 05/10/2026 — DartsOpen ne rembourse que le joueur qui a payé sans obtenir de place, décision
+ * déjà prise par le système ; une demande perdue par un incident doit aboutir). Sans risque de
+ * double remboursement : SterPlatform rembourse un paiement avec une clé Stripe fixe et répond
+ * 409 s'il est déjà remboursé. Un échec CONFIRMÉ (FAILED) n'est jamais relancé : il est signalé à
+ * l'organisateur, qui rembourse lui-même depuis son Stripe.
  *
  * Lot borné (`limit`), plus anciennes d'abord ; try/catch par inscription : une erreur n'arrête
  * pas les suivantes.
  */
 import { dbListRefundPendingForReconciliation } from "@/lib/db/tournament";
 import { syncRegistrationRefund, type RefundDecision, type RefundSyncResult } from "@/lib/payments/refundSync";
+import { refundPayment, type RefundOutcome } from "@/lib/api/sterplatformInternal";
 
 export const DEFAULT_REFUND_RECONCILIATION_LIMIT = 100;
 export const MAX_REFUND_RECONCILIATION_LIMIT = 1000;
@@ -38,6 +42,8 @@ export type RefundReconciliationReport = {
   unexpected: number;
   unreadable: number;
   errors: number;
+  /** Remboursements jamais demandés pour lesquels la demande a été relancée avec succès. */
+  relaunched: number;
 };
 
 export type RefundReconciliationOptions = {
@@ -50,6 +56,8 @@ export type RefundReconciliationOptions = {
   onlyRegistrationIds?: string[];
   /** Tests uniquement : remplace la synchronisation (frontière SterPlatform). */
   sync?: (registrationId: string, paymentId: string, options: { dryRun: boolean }) => Promise<RefundSyncResult>;
+  /** Tests uniquement : remplace la demande de remboursement (frontière SterPlatform). */
+  requestRefund?: (paymentId: string) => Promise<RefundOutcome>;
 };
 
 export async function reconcilePendingRefunds(options: RefundReconciliationOptions): Promise<RefundReconciliationReport> {
@@ -58,6 +66,7 @@ export async function reconcilePendingRefunds(options: RefundReconciliationOptio
   const now = options.now ?? new Date();
   const log = options.log ?? ((message: string) => console.error(message));
   const sync = options.sync ?? ((registrationId, paymentId, o) => syncRegistrationRefund(registrationId, paymentId, o));
+  const requestRefund = options.requestRefund ?? refundPayment;
   const cutoff = new Date(now.getTime() - minAgeMinutes * 60 * 1000);
 
   const report: RefundReconciliationReport = {
@@ -72,6 +81,7 @@ export async function reconcilePendingRefunds(options: RefundReconciliationOptio
     unexpected: 0,
     unreadable: 0,
     errors: 0,
+    relaunched: 0,
   };
 
   const candidates = await dbListRefundPendingForReconciliation(cutoff, limit, options.onlyRegistrationIds);
@@ -98,7 +108,21 @@ export async function reconcilePendingRefunds(options: RefundReconciliationOptio
       const key = counters[result.decision];
       (report[key] as number)++;
       if (result.decision === "NOT_REQUESTED") {
-        log(`[reconcile-refunds] ${reg.id} : paiement encaissé mais aucun remboursement demandé chez SterPlatform — décision humaine requise (aucune relance automatique).`);
+        if (options.dryRun) {
+          log(`[reconcile-refunds] ${reg.id} : aucun remboursement demandé chez SterPlatform — serait relancé (dry-run, rien demandé).`);
+        } else {
+          const outcome = await requestRefund(reg.sterPaymentId);
+          if (outcome.outcome === "FAILED") {
+            // Réseau, refus ou configuration : rien n'est écrit, le prochain passage réessaie.
+            log(`[reconcile-refunds] ${reg.id} : relance du remboursement en échec — ${outcome.error} (nouvel essai au prochain passage).`);
+          } else {
+            report.relaunched++;
+            log(`[reconcile-refunds] ${reg.id} : remboursement relancé (${outcome.outcome}).`);
+            // Applique tout de suite l'issue connue (REFUNDED) ; sinon le webhook ou le prochain
+            // passage conclura.
+            await sync(reg.id, reg.sterPaymentId, { dryRun: false });
+          }
+        }
       } else if (result.decision !== "STILL_PENDING") {
         log(`[reconcile-refunds] ${reg.id} : ${result.decision}${options.dryRun ? " (dry-run, rien écrit)" : result.changed ? " (écrit)" : " (déjà à jour)"}.`);
       }

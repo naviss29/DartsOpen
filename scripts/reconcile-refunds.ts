@@ -99,7 +99,7 @@ async function main(): Promise<number> {
   console.log(
     `[reconcile-refunds] ${report.dryRun ? "DRY-RUN" : "APPLY"} terminé — ${report.scanned} inscription(s) relue(s) ; ` +
       `${report.confirmed} remboursement(s) confirmé(s) ; ${report.failed} en échec (alerte) ; ` +
-      `${report.stillPending} encore en cours ; ${report.notRequested} jamais demandé(s) ; ` +
+      `${report.stillPending} encore en cours ; ${report.notRequested} jamais demandé(s) dont ${report.relaunched} relancé(s) ; ` +
       `${report.missingPaymentId} sans identifiant de paiement ; ${report.unexpected} incohérent(s) ; ` +
       `${report.unreadable} illisible(s) ; ${report.errors} erreur(s).`,
   );

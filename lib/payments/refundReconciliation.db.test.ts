@@ -199,12 +199,17 @@ describe("reconcilePendingRefunds — réconciliation par lots (F13)", () => {
     const logs: string[] = [];
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const dry = await reconcilePendingRefunds({ dryRun: true, onlyRegistrationIds: ids, sync, log: (m) => logs.push(m) });
+    // Remboursement jamais demandé : relancé (décision du 05/10/2026), jamais en dry-run.
+    const requestRefund = vi.fn(async () => ({ outcome: "PENDING" as const }));
+    const dry = await reconcilePendingRefunds({ dryRun: true, onlyRegistrationIds: ids, sync, requestRefund, log: (m) => logs.push(m) });
+    expect(requestRefund).not.toHaveBeenCalled();
     expect(dry).toMatchObject({ scanned: 6, confirmed: 1, failed: 1, stillPending: 1, notRequested: 1, missingPaymentId: 1, unreadable: 1, errors: 0 });
     expect((await row(refunded.id)).status).toBe("REFUND_PENDING");
     expect((await row(failed.id)).refundFailedAt).toBeNull();
 
-    const applied = await reconcilePendingRefunds({ dryRun: false, onlyRegistrationIds: ids, sync, log: (m) => logs.push(m) });
+    const applied = await reconcilePendingRefunds({ dryRun: false, onlyRegistrationIds: ids, sync, requestRefund, log: (m) => logs.push(m) });
+    expect(requestRefund).toHaveBeenCalledTimes(1);
+    expect(applied.relaunched).toBe(1);
     expect(applied).toMatchObject({ scanned: 6, confirmed: 1, failed: 1, stillPending: 1, notRequested: 1, missingPaymentId: 1, unreadable: 1, errors: 0 });
     expect((await row(refunded.id)).status).toBe("REFUNDED");
     expect((await row(failed.id)).refundFailedAt).not.toBeNull();
@@ -212,10 +217,10 @@ describe("reconcilePendingRefunds — réconciliation par lots (F13)", () => {
     expect((await row(neverRequested.id)).status).toBe("REFUND_PENDING");
     expect(sync).not.toHaveBeenCalledWith(recent.id, expect.anything(), expect.anything());
     expect(sync).not.toHaveBeenCalledWith(alreadyFailed.id, expect.anything(), expect.anything());
-    expect(logs.some((m) => m.includes(neverRequested.id) && m.includes("décision humaine"))).toBe(true);
+    expect(logs.some((m) => m.includes(neverRequested.id) && m.includes("remboursement relancé"))).toBe(true);
 
     // Rejouer : les cas résolus sortent du balayage (idempotent).
-    const again = await reconcilePendingRefunds({ dryRun: false, onlyRegistrationIds: ids, sync, log: () => {} });
+    const again = await reconcilePendingRefunds({ dryRun: false, onlyRegistrationIds: ids, sync, requestRefund, log: () => {} });
     expect(again).toMatchObject({ scanned: 4, confirmed: 0, failed: 0 });
     errSpy.mockRestore();
   });
@@ -235,5 +240,17 @@ describe("reconcilePendingRefunds — réconciliation par lots (F13)", () => {
     const report = await reconcilePendingRefunds({ dryRun: false, limit: 2, onlyRegistrationIds: ids, sync, log: () => {} });
     expect(report).toMatchObject({ scanned: 2, errors: 1, stillPending: 1 });
     expect(sync.mock.calls.map((c) => c[0])).toEqual([oldest.id, middle.id]);
+  });
+
+  it("relance en échec (réseau, refus) : rien n'est écrit, aucun compteur de relance, nouvel essai au passage suivant", async () => {
+    const t = await createTournament();
+    const reg = await createRegistration(t, { status: "REFUND_PENDING", createdAt: OLD });
+    const sync = fakeSync({ [reg.id]: { paymentId: "p", status: "SUCCEEDED", refundStatus: null, externalReference: reg.id } });
+    const requestRefund = vi.fn(async () => ({ outcome: "FAILED" as const, error: "réseau" }));
+
+    const report = await reconcilePendingRefunds({ dryRun: false, onlyRegistrationIds: [reg.id], sync, requestRefund, log: () => {} });
+    expect(report).toMatchObject({ notRequested: 1, relaunched: 0, errors: 0 });
+    expect((await row(reg.id)).status).toBe("REFUND_PENDING");
+    expect((await row(reg.id)).refundFailedAt).toBeNull();
   });
 });

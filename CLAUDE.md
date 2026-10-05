@@ -390,7 +390,7 @@ cron aujourd'hui).
   `REFUND_PENDING` en échec (un remboursement d'abord réussi peut échouer ensuite, PAY-003) ;
   `PAID`/`PENDING`/`CANCELLED` → jamais touchés. `dbMarkRefundConfirmed()` efface `refundFailedAt`.
   Jamais de retour à `PAID`.
-- **Aucune relance automatique** : un échec confirmé est journalisé `[ALERTE remboursement]`
+- **Aucune relance d'un échec confirmé** : un échec confirmé est journalisé `[ALERTE remboursement]`
   (identifiants seulement) ; `dbConfirmPendingPayment()` renvoie `REFUND_FAILED` sur une
   inscription en échec, et le webhook `payment.succeeded` ne redemande alors aucun remboursement.
 - **Interface organisateur** : page Joueurs, bandeau `UnresolvedRefundsNotice` (gestionnaires
@@ -401,17 +401,24 @@ cron aujourd'hui).
   (`scripts/reconcile-refunds.ts` → `reconcilePendingRefunds()`, `lib/payments/refundReconciliation.ts`).
   Relit les `REFUND_PENDING` sans échec constaté, créées il y a plus de `--min-age-minutes` (défaut
   60), plus anciennes d'abord, au plus `--limit` (défaut 100, max 1000) par passage ; try/catch par
-  inscription ; **ne demande jamais de remboursement**. Bilan : confirmés, en échec, en cours,
-  jamais demandés (journalisés « décision humaine requise »), sans identifiant de paiement local,
+  inscription. **Remboursement jamais demandé** (`refundStatus` absent : demande perdue par un
+  incident) → la demande est **relancée** (`refundPayment()`, sans risque de doublon : clé Stripe
+  fixe par paiement, 409 si déjà remboursé ; jamais en `--dry-run` ; échec → rien écrit, nouvel
+  essai au passage suivant) — décision du fondateur du 05/10/2026 : DartsOpen ne rembourse que le
+  joueur qui a payé sans obtenir de place, ce remboursement doit aboutir. Un échec **confirmé**
+  n'est jamais relancé. Bilan : confirmés, en échec, en cours, jamais demandés (dont relancés),
+  sans identifiant de paiement local,
   incohérents, illisibles, erreurs. Codes de sortie : 0 succès, 1 erreur ou paiement illisible,
   2 usage/configuration (`DATABASE_URL`, `NEXT_PUBLIC_API_URL`, `STER_API_TOKEN`).
   **Tâche Coolify à créer par Alan** (staging puis production) : Scheduled Task sur le conteneur
   DartsOpen, `npm run reconcile:refunds -- --apply`, horaire proposé `30 * * * *` (toutes les
   heures) ; lancer d'abord `-- --dry-run` à la main.
-- **Points non tranchés** : (1) une inscription `REFUND_PENDING` dont le remboursement n'a jamais
-  été demandé chez SterPlatform (`refundStatus` absent, notifications épuisées) est seulement
-  signalée — faut-il que la réconciliation le demande ? (2) Un remboursement refusé : qui
-  rembourse, et faut-il un bouton « relancer » côté organisateur ?
+- **Décisions du fondateur (05/10/2026)** : DartsOpen n'offre **aucun remboursement à la
+  demande** (inscriptions de quelques euros, « les gens assument ») ; le seul remboursement est
+  automatique, pour le joueur qui a payé sans obtenir de place (réservation expirée, tournoi
+  démarré). Remboursement refusé par Stripe : l'organisateur contacte le joueur et le rembourse
+  depuis le tableau de bord Stripe de son organisation (consigne du bandeau) — pas de bouton
+  « relancer ».
 - **Tests** : `app/api/webhooks/sterplatform-payments/route.test.ts` (panne base → 500 puis rejeu
   200, relecture impossible → 503, doublons, ordre inversé, vieux `payment.refunded` après échec,
   portions ignorées, `REFUND_FAILED`), `lib/payments/refundSync.test.ts` (règle pure),
