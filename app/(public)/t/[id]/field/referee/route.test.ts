@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // DO-FIELD-ACCESS-002 — câblage de la route d'échange arbitre, toujours mocké : la logique de
@@ -20,7 +20,14 @@ function req(url: string) {
   return new NextRequest(new URL(url, "http://localhost"));
 }
 
+// Adresse publique fixée explicitement : la redirection l'utilise (lib/publicBaseUrl.ts) et
+// la CI définit NEXT_PUBLIC_APP_URL — sans cela, le résultat dépendait de la machine.
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost");
   vi.mocked(dbListMatches).mockReset();
   vi.mocked(redeemRefereeGrant).mockReset();
   vi.mocked(issueFieldSession).mockReset().mockResolvedValue(undefined);

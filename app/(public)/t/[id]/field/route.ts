@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { dbGetTournamentPublic, dbListMatches } from "@/lib/db/tournament";
 import { issueFieldSession } from "@/lib/actions/fieldAccess";
 import { parseBoardNumber } from "@/lib/utils/fieldBoard";
+import { publicBaseUrl } from "@/lib/publicBaseUrl";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const tournament = await dbGetTournamentPublic(tournamentId).catch(() => null);
   const boardNumber = parseBoardNumber(boardParam, tournament?.nb_boards);
 
-  const redirectUrl = new URL(`/t/${tournamentId}/score`, request.url);
+  const redirectUrl = new URL(`/t/${tournamentId}/score`, publicBaseUrl(request.url));
   if (boardNumber !== null) {
     redirectUrl.searchParams.set("board", String(boardNumber));
   }
