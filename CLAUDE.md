@@ -312,8 +312,10 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   remboursement via `refundPayment()` (`lib/api/sterplatformInternal.ts`,
   `POST /api/internal/payments/{id}/refund`, ciblé par le `paymentId` du webhook lui-même —
   jamais uniquement la copie locale `ster_payment_id`), un échec renvoyant un statut non-2xx
-  pour permettre une redélivraison ultérieure. Sur `payment.refunded` (confirmation Stripe
-  asynchrone), confirme le remboursement via `dbMarkRefundConfirmed()`.
+  pour permettre une redélivraison ultérieure. Sur `payment.refunded` **et** `payment.refund_failed`
+  (F13), relit l'état réel du paiement puis fait converger l'inscription (voir « Issue d'un
+  remboursement » ci-dessous) ; `payment.refund.succeeded`/`payment.refund.failed` (portions)
+  sont ignorés explicitement (200) : DartsOpen ne rembourse jamais par portion.
 - `PLATFORM_FEE_CENTS` (`lib/platformFee.ts`) — reste une décision métier propre à DartsOpen
   (transmise en paramètre `platformFeeCents` à l'appel de checkout, jamais calculée côté
   SterPlatform, qui reste générique entre modules).
@@ -354,6 +356,57 @@ mécanisme de retry est la file de notifications sortantes déjà existante côt
 CLAUDE.md de SterPlatform) plutôt qu'une infrastructure dédiée côté DartsOpen — voir les
 limites du rapport de mission pour sa portée opérationnelle réelle (dispatch non planifié en
 cron aujourd'hui).
+
+### Issue d'un remboursement : confirmation, échec, réconciliation (F13, audit du 04/10/2026)
+
+- **Un seul point de décision** : `syncRegistrationRefund()` (`lib/payments/refundSync.ts`) relit
+  `GET /api/internal/payments/{id}` (`getPayment()`) et applique la règle pure
+  `decideRefundConvergence()` : paiement `REFUNDED` → `dbMarkRefundConfirmed()` ; `SUCCEEDED` +
+  `refundStatus: FAILED` → `dbMarkRefundFailed()` ; `refundStatus` `PENDING`/`SUCCEEDED` → rien
+  (en cours) ; `refundStatus` absent → « jamais demandé », rien ; autre `externalReference` ou
+  statut inattendu → rien + avertissement ; relecture impossible → rien. Relire plutôt que croire
+  l'événement rend le traitement indifférent à l'ordre et aux doublons (un vieux
+  `payment.refunded` livré après un échec ne marque jamais l'inscription remboursée).
+- **Webhook** (`payment.refunded`, `payment.refund_failed`) : 2xx **seulement après écriture
+  durable**. Erreur base → 500 ; relecture SterPlatform impossible → 503 ; SterPlatform redélivre
+  (outbox). Le chemin synchrone (`attemptRefund`) répond aussi 502 si l'écriture locale échoue
+  après un remboursement réussi (la redélivraison retombe sur `ALREADY_REFUNDED`).
+- **État d'échec** : `Registration.refundFailedAt` (colonne nullable `refund_failed_at`, migration
+  `20261005120000_registration_refund_failed_at`), le statut restant `REFUND_PENDING` (pas de
+  nouveau statut : migration additive, l'ancienne image voit un simple `REFUND_PENDING`, aucune
+  incidence sur la capacité). `dbMarkRefundFailed()` est conditionnelle : `REFUND_PENDING` sans
+  échec → horodaté ; déjà en échec → no-op (premier horodatage conservé) ; `REFUNDED` → revient
+  `REFUND_PENDING` en échec (un remboursement d'abord réussi peut échouer ensuite, PAY-003) ;
+  `PAID`/`PENDING`/`CANCELLED` → jamais touchés. `dbMarkRefundConfirmed()` efface `refundFailedAt`.
+  Jamais de retour à `PAID`.
+- **Aucune relance automatique** : un échec confirmé est journalisé `[ALERTE remboursement]`
+  (identifiants seulement) ; `dbConfirmPendingPayment()` renvoie `REFUND_FAILED` sur une
+  inscription en échec, et le webhook `payment.succeeded` ne redemande alors aucun remboursement.
+- **Interface organisateur** : page Joueurs, bandeau `UnresolvedRefundsNotice` (gestionnaires
+  seulement, `dbListUnresolvedRefunds()`) listant les inscriptions `REFUND_PENDING` — « en cours »
+  ou « refusé le … » avec la consigne (contacter le joueur, rembourser depuis le tableau de bord
+  Stripe de l'organisation). Textes `refunds.*` FR/EN/ES.
+- **Réconciliation planifiée** : `npm run reconcile:refunds -- --dry-run|--apply`
+  (`scripts/reconcile-refunds.ts` → `reconcilePendingRefunds()`, `lib/payments/refundReconciliation.ts`).
+  Relit les `REFUND_PENDING` sans échec constaté, créées il y a plus de `--min-age-minutes` (défaut
+  60), plus anciennes d'abord, au plus `--limit` (défaut 100, max 1000) par passage ; try/catch par
+  inscription ; **ne demande jamais de remboursement**. Bilan : confirmés, en échec, en cours,
+  jamais demandés (journalisés « décision humaine requise »), sans identifiant de paiement local,
+  incohérents, illisibles, erreurs. Codes de sortie : 0 succès, 1 erreur ou paiement illisible,
+  2 usage/configuration (`DATABASE_URL`, `NEXT_PUBLIC_API_URL`, `STER_API_TOKEN`).
+  **Tâche Coolify à créer par Alan** (staging puis production) : Scheduled Task sur le conteneur
+  DartsOpen, `npm run reconcile:refunds -- --apply`, horaire proposé `30 * * * *` (toutes les
+  heures) ; lancer d'abord `-- --dry-run` à la main.
+- **Points non tranchés** : (1) une inscription `REFUND_PENDING` dont le remboursement n'a jamais
+  été demandé chez SterPlatform (`refundStatus` absent, notifications épuisées) est seulement
+  signalée — faut-il que la réconciliation le demande ? (2) Un remboursement refusé : qui
+  rembourse, et faut-il un bouton « relancer » côté organisateur ?
+- **Tests** : `app/api/webhooks/sterplatform-payments/route.test.ts` (panne base → 500 puis rejeu
+  200, relecture impossible → 503, doublons, ordre inversé, vieux `payment.refunded` après échec,
+  portions ignorées, `REFUND_FAILED`), `lib/payments/refundSync.test.ts` (règle pure),
+  `lib/payments/refundReconciliation.db.test.ts` (vrai PostgreSQL : écritures conditionnelles,
+  REFUNDED → échec, lots bornés, dry-run), `scripts/reconcile-refunds.test.ts` (CLI),
+  `components/tournament/UnresolvedRefundsNotice.test.tsx` (FR/EN/ES).
 
 ### Entitlement >10 joueurs : idempotence, réconciliation, état intermédiaire (DARTSOPEN-MONETIZATION-003/004, contre-audit P2/P3/P4)
 
@@ -698,3 +751,4 @@ d'applications, le repli du portail et les liens croisés Connect ↔ MarketPlac
 - Seed tournoi test : `npm run seed:players`
 - Purge RGPD planifiée : `npm run purge:expired-contacts -- --dry-run|--apply` (voir « Conservation des données personnelles »)
 - Purge des tournois jamais terminés : `npm run purge:unfinished-tournaments -- --dry-run|--apply` (voir la section dédiée ; rappel via SterPlatform `send-to-organization`, `send-to-user` pour un tournoi sans organisation)
+- Réconciliation des remboursements : `npm run reconcile:refunds -- --dry-run|--apply` (voir « Issue d'un remboursement »)
