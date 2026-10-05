@@ -112,6 +112,12 @@ export type PaymentRecord = {
   paymentId: string;
   status: string;
   externalReference: string;
+  /**
+   * PAY-003 (SterPlatform) — état du dernier remboursement « paiement entier » :
+   * null | PENDING | SUCCEEDED | FAILED. Seul moyen de distinguer « remboursement encore en
+   * cours » de « remboursement échoué » (les deux laissent le paiement SUCCEEDED) — F13.
+   */
+  refundStatus?: string | null;
 };
 
 /**

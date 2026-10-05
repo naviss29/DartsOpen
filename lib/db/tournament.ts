@@ -821,6 +821,7 @@ export type ConfirmPendingPaymentResult =
   | "ALREADY_CONFIRMED"
   | "REFUND_NEEDED"
   | "REFUND_IN_PROGRESS"
+  | "REFUND_FAILED"
   | "ALREADY_REFUNDED"
   | "NOT_FOUND";
 
@@ -869,7 +870,10 @@ export async function dbConfirmPendingPayment(registrationId: string): Promise<C
     if (!reg || !tournament) return "NOT_FOUND";
     if (reg.status === "PAID") return "ALREADY_CONFIRMED";
     if (reg.status === "REFUNDED") return "ALREADY_REFUNDED";
-    if (reg.status === "REFUND_PENDING") return "REFUND_IN_PROGRESS";
+    // F13 — un échec de remboursement CONFIRMÉ par SterPlatform (refundFailedAt) n'est jamais
+    // relancé automatiquement : une redélivraison de `payment.succeeded` ne doit pas redemander
+    // un remboursement que Stripe vient de refuser (décision humaine de l'organisateur).
+    if (reg.status === "REFUND_PENDING") return reg.refundFailedAt ? "REFUND_FAILED" : "REFUND_IN_PROGRESS";
     if (reg.status !== "PENDING") return "NOT_FOUND"; // CANCELLED — a late webhook must never resurrect it
 
     const now = new Date();
@@ -915,15 +919,97 @@ export async function dbConfirmPendingPayment(registrationId: string): Promise<C
  * DARTSOPEN-MONETIZATION-004 (P1, contre-audit) — the only way a registration ever reaches
  * REFUNDED: called once SterPlatform has *actually confirmed* the refund (an immediate
  * synchronous confirmation from refundPayment(), or the later `payment.refunded` webhook event
- * for an initially-asynchronous Stripe refund). Idempotent — a no-op (never throws) if the
- * registration isn't currently REFUND_PENDING, so a webhook redelivery or a concurrent retry
- * can call this safely any number of times.
+ * for an initially-asynchronous Stripe refund, re-read via GET /api/internal/payments/{id}).
+ * Idempotent — a no-op if the registration isn't currently REFUND_PENDING, so a webhook
+ * redelivery or a concurrent retry can call this safely any number of times. A database error
+ * does throw (F13): the caller must then answer non-2xx so SterPlatform redelivers.
  */
-export async function dbMarkRefundConfirmed(registrationId: string): Promise<void> {
-  await prisma.registration.updateMany({
+export async function dbMarkRefundConfirmed(registrationId: string): Promise<number> {
+  // F13 — retourne le nombre de lignes modifiées (0 = déjà REFUNDED, inconnue ou hors
+  // remboursement) pour la journalisation ; les erreurs base REMONTENT à l'appelant, qui doit
+  // répondre non-2xx (le webhook ne doit jamais acquitter une écriture qui n'a pas eu lieu).
+  // `refundFailedAt` est effacé : un remboursement relancé à la main puis confirmé n'est plus
+  // un échec à traiter.
+  const { count } = await prisma.registration.updateMany({
     where: { id: registrationId, status: "REFUND_PENDING" },
-    data: { status: "REFUNDED" },
+    data: { status: "REFUNDED", refundFailedAt: null },
   });
+  return count;
+}
+
+/**
+ * F13 (audit 04/10/2026) — SterPlatform a confirmé l'ÉCHEC du remboursement (relecture
+ * `refundStatus: FAILED`, après `payment.refund_failed`) : l'argent n'a pas été rendu.
+ *
+ * - REFUND_PENDING sans échec noté → `refundFailedAt` posé (visible par l'organisateur) ;
+ * - REFUND_PENDING déjà en échec → no-op (redélivraison, Stripe émet plusieurs événements pour
+ *   un même échec) : le premier horodatage est conservé ;
+ * - REFUNDED → revient REFUND_PENDING + échec : un remboursement carte d'abord `succeeded` peut
+ *   échouer ensuite (cas réel de la recette SterPlatform du 01/10/2026, PAY-003). Laisser
+ *   REFUNDED mentirait sur la réalité financière. Sans effet sur la capacité : ni REFUND_PENDING
+ *   ni REFUNDED n'occupent de place. Jamais de retour à PAID (honorerait une inscription refusée).
+ * - tout autre statut (PAID, PENDING, CANCELLED) → no-op : ce n'est pas un remboursement que
+ *   DartsOpen a décidé (ex. remboursement lancé depuis le Dashboard Stripe).
+ *
+ * Une seule écriture conditionnelle (idempotente, sans verrou explicite). Erreurs base remontées.
+ */
+export async function dbMarkRefundFailed(registrationId: string, at: Date = new Date()): Promise<number> {
+  const { count } = await prisma.registration.updateMany({
+    where: {
+      id: registrationId,
+      OR: [
+        { status: "REFUND_PENDING", refundFailedAt: null },
+        { status: "REFUNDED" },
+      ],
+    },
+    data: { status: "REFUND_PENDING", refundFailedAt: at },
+  });
+  return count;
+}
+
+/**
+ * F13 — candidates à la réconciliation : REFUND_PENDING sans échec déjà constaté, créées avant
+ * `olderThan` (laisse le temps au remboursement synchrone et au webhook normal d'aboutir), les
+ * plus anciennes d'abord, au plus `limit` lignes (lot borné). Les échecs déjà constatés sont
+ * exclus : ils attendent une décision humaine, les relire à chaque passage ne ferait que
+ * repousser les autres hors du lot.
+ */
+export async function dbListRefundPendingForReconciliation(
+  olderThan: Date,
+  limit: number,
+  // Restriction facultative (tests sur base partagée) : jamais utilisée par le script réel.
+  onlyRegistrationIds?: string[],
+) {
+  return prisma.registration.findMany({
+    where: {
+      status: "REFUND_PENDING",
+      refundFailedAt: null,
+      createdAt: { lte: olderThan },
+      ...(onlyRegistrationIds ? { id: { in: onlyRegistrationIds } } : {}),
+    },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+    select: { id: true, tournamentId: true, sterPaymentId: true, createdAt: true },
+  });
+}
+
+/**
+ * F13 — remboursements non aboutis d'un tournoi, pour l'écran organisateur (page Joueurs) :
+ * inscriptions REFUND_PENDING (en cours, ou en échec si `refund_failed_at` est posé). Jamais
+ * d'email ni de téléphone : le nom suffit à retrouver le paiement dans le Dashboard Stripe.
+ */
+export async function dbListUnresolvedRefunds(tournamentId: string) {
+  const rows = await prisma.registration.findMany({
+    where: { tournamentId, status: "REFUND_PENDING" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, playerName: true, createdAt: true, refundFailedAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    player_name: r.playerName,
+    created_at: r.createdAt.toISOString(),
+    refund_failed_at: r.refundFailedAt ? r.refundFailedAt.toISOString() : null,
+  }));
 }
 
 export async function dbDeleteRegistration(registrationId: string, tournamentId: string) {
