@@ -99,7 +99,9 @@ export async function addPlayer(prevState: PlayerState, formData: FormData): Pro
 
   if (!result) return { error: "Erreur lors de l'inscription.", fields: rawFields, ts: Date.now() };
   if (result.outcome === "FULL") return { error: "Ce tournoi est complet.", fields: rawFields, ts: Date.now() };
-  if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
+  // Toute autre issue (NOT_OPEN, NOT_FOUND ; les refus F17 ne concernent que l'inscription
+  // publique et ne sont jamais renvoyés ici) : inscriptions fermées.
+  if (result.outcome !== "RESERVED") {
     return { error: "Les inscriptions sont fermées pour ce tournoi.", fields: rawFields, ts: Date.now() };
   }
   const reg = result.registration;

@@ -10,6 +10,16 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("@/lib/api/sterplatform", () => ({ sendEmail: vi.fn().mockResolvedValue(undefined) }));
+// F18 — IP de la requête et limiteur (frontières) : le limiteur lui-même est prouvé contre un vrai
+// PostgreSQL dans lib/rateLimit.test.ts.
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" })),
+  cookies: vi.fn(async () => ({ get: () => undefined })),
+}));
+vi.mock("@/lib/rateLimit", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/rateLimit")>("@/lib/rateLimit");
+  return { clientIp: actual.clientIp, checkRateLimit: vi.fn() };
+});
 vi.mock("@/lib/api/sterplatformInternal", () => ({
   createPaymentCheckout: vi.fn(),
   getStripeConnectStatus: vi.fn(),
@@ -33,6 +43,7 @@ const {
 } = await import("@/lib/db/tournament");
 const { redirect } = await import("next/navigation");
 const { getMyMemberships } = await import("@/lib/auth/organizationAccess");
+const { checkRateLimit } = await import("@/lib/rateLimit");
 
 function paidTournament(overrides: Record<string, unknown> = {}) {
   return {
@@ -62,6 +73,7 @@ beforeEach(() => {
   vi.mocked(getStripeConnectStatus).mockReset();
   vi.mocked(createPaymentCheckout).mockReset();
   vi.mocked(redirect).mockClear();
+  vi.mocked(checkRateLimit).mockReset().mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
 });
 
 describe("createRegistration — garde-fou checkout (DO-PAYMENT-GUARD-001 §5)", () => {
@@ -372,5 +384,79 @@ describe("createRegistration — ADR-0021 / L7 : checkout sur l'organisation du 
     expect(result.error).toMatch(/paiements en ligne ne sont pas disponibles/);
     expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
     error.mockRestore();
+  });
+});
+
+describe("createRegistration — limite de débit propre à l'action (F18, audit 04/10/2026)", () => {
+  it("clé = IP cliente + tournoi, règle dédiée, vérifiée avant toute lecture", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(checkRateLimit).toHaveBeenCalledWith("registration:203.0.113.7:tournament-1", { windowMs: 600_000, max: 10 });
+  });
+
+  it("au-delà de la limite : message clair avec le délai, aucune lecture, aucune réservation, aucun paiement", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({ allowed: false, retryAfterSeconds: 125 });
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toBe("Trop de tentatives d’inscription depuis votre connexion. Réessayez dans 3 min.");
+    expect(dbGetTournament).not.toHaveBeenCalled();
+    expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
+    expect(createPaymentCheckout).not.toHaveBeenCalled();
+  });
+
+  it("les tentatives invalides comptent aussi (le limiteur passe avant la validation)", async () => {
+    await createRegistration("tournament-1", "", "pas-un-email", null, []);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createRegistration — mode d'inscription et taille d'équipe (F17, audit 04/10/2026)", () => {
+  it("tournoi en inscription sur place (ONSITE) : refus clair, aucune réservation", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0, registration_mode: "ONSITE" }) as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toMatch(/n’accepte pas les inscriptions en ligne/);
+    expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["confirmation immédiate", { entry_fee: 0 }],
+    ["paiement en ligne", {}],
+  ])("%s : la réservation est demandée en mode « inscription publique » (contrôles F17 sous verrou)", async (_label, overrides) => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament(overrides) as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue({ outcome: "ONLINE_REGISTRATION_DISABLED" } as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(vi.mocked(dbReserveRegistrationSlot).mock.calls[0][3]).toEqual({ publicRegistration: true });
+    expect(result.error).toMatch(/n’accepte pas les inscriptions en ligne/);
+    expect(createPaymentCheckout).not.toHaveBeenCalled();
+  });
+
+  it("nombre de noms différent de playersPerTeam (relu sous verrou) : refus avec le nombre attendu", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0 }) as never);
+    vi.mocked(dbReserveRegistrationSlot).mockResolvedValue({ outcome: "INVALID_TEAM_SIZE", expected: 3 } as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toBe("Nombre de joueurs incorrect : ce tournoi en attend 3 par inscription.");
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("tableau de noms démesuré : refusé par le schéma, avant toute lecture", async () => {
+    const names = Array.from({ length: 11 }, (_, i) => `Joueur ${i}`);
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, names);
+
+    expect(result.error).toMatch(/Trop de joueurs/);
+    expect(dbGetTournament).not.toHaveBeenCalled();
   });
 });

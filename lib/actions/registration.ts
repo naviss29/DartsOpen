@@ -6,12 +6,16 @@ import {
   dbGetTournament,
   dbReserveRegistrationSlot,
   dbUpdateRegistrationPaymentId,
+  type ReserveSlotResult,
 } from "@/lib/db/tournament";
 import { billingSourceForTournament, resolveBillingOrganizationSlug } from "@/lib/organizations/billingOrganization";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { immediatePaymentKind } from "@/lib/registration/successPayment";
+import { checkRateLimit, clientIp } from "@/lib/rateLimit";
+import { getI18n } from "@/lib/i18n/server";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-009) — how long a PENDING online-payment reservation
@@ -21,6 +25,22 @@ import { immediatePaymentKind } from "@/lib/registration/successPayment";
  * race with legitimate completion time.
  */
 const RESERVATION_TTL_MINUTES = 30;
+
+/**
+ * F17 — borne haute du nombre de noms acceptés par le schéma, alignée sur la borne de
+ * `players_per_team` à la création d'un tournoi (lib/actions/tournament.ts, max 10). Le nombre
+ * EXACT attendu (playersPerTeam du tournoi) est vérifié sous le verrou du tournoi
+ * (dbReserveRegistrationSlot) ; cette borne empêche seulement d'envoyer un tableau démesuré.
+ */
+const MAX_PLAYER_NAMES = 10;
+
+/**
+ * F18 (audit 04/10/2026) — limite propre à l'action d'inscription publique, en plus de la
+ * limite générale du proxy sur /t/ (300 requêtes / 5 min / IP, qui laisse passer des centaines de
+ * soumissions). Clé = IP + tournoi : un même club peut inscrire plusieurs équipes, mais un robot
+ * ne peut pas remplir un tournoi (ni multiplier les sessions de paiement). Seuil ajustable.
+ */
+const REGISTRATION_RATE_LIMIT = { windowMs: 10 * 60_000, max: 10 };
 
 // Sécurité pré-recette (S3) — createRegistration() est la seule Server Action véritablement
 // publique et non authentifiée du produit (auto-inscription) : avant ce schéma, seul le
@@ -37,7 +57,8 @@ const RegistrationSchema = z.object({
     .nullable(),
   playerNames: z
     .array(z.string().trim().min(1, "Le nom d'un joueur ne peut pas être vide.").max(100, "Nom de joueur trop long (100 caractères max)."))
-    .min(1, "Au moins un joueur est requis."),
+    .min(1, "Au moins un joueur est requis.")
+    .max(MAX_PLAYER_NAMES, `Trop de joueurs (${MAX_PLAYER_NAMES} max).`),
 });
 
 export async function createRegistration(
@@ -47,6 +68,21 @@ export async function createRegistration(
   phone: string | null,
   playerNames: string[]
 ): Promise<{ error?: string }> {
+  // F18 — avant toute lecture ou écriture : chaque tentative compte, valide ou non. Le limiteur
+  // est fail-open si sa table est indisponible (voir lib/rateLimit.ts), il ne bloque donc jamais
+  // une inscription légitime à cause d'une panne.
+  let ip = "unknown";
+  try {
+    ip = clientIp(await headers());
+  } catch (err) {
+    console.error("[createRegistration] En-têtes de requête illisibles, limite appliquée à la clé « unknown »:", err);
+  }
+  const limit = await checkRateLimit(`registration:${ip}:${tournamentId}`, REGISTRATION_RATE_LIMIT);
+  if (!limit.allowed) {
+    const { t } = await getI18n();
+    return { error: t("registration.rateLimited", { minutes: Math.max(1, Math.ceil(limit.retryAfterSeconds / 60)) }) };
+  }
+
   const parsed = RegistrationSchema.safeParse({ teamName, contactEmail, phone, playerNames });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données d'inscription invalides." };
@@ -56,6 +92,12 @@ export async function createRegistration(
   const tournament = await dbGetTournament(tournamentId);
   if (!tournament || tournament.status !== "OPEN") {
     return { error: "Ce tournoi n'accepte plus les inscriptions." };
+  }
+  // F17 — filtre rapide (message clair sans réserver) ; la décision finale est prise sous le
+  // verrou du tournoi dans dbReserveRegistrationSlot (publicRegistration).
+  if (tournament.registration_mode === "ONSITE") {
+    const { t } = await getI18n();
+    return { error: t("registration.onlineDisabled") };
   }
 
   const platformFeeCents = PLATFORM_FEE_CENTS * tournament.players_per_team;
@@ -80,16 +122,13 @@ export async function createRegistration(
       playerNames,
       platformFeeCents,
       status: "PAID",
-    }).catch((err) => {
+    }, { publicRegistration: true }).catch((err) => {
       console.error('[createRegistration] dbReserveRegistrationSlot (confirmsImmediately):', err);
       return null;
     });
 
     if (!result) return { error: "Erreur lors de l'inscription." };
-    if (result.outcome === "FULL") return { error: "Ce tournoi est complet." };
-    if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
-      return { error: "Ce tournoi n'accepte plus les inscriptions." };
-    }
+    if (result.outcome !== "RESERVED") return { error: await reservationRefusal(result) };
 
     const months = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
     const d = new Date(tournament.date);
@@ -154,16 +193,13 @@ export async function createRegistration(
     platformFeeCents,
     status: "PENDING",
     reservationExpiresAt,
-  }).catch((err) => {
+  }, { publicRegistration: true }).catch((err) => {
     console.error('[createRegistration] dbReserveRegistrationSlot (online):', err);
     return null;
   });
 
   if (!result) return { error: "Erreur lors de l'inscription." };
-  if (result.outcome === "FULL") return { error: "Ce tournoi est complet." };
-  if (result.outcome === "NOT_OPEN" || result.outcome === "NOT_FOUND") {
-    return { error: "Ce tournoi n'accepte plus les inscriptions." };
-  }
+  if (result.outcome !== "RESERVED") return { error: await reservationRefusal(result) };
   const registration = result.registration;
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -191,4 +227,18 @@ export async function createRegistration(
   await dbUpdateRegistrationPaymentId(registration.id, checkout.paymentId);
 
   redirect(checkout.checkoutUrl);
+}
+
+/** Message d'un refus de réservation (capacité, statut, et refus F17 sous verrou). */
+async function reservationRefusal(result: Exclude<ReserveSlotResult, { outcome: "RESERVED" }>): Promise<string> {
+  switch (result.outcome) {
+    case "FULL":
+      return "Ce tournoi est complet.";
+    case "ONLINE_REGISTRATION_DISABLED":
+      return (await getI18n()).t("registration.onlineDisabled");
+    case "INVALID_TEAM_SIZE":
+      return (await getI18n()).t("registration.teamSize", { count: result.expected });
+    default:
+      return "Ce tournoi n'accepte plus les inscriptions.";
+  }
 }

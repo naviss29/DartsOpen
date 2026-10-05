@@ -54,6 +54,14 @@ const fr = {
   "registerSuccess.seeYou": "Rendez-vous le jour du tournoi !",
   "registerSuccess.scanHint": "Le jour J, scannez le QR code affiché sur votre cible pour saisir vos scores directement depuis votre smartphone.",
   "registerSuccess.followLive": "Suivre le tournoi en direct →",
+  "registration.onlineDisabled": "Ce tournoi n’accepte pas les inscriptions en ligne : inscrivez-vous sur place auprès de l’organisateur.",
+  "registration.teamSize": "Nombre de joueurs incorrect : ce tournoi en attend {count} par inscription.",
+  "registration.rateLimited": "Trop de tentatives d’inscription depuis votre connexion. Réessayez dans {minutes} min.",
+  "refunds.title": "Remboursements à suivre",
+  "refunds.intro": "Ces inscriptions ont été payées en ligne alors que le tournoi ne pouvait plus les accepter (complet ou déjà démarré) : le joueur doit être remboursé. Elles n’occupent aucune place.",
+  "refunds.pending": "Remboursement en cours",
+  "refunds.failed": "Remboursement refusé le {date}",
+  "refunds.failedHelp": "Stripe a refusé ce remboursement : l’argent n’a pas été rendu au joueur et aucune nouvelle tentative n’est faite automatiquement. Contactez le joueur et remboursez-le depuis le tableau de bord Stripe de votre organisation.",
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -115,6 +123,14 @@ const en = {
   "registerSuccess.seeYou": "See you on tournament day!",
   "registerSuccess.scanHint": "On the day, scan the QR code on your board to enter your scores straight from your smartphone.",
   "registerSuccess.followLive": "Follow the tournament live →",
+  "registration.onlineDisabled": "This tournament does not accept online registration: please register on site with the organiser.",
+  "registration.teamSize": "Wrong number of players: this tournament expects {count} per registration.",
+  "registration.rateLimited": "Too many registration attempts from your connection. Please try again in {minutes} min.",
+  "refunds.title": "Refunds to follow up",
+  "refunds.intro": "These registrations were paid online when the tournament could no longer accept them (full or already started): the player must be refunded. They do not take up a place.",
+  "refunds.pending": "Refund in progress",
+  "refunds.failed": "Refund declined on {date}",
+  "refunds.failedHelp": "Stripe declined this refund: the money has not been returned to the player and no new attempt is made automatically. Contact the player and refund them from your organisation’s Stripe dashboard.",
 } satisfies Messages;
 
 const es = {
@@ -173,6 +189,14 @@ const es = {
   "registerSuccess.seeYou": "¡Nos vemos el día del torneo!",
   "registerSuccess.scanHint": "El día del torneo, escanea el código QR de tu diana para introducir tus puntuaciones desde tu smartphone.",
   "registerSuccess.followLive": "Seguir el torneo en directo →",
+  "registration.onlineDisabled": "Este torneo no acepta inscripciones en línea: inscríbase en el lugar con el organizador.",
+  "registration.teamSize": "Número de jugadores incorrecto: este torneo espera {count} por inscripción.",
+  "registration.rateLimited": "Demasiados intentos de inscripción desde su conexión. Vuelva a intentarlo dentro de {minutes} min.",
+  "refunds.title": "Reembolsos pendientes de seguimiento",
+  "refunds.intro": "Estas inscripciones se pagaron en línea cuando el torneo ya no podía aceptarlas (completo o ya iniciado): hay que reembolsar al jugador. No ocupan ninguna plaza.",
+  "refunds.pending": "Reembolso en curso",
+  "refunds.failed": "Reembolso rechazado el {date}",
+  "refunds.failedHelp": "Stripe rechazó este reembolso: el dinero no se ha devuelto al jugador y no se realiza ningún nuevo intento automáticamente. Contacte con el jugador y reembólsele desde el panel de Stripe de su organización.",
 } satisfies Messages;
 
 export const catalogs = { fr, en, es } satisfies Record<string, Messages>;

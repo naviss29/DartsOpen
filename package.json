@@ -14,6 +14,7 @@
     "audit:online-payment": "tsx scripts/audit-online-payment-consistency.ts",
     "purge:expired-contacts": "tsx scripts/purge-expired-contacts.ts",
     "purge:unfinished-tournaments": "tsx scripts/purge-unfinished-tournaments.ts",
+    "reconcile:refunds": "tsx scripts/reconcile-refunds.ts",
     "verify": "npm ci && npx prisma generate && npm run guardrail:i18n && npm run lint && npx tsc --noEmit && npx prisma migrate deploy && npm run test:run && npm run build"
   },
   "dependencies": {

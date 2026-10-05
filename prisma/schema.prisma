@@ -216,6 +216,16 @@ model Registration {
    * PAID registration (free or confirmed onsite — occupies its slot permanently, no expiry).
    */
   reservationExpiresAt DateTime?       @map("reservation_expires_at")
+  /**
+   * F13 (audit 04/10/2026) — instant où SterPlatform a confirmé l'ÉCHEC du remboursement de
+   * cette inscription (`payment.refund_failed`, ou relecture `refundStatus: FAILED`). N'a de
+   * sens qu'avec `status = REFUND_PENDING` : l'argent n'a pas été rendu, l'organisateur doit
+   * agir (aucune relance automatique — décision humaine). Champ nullable plutôt qu'un nouveau
+   * statut : migration additive, l'ancienne image (qui ne connaît pas ce champ) continue de
+   * lire l'inscription comme un simple REFUND_PENDING, et rien ne change pour la capacité
+   * (REFUND_PENDING n'occupe jamais de place). Remis à null quand le remboursement est confirmé.
+   */
+  refundFailedAt   DateTime?          @map("refund_failed_at")
   createdAt        DateTime           @default(now()) @map("created_at")
 
   tournament  Tournament   @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
