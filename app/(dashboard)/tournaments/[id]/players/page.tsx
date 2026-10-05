@@ -3,7 +3,9 @@ import { RemovePlayerButton } from "@/components/tournament/RemovePlayerButton";
 import { SeedToggleButton } from "@/components/tournament/SeedToggleButton";
 import { EditPlayerButton } from "@/components/tournament/EditPlayerButton";
 import { EraseRegistrationButton } from "@/components/tournament/EraseRegistrationButton";
-import { dbListRegistrations } from "@/lib/db/tournament";
+import { dbListRegistrations, dbListUnresolvedRefunds } from "@/lib/db/tournament";
+import { UnresolvedRefundsNotice, type UnresolvedRefund } from "@/components/tournament/UnresolvedRefundsNotice";
+import { getI18n } from "@/lib/i18n/server";
 import { requireTournamentReader } from "@/lib/auth/organizationAccess";
 import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import Link from "next/link";
@@ -43,6 +45,15 @@ export default async function PlayersPage({ params }: Props) {
   const tournament = access.tournament as Tournament;
   const canManage = access.canManage;
   const registrations = await dbListRegistrations(id, "PAID").catch(() => []) as Registration[];
+  // F13 — remboursements non aboutis (en cours ou refusés), réservés aux gestionnaires : seuls
+  // eux peuvent agir. Une lecture en échec n'empêche pas d'afficher la page (journalisée).
+  const unresolvedRefunds: UnresolvedRefund[] = canManage
+    ? await dbListUnresolvedRefunds(id).catch((err) => {
+        console.error("[players] Lecture des remboursements non aboutis impossible:", id, err);
+        return [];
+      })
+    : [];
+  const { t, formatDate } = await getI18n();
 
   const count = registrations.length;
   const playerCount = count * tournament.players_per_team;
@@ -69,6 +80,12 @@ export default async function PlayersPage({ params }: Props) {
       </div>
 
       {!canManage && <ReadOnlyNotice />}
+
+      <UnresolvedRefundsNotice
+        refunds={unresolvedRefunds}
+        t={t}
+        formatDate={(value) => formatDate(value, { dateStyle: "long", timeStyle: "short", timeZone: "Europe/Paris" })}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
