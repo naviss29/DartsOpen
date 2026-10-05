@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbListMatches } from "@/lib/db/tournament";
 import { redeemRefereeGrant, issueFieldSession } from "@/lib/actions/fieldAccess";
+import { publicBaseUrl } from "@/lib/publicBaseUrl";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 
   const redemption = await redeemRefereeGrant(proof, tournamentId);
 
-  const redirectUrl = new URL(`/t/${tournamentId}/score`, request.url);
+  const redirectUrl = new URL(`/t/${tournamentId}/score`, publicBaseUrl(request.url));
   if (redemption.ok) {
     const matches = await dbListMatches(tournamentId).catch(() => [] as { id: string; board_number: number }[]);
     const match = matches.find((m) => m.id === redemption.matchId);
