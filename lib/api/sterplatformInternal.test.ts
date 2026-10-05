@@ -100,6 +100,9 @@ describe("createPaymentCheckout", () => {
     const body = JSON.parse(options!.body as string);
     expect(body.product).toBe("DARTSOPEN");
     expect(body.amountCents).toBe(2000);
+    // ADR-0022 : une inscription est encaissée par l'organisation (défaut SterPlatform) —
+    // jamais `payee: "PLATFORM"`, qui ferait encaisser l'argent du joueur par BApps.
+    expect(body).not.toHaveProperty("payee");
   });
 
   it("retourne une erreur explicite si le paiement est refusé côté SterPlatform", async () => {

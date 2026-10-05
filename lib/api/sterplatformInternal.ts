@@ -77,6 +77,11 @@ export type PaymentCheckout = {
  * d'une session Stripe Checkout. Idempotent sur (organisation, produit, externalReference)
  * côté SterPlatform : un retry avec la même référence renvoie le même Payment, jamais une
  * session dupliquée.
+ *
+ * ADR-0022 : une inscription est une vente DE l'organisation — encaissée directement sur son
+ * compte Stripe (direct charge). C'est le comportement par défaut de SterPlatform (`payee`
+ * absent = ORGANIZATION) : ne jamais envoyer `payee: "PLATFORM"` ici, réservé aux achats faits
+ * à BApps (les crédits tournoi DartsOpen passent d'ailleurs par BSsite, pas par ce module).
  */
 export async function createPaymentCheckout(params: CreatePaymentCheckoutParams): Promise<{ checkout?: PaymentCheckout; error?: string }> {
   const res = await internalFetch(`/api/internal/organizations/${encodeURIComponent(params.organizationSlug)}/payments/checkout`, {

@@ -40,25 +40,13 @@ export default async function CguPage() {
         d&apos;obligation légale.
       </p>
 
-      <h2>Frais de plateforme — état actuel, non contractuel</h2>
-      <p>
-        À la date de cette page, DartsOpen ne prélève aucun frais sur les inscriptions à un
-        tournoi payant : les droits d&apos;inscription encaissés en ligne sont intégralement
-        reversés à l&apos;association organisatrice. Le modèle économique de DartsOpen repose
-        sur l&apos;accès gratuit jusqu&apos;à 10 joueurs par tournoi, puis un crédit tournoi
-        ponctuel ou un abonnement au-delà de ce seuil. Ce fonctionnement correspond à
-        l&apos;implémentation technique actuelle du service et ne constitue pas un tarif
-        contractuel arrêté : il pourra évoluer. Cette section sera mise à jour dès qu&apos;une
-        décision définitive sera prise.
-      </p>
+      {/* ADR-0022 : les inscriptions sont encaissées directement sur le compte Stripe de
+          l'organisation — jamais « reversées » par BApps, qui ne touche pas cet argent. */}
+      <h2>{t("legal.terms.fees.title")}</h2>
+      <p>{t("legal.terms.fees.body")}</p>
 
-      <h2>Paiement</h2>
-      <p>
-        Les paiements d&apos;inscription sont initiés par DartsOpen mais traités et encaissés par
-        Stripe via l&apos;infrastructure de paiement de BApps Studio (SterPlatform). DartsOpen
-        n&apos;a accès à aucune donnée bancaire et n&apos;intervient pas dans la transaction
-        financière.
-      </p>
+      <h2>{t("legal.terms.payment.title")}</h2>
+      <p>{t("legal.terms.payment.body")}</p>
 
       <h2>{t("legal.terms.cancellation.title")}</h2>
       <p>{t("legal.terms.cancellation.organizerPolicy")}</p>
