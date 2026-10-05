@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { dbConfirmPendingPayment, dbMarkRefundConfirmed, dbGetRegistrationWithTournament, type ConfirmPendingPaymentResult } from "@/lib/db/tournament";
 import { sendEmail } from "@/lib/api/sterplatform";
 import { refundPayment } from "@/lib/api/sterplatformInternal";
+import { syncRegistrationRefund, type RefundSyncResult } from "@/lib/payments/refundSync";
 import { NextResponse } from "next/server";
 
 const SECRET = process.env.STER_PAYMENTS_CALLBACK_SECRET ?? "";
@@ -58,7 +59,14 @@ async function attemptRefund(registrationId: string, paymentId: string): Promise
   const result = await refundPayment(paymentId);
 
   if (result.outcome === "REFUNDED" || result.outcome === "ALREADY_REFUNDED") {
-    await dbMarkRefundConfirmed(registrationId);
+    try {
+      await dbMarkRefundConfirmed(registrationId);
+    } catch (err) {
+      // F13 — remboursement fait chez Stripe mais non écrit ici : non-2xx, la redélivraison
+      // retombe sur ALREADY_REFUNDED (409 relu) et réécrit. Jamais un 200 sans écriture.
+      console.error("[webhook] Remboursement confirmé mais écriture locale impossible:", registrationId, paymentId, err);
+      return false;
+    }
     return true;
   }
 
@@ -92,14 +100,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Produit inattendu." }, { status: 400 });
   }
 
-  if (notification.event === "payment.refunded") {
-    // DARTSOPEN-MONETIZATION-004 (P1) — confirmation asynchrone d'un remboursement dont l'appel
-    // initial (attemptRefund ci-dessus) avait renvoyé PENDING (certains moyens de paiement
-    // Stripe). Idempotent (dbMarkRefundConfirmed ne touche que REFUND_PENDING) — une
-    // redélivraison ou un événement reçu deux fois n'a aucun effet la deuxième fois.
-    await dbMarkRefundConfirmed(notification.externalReference).catch((err) => {
-      console.error("[webhook] Erreur confirmation remboursement:", notification.externalReference, err);
-    });
+  if (notification.event === "payment.refunded" || notification.event === "payment.refund_failed") {
+    // F13 (audit 04/10/2026) — issue d'un remboursement « paiement entier » demandé par
+    // DartsOpen. Les deux événements suivent le même chemin : relecture de l'état réel chez
+    // SterPlatform puis écriture conditionnelle (voir lib/payments/refundSync.ts) — l'ordre
+    // d'arrivée et les doublons sont ainsi sans effet. 2xx UNIQUEMENT après écriture durable :
+    // une erreur base répond 500 et SterPlatform redélivre (outbox, backoff).
+    const registrationId = notification.externalReference;
+    let sync: RefundSyncResult;
+    try {
+      sync = await syncRegistrationRefund(registrationId, notification.paymentId);
+    } catch (err) {
+      console.error("[webhook] Écriture du résultat de remboursement impossible, redélivraison attendue:", notification.event, registrationId, err);
+      return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    }
+    if (sync.decision === "UNREADABLE") {
+      // L'état réel n'a pas pu être relu : on n'écrit rien sur la seule foi de l'événement
+      // (il peut être périmé) et on demande une redélivraison.
+      console.error("[webhook] État du paiement illisible chez SterPlatform, redélivraison attendue:", notification.event, registrationId, notification.paymentId);
+      return NextResponse.json({ error: "État du paiement indisponible, nouvelle tentative nécessaire." }, { status: 503 });
+    }
+    console.info("[webhook] Remboursement synchronisé:", notification.event, registrationId, sync.decision, sync.changed ? "écrit" : "inchangé");
+    return NextResponse.json({ received: true });
+  }
+
+  if (notification.event === "payment.refund.succeeded" || notification.event === "payment.refund.failed") {
+    // Notifications « par portion » (remboursement billet par billet, ADR-0022) : DartsOpen ne
+    // demande jamais de portion (refundPayment() n'envoie aucun montant ni référence), donc ne
+    // devrait jamais les recevoir. Ignorées explicitement : si une portion était un jour lancée
+    // ailleurs, son issue globale arriverait de toute façon par `payment.refunded` /
+    // `payment.refund_failed`, et la réconciliation relit l'état réel.
+    console.info("[webhook] Notification de portion ignorée (DartsOpen ne rembourse pas par portion):", notification.event, notification.externalReference);
     return NextResponse.json({ received: true });
   }
 
@@ -117,6 +148,13 @@ export async function POST(req: Request) {
     } catch (err) {
       console.error("[webhook] Erreur confirmation paiement:", registrationId, err);
       return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    }
+
+    if (result === "REFUND_FAILED") {
+      // F13 — un remboursement déjà REFUSÉ par Stripe n'est jamais redemandé automatiquement
+      // (décision de l'organisateur, visible sur sa page Joueurs).
+      console.warn("[webhook] payment.succeeded sur un remboursement en échec : aucune nouvelle tentative automatique:", registrationId);
+      return NextResponse.json({ received: true });
     }
 
     if (result === "NOT_FOUND" || result === "ALREADY_CONFIRMED" || result === "ALREADY_REFUNDED") {
