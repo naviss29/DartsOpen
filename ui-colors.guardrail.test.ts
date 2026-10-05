@@ -135,7 +135,9 @@ function listSourceFiles(root: string): string[] {
       if (st.isDirectory()) {
         walk(abs);
       } else if (/\.(tsx|ts)$/.test(entry)) {
-        out.push(rel);
+        // Séparateurs POSIX : sous Windows, path.relative() rend des « \ » et les listes
+        // d'exemption/de fichiers attendus (écrites en « / ») ne correspondaient jamais.
+        out.push(rel.split(path.sep).join("/"));
       }
     }
   }
