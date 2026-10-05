@@ -26,6 +26,7 @@ async function internalFetch(path: string, options: RequestInit = {}): Promise<R
 
 export type PaymentAuthorizationStatus =
   | 'NO_ACCOUNT'
+  | 'ACCOUNT_INACCESSIBLE'
   | 'ONBOARDING_INCOMPLETE'
   | 'ADDITIONAL_INFO_REQUIRED'
   | 'RESTRICTED'

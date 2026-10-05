@@ -31,6 +31,7 @@ export async function getMyOrganizations(): Promise<MyOrganization[] | null> {
 
 export type PaymentAuthorizationStatus =
   | 'NO_ACCOUNT'
+  | 'ACCOUNT_INACCESSIBLE'
   | 'ONBOARDING_INCOMPLETE'
   | 'ADDITIONAL_INFO_REQUIRED'
   | 'RESTRICTED'
