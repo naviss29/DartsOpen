@@ -1,3 +1,4 @@
+import { publicMetadata } from "@/lib/seo";
 import { notFound } from "next/navigation";
 import { RegisterTeamForm } from "@/components/tournament/RegisterTeamForm";
 import { dbGetTournamentPublic, dbCountOccupiedSlots } from "@/lib/db/tournament";
@@ -5,7 +6,18 @@ import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }>; searchParams: Promise<{ cancelled?: string }> }
 
-export const metadata: Metadata = { title: "Inscription — DartsOpen" };
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const tournament = await dbGetTournamentPublic(id);
+  if (!tournament || tournament.status !== "OPEN") {
+    return { title: "DartsOpen", robots: { index: false, follow: false } };
+  }
+  return publicMetadata(
+    tournament.name,
+    `Inscription au tournoi de fléchettes ${tournament.name}${tournament.location ? ` à ${tournament.location}` : ""}. Consultez la date et les modalités d’inscription.`,
+    `/t/${encodeURIComponent(id)}/register`, "/brand/icon-512.png",
+  );
+}
 
 type Tournament = {
   id: string;
@@ -104,3 +116,4 @@ export default async function RegisterPage({ params, searchParams }: Props) {
     </div>
   );
 }
+
