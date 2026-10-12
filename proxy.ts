@@ -1,3 +1,4 @@
+import { shouldNoIndex } from "@/lib/seo";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 import { ssoStartPath } from "@/lib/sso/redirect";
@@ -54,6 +55,9 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   const headers = buildSecurityHeaders();
   for (const [key, value] of Object.entries(headers)) {
     response.headers.set(key, value);
+  }
+  if (shouldNoIndex(request.nextUrl.pathname)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return response;
 }
@@ -140,3 +144,4 @@ export const config = {
   // donc aucune vérification supplémentaire sur les routes déjà publiques.
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
+
