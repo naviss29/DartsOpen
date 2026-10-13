@@ -19,7 +19,7 @@ it("publie uniquement les champs publics attendus avec des URL absolues", async 
   expect(entries).toContainEqual(expect.objectContaining({ url: "https://dartsopen.bapps-studio.com/t/open-tournament/register" }));
   expect(entries.every((entry) => entry.url.startsWith("https://dartsopen.bapps-studio.com/"))).toBe(true);
   expect(entries.some((entry) => entry.url.includes("/dashboard") || entry.url.includes("/api") || entry.url.includes("/p/"))).toBe(false);
-  expect(query).toHaveBeenCalledWith({ where: { status: "OPEN" }, select: { id: true }, orderBy: { id: "asc" } });
+  expect(query).toHaveBeenCalledWith({ where: { status: "OPEN", registrationMode: "ONLINE" }, select: { id: true }, orderBy: { id: "asc" } });
 });
 
 it("rend visible une panne de base plutôt que publier un sitemap vide trompeur", async () => {
