@@ -1,3 +1,4 @@
+import { canIndexPublicPages, publicUrl } from "@/lib/seo";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { BuildSkewGuardReset } from "@/components/ui/BuildSkewGuardReset";
@@ -14,6 +15,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const description = t("metadata.description");
 
   return {
+    metadataBase: new URL(publicUrl()),
+    robots: { index: canIndexPublicPages(), follow: true },
     title: {
       default: title,
       template: "%s — DartsOpen",
@@ -47,3 +50,4 @@ export default async function RootLayout({
     </html>
   );
 }
+
