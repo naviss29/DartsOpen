@@ -152,8 +152,13 @@ describe("checkRateLimit — stockage indisponible", () => {
 });
 
 describe("clientIp", () => {
-  it("utilise le premier IP de x-forwarded-for", () => {
+  it("ADR-0024 : entrée la plus à droite hors relais de confiance (10.0.0.1 sautée)", () => {
     const headers = new Headers({ "x-forwarded-for": "203.0.113.1, 10.0.0.1" });
+    expect(clientIp(headers)).toBe("203.0.113.1");
+  });
+
+  it("ADR-0024 : une forge à gauche est ignorée derrière Cloudflare", () => {
+    const headers = new Headers({ "x-forwarded-for": "6.6.6.6, 203.0.113.1, 104.16.0.1" });
     expect(clientIp(headers)).toBe("203.0.113.1");
   });
 

@@ -19,6 +19,7 @@
  */
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db/client";
+import { clientIpFromForwardedFor } from "@/lib/clientIp";
 
 export interface RateLimitRule {
   /** Préfixe de chemin (comparé via pathname.startsWith) */
@@ -100,10 +101,14 @@ async function cleanupExpired(store: RateLimitStore): Promise<void> {
   await store.$executeRaw`DELETE FROM rate_limit_buckets WHERE reset_at < ${cutoff}`;
 }
 
-/** Extrait l'IP cliente depuis les en-têtes posés par le reverse proxy (Traefik/Coolify). */
+/**
+ * IP du visiteur selon l'ADR-0024 : entrée la plus à droite de x-forwarded-for hors relais de
+ * confiance (lib/clientIp.ts) — jamais la première, falsifiable dès que Cloudflare est devant
+ * Traefik. Repli inchangé : x-real-ip, puis « unknown ».
+ */
 export function clientIp(headers: Headers): string {
-  const forwardedFor = headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0].trim();
+  const forwardedFor = clientIpFromForwardedFor(headers.get("x-forwarded-for"));
+  if (forwardedFor) return forwardedFor;
 
   const realIp = headers.get("x-real-ip");
   if (realIp) return realIp;
