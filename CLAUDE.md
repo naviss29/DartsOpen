@@ -341,7 +341,9 @@ noms n'est pas exactement `playersPerTeam` (relu sous verrou). Le schéma borne 
 (borne de `players_per_team` à la création). L'ajout organisateur (`addPlayer`) n'est pas concerné.
 Avant toute lecture, l'action applique une limite propre (`checkRateLimit`, clé
 `registration:<IP>:<tournoi>`, 10 tentatives / 10 min, valides ou non ; fail-open si la table est
-indisponible) en plus de la limite générale du proxy sur `/t/`. Messages `registration.*` FR/EN/ES.
+indisponible) en plus de la limite générale du proxy sur `/t/`. L'IP est lue par `clientIp()`
+(`lib/rateLimit.ts` → `lib/clientIp.ts`, ADR-0024 : entrée la plus à droite de `x-forwarded-for`
+hors relais de confiance — réseaux privés, serveur, plages Cloudflare). Messages `registration.*` FR/EN/ES.
 Tests : `lib/actions/registration.test.ts`, `lib/db/registrationGuards.db.test.ts` (vrai PostgreSQL).
 
 Mais un paiement en ligne peut arriver **après** l'expiration de sa réservation (place reprise
