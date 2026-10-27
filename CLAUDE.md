@@ -753,6 +753,9 @@ Décision d'Alan : tant que EN/ES ne sont pas finalisés, `LANGUAGE_CHOICE_ENABL
 explicitement à `getI18n(locale)` reste servie. Réactiver = passer à `true`. Les tests du mécanisme
 multilingue réactivent le réglage par `vi.mock` ; `lib/i18n/languageChoice.test.ts` garde le blocage.
 
+Vocabulaire : le jargon des joueurs est conservé en français (« bracket », « Vue Live »), décision
+d'Alan du 28/10/2026 — ne pas le « franciser » lors d'une relecture.
+
 ## Liens vers les autres applications BApps (03/10/2026)
 
 Jamais d'adresse de production en dur : `bappsAppUrl("https://x.bapps-studio.com")`
