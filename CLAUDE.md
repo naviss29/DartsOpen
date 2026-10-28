@@ -67,7 +67,10 @@ respectifs pour le détail du protocole côté SterPlatform.
   unique, 10 min — voir `lib/sso/transaction.ts`), puis redirige vers SterPlatform
   `GET /api/auth/sso/authorize`. Le paramètre `?next=` (chemin relatif exact demandé, validé
   contre l'open redirect — `lib/sso/redirect.ts`) est conservé dans cette même transaction
-  pour revenir sur la page d'origine après connexion.
+  pour revenir sur la page d'origine après connexion. Depuis le 28/10/2026 (logique
+  MarketPlace) : antislash, caractères de contrôle et espaces en bordure refusés, sur la valeur
+  brute et décodée (`/\evil.com` était résolu en `https://evil.com`), et le callback re-filtre
+  `tx.next` avant de rediriger.
 - **`app/api/auth/sso/callback/route.ts`** — reçoit `?code=&state=` de SterPlatform, vérifie
   le `state` local, échange le code contre une session via `POST /api/auth/sso/exchange`
   (secret client serveur `STER_SSO_CLIENT_SECRET`, jamais `NEXT_PUBLIC_`), pose les cookies de

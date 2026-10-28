@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeTransaction } from "@/lib/sso/transaction";
 import { setAuthCookies } from "@/lib/api/auth";
+import { sanitizeNextPath } from "@/lib/sso/redirect";
 
 const SSO_CLIENT_ID = "DARTSOPEN";
 
@@ -49,7 +50,10 @@ export async function GET(request: NextRequest) {
     const data = await res.json();
     await setAuthCookies(data.token, data.refresh_token);
 
-    return NextResponse.redirect(new URL(tx.next, appUrl));
+    // Seconde barrière indépendante au point d'usage réel : `tx.next` vient d'un cookie et a pu
+    // être enregistré par une version antérieure (non corrigée) de sanitizeNextPath, ou altéré.
+    // Idempotent pour une valeur légitime.
+    return NextResponse.redirect(new URL(sanitizeNextPath(tx.next), appUrl));
   } catch (err) {
     console.error("[sso/callback] Échec de l'échange SSO:", err);
     return NextResponse.redirect(new URL("/login", appUrl));
