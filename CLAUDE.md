@@ -143,7 +143,10 @@ enregistré (idempotence, emails, purge) mais ne donne plus de droits, sauf repl
   `tournamentOps.ts`, `fieldReferee.ts` (**accès arbitre : OWNER/ADMIN, D7**), voie organisateur du
   score. Inchangés : saisie de score publique (`proposeWinner`/`confirmWinner`/`disputeResult`),
   sessions terrain joueur/arbitre, inscription publique (`createRegistration`). Helpers internes
-  `doAdvanceToNextRound`/`doAdvanceQuickTournament` toujours protégés par leurs appelants.
+  `doAdvanceToNextRound`/`doAdvanceQuickTournament` toujours protégés par leurs appelants — et
+  hébergés dans `lib/tournament/advance.ts`, **jamais** dans un fichier `"use server"` (tout export
+  d'un tel fichier est une Server Action appelable depuis le navigateur ; audit P2 du 28/10/2026,
+  garde-fou `lib/tournament/advance.guardrail.test.ts`).
 - **Pages** `(dashboard)/tournaments/[id]/**` : lecture pour tout rôle ; `canManage` masque les
   boutons de gestion (statut, édition, manches, joueurs, poules, bracket — y compris la génération
   automatique à l'affichage —, arbitrage, accès arbitre, scoring, incidents) et affiche
@@ -249,7 +252,7 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
 
 ## Garde-fous contre les états cassés et les pertes de données
 
-- **Clôture automatique** : en mode standard, `doAdvanceToNextRound` (`lib/actions/bracket.ts`) passe le tournoi en `FINISHED` dès que le dernier match du bracket est joué (`bracketMatches.length === 1`), sans action manuelle de l'organisateur — miroir exact du comportement déjà en place en mode rapide (`doAdvanceQuickTournament`). Le classement (`lib/db/ranking.ts`, filtré sur `status: "FINISHED"`) est donc alimenté automatiquement. La transition manuelle *"Clôturer le tournoi"* (`TournamentStatusButton`) reste disponible en secours et exige désormais une confirmation explicite (case à cocher) car elle coupe immédiatement la saisie des scores en cours.
+- **Clôture automatique** : en mode standard, `doAdvanceToNextRound` (`lib/tournament/advance.ts`) passe le tournoi en `FINISHED` dès que le dernier match du bracket est joué (`bracketMatches.length === 1`), sans action manuelle de l'organisateur — miroir exact du comportement déjà en place en mode rapide (`doAdvanceQuickTournament`). Le classement (`lib/db/ranking.ts`, filtré sur `status: "FINISHED"`) est donc alimenté automatiquement. La transition manuelle *"Clôturer le tournoi"* (`TournamentStatusButton`) reste disponible en secours et exige désormais une confirmation explicite (case à cocher) car elle coupe immédiatement la saisie des scores en cours.
 
 - **Manche obligatoire avant ouverture** : `dbUpdateTournamentStatus` refuse la transition vers `OPEN` si le tournoi n'est pas en mode rapide et n'a aucune manche (`rounds.length === 0`) — sans manche, aucun `MatchSet` n'est créé et un match ne peut jamais passer en `FINISHED`. Le mode rapide est exempté : ses manches (501/Cricket/701) sont générées automatiquement par `generateQuickBracket`. En complément, `deleteRound` refuse toute suppression de manche hors statut `DRAFT`, pour garantir qu'un tournoi qui a passé la porte `OPEN` ne peut plus revenir à 0 manche.
 - **Arbitrage destructeur** : en mode standard, corriger un match de bracket dont le vainqueur change supprime les matchs des tours suivants déjà générés (`dbArbitrateMatch`). `ArbitrateMatchModal` calcule ce risque côté client (`laterMatchesCount`, transmis par `BracketView`) et bloque le bouton de validation tant qu'une case à cocher explicite n'a pas été confirmée. Les matchs de poule (`bracket_round` null) et le mode rapide (jamais destructeur) ne sont pas concernés.
@@ -651,7 +654,10 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
 - `DATABASE_URL` — PostgreSQL
 - `NEXT_PUBLIC_API_URL` — URL SterPlatform
 - `NEXT_PUBLIC_APP_URL` — URL publique de DartsOpen (utilisée pour construire `redirect_uri`
-  côté SSO, jamais `request.url` — voir "Authentification (SSO central)")
+  côté SSO, jamais `request.url` — voir "Authentification (SSO central)"). **Aucun repli
+  localhost** pour un lien remis à quelqu'un (QR de cible, QR arbitre, retours de paiement) :
+  `requireAppUrl()` (`lib/appUrl.ts`) échoue clairement si elle manque (inscription en ligne
+  refusée avant toute réservation, accès arbitre refusé, page Poules en erreur) — audit P2.
 - `STER_ORG_SLUG` / `NEXT_PUBLIC_STER_ORG_SLUG` — slug org dans SterPlatform (`dartsopen`)
 - `STER_SSO_CLIENT_SECRET` — secret client SSO, voir "Authentification (SSO central)"
 - `STER_API_TOKEN` — jeton serveur-à-serveur (`X-App-Token`) partagé avec SterPlatform :
@@ -698,6 +704,8 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 - `console.error` pour les erreurs inattendues (DB)
 - `console.warn` pour les best-effort (email, opérations non-bloquantes)
 - Toujours passer l'objet `err` en dernier argument pour avoir la stack trace
+- Jamais d'adresse e-mail en clair dans un log : `maskEmail()` (`lib/logging/maskEmail.ts`,
+  `a***@domaine`)
 
 ## Mode tournoi rapide
 
@@ -737,7 +745,7 @@ réécrits) — `resolveChampions` (`lib/db/ranking.ts`) sait encore lire les de
 
 ### Fichiers clés
 - `lib/utils/doubleElimination.ts` — fonctions pures (format, pairing, shuffle)
-- `lib/actions/quickTournament.ts` — `generateQuickBracket` + `doAdvanceQuickTournament`
+- `lib/actions/quickTournament.ts` — `generateQuickBracket` ; `doAdvanceQuickTournament` est dans `lib/tournament/advance.ts` (hors Server Actions)
 - `lib/actions/admin.ts` — `arbitrateMatch` : seul point d'entrée pour désigner un vainqueur en mode rapide (la page de saisie de score publique est désactivée dans ce mode)
 - `lib/actions/player.ts` — `addPlayer` : email optionnel (vide `""` si absent), email de confirmation sauté si pas d'email
 - `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`, `doAdvanceQuickTournamentTx` (le bassin unique)
