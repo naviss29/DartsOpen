@@ -1,3 +1,4 @@
+import { getI18n } from "@/lib/i18n/server";
 import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
 import { PrintButton } from "@/components/tournament/PrintButton";
@@ -14,7 +15,7 @@ import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }> }
 
-export const metadata: Metadata = { title: "Poules — DartsOpen" };
+export const metadata: Metadata = { title: "Poules" };
 
 type Tournament = {
   id: string;
@@ -43,6 +44,7 @@ type Pool = {
 
 export default async function PoolsPage({ params }: Props) {
   const { id } = await params;
+  const { t: translate, plural } = await getI18n();
 
   const access = await requireTournamentReader(id);
   const tournament = access.tournament as Tournament;
@@ -110,7 +112,7 @@ export default async function PoolsPage({ params }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-brand-dark">Poules & Matchs</h1>
           <p className="text-sm text-brand-text-secondary mt-1">
-            {tournament.nb_pools} poules · {tournament.nb_boards} cibles · {totalPlayers} joueurs
+            {plural(tournament.nb_pools, { one: translate("tournament.pools.one"), other: translate("tournament.pools.other") })} · {tournament.nb_boards} cibles · {totalPlayers} joueurs
           </p>
         </div>
 

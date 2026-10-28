@@ -2,6 +2,7 @@ import { dbGetRanking } from "@/lib/db/ranking";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { EmptyState } from "@naviss29/design-system";
+import { getI18n } from "@/lib/i18n/server";
 
 // Perf pré-recette (E2) : dbGetRanking() charge tous les Match/Registration FINISHED de TOUS
 // les tournois de la plateforme à chaque visite (agrégation en mémoire, aucun filtre date/
@@ -11,12 +12,15 @@ import { EmptyState } from "@naviss29/design-system";
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "Classement général — DartsOpen",
+  title: "Classement général",
   description: "Classement inter-tournois des joueurs de fléchettes.",
 };
 
 export default async function ClassementPage() {
   const ranking = await dbGetRanking();
+  const { t, plural } = await getI18n();
+  // « 1 pt » / « 12 pts » : l'abréviation suit le nombre affiché juste au-dessus.
+  const pointsUnit = (points: number) => plural(points, { one: t("ranking.points.one"), other: t("ranking.points.other") });
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10 space-y-8">
@@ -73,7 +77,7 @@ export default async function ClassementPage() {
 
               <div className="text-right shrink-0">
                 <p className="tabular-score text-2xl font-black text-brand-dark tabular-nums">{entry.points}</p>
-                <p className="text-xs text-brand-text-secondary">pts</p>
+                <p className="text-xs text-brand-text-secondary">{pointsUnit(entry.points)}</p>
               </div>
             </Link>
           ))}

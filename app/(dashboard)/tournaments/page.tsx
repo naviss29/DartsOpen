@@ -8,7 +8,7 @@ import { Alert, Card, EmptyState, PageHeader, Pill } from "@naviss29/design-syst
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
 
-export const metadata: Metadata = { title: "Mes tournois — DartsOpen" };
+export const metadata: Metadata = { title: "Mes tournois" };
 
 type Tournament = {
   id: string;
@@ -28,7 +28,7 @@ type Tournament = {
 
 export default async function TournamentsPage({ searchParams }: { searchParams: Promise<{ access?: string }> }) {
   const user = await getUser();
-  const { t: translate } = await getI18n();
+  const { t: translate, plural, formatCurrency } = await getI18n();
   const readOnlyLabel = translate("orgAccess.readOnly");
   const { access } = await searchParams;
 
@@ -79,9 +79,9 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
                     </p>
                     <div className="mt-3 flex flex-wrap gap-4 text-xs text-brand-text-secondary">
                       <span>👤 {t.players_paid * t.players_per_team}/{t.max_players} joueurs</span>
-                      <span>🔵 {t.nb_pools} poules</span>
+                      <span>🔵 {plural(t.nb_pools, { one: translate("tournament.pools.one"), other: translate("tournament.pools.other") })}</span>
                       <span>🎯 {t.nb_boards} cibles</span>
-                      <span>💶 {(t.entry_fee / 100).toFixed(2)} €/j</span>
+                      <span>💶 {translate("tournament.feePerPlayer", { amount: formatCurrency(t.entry_fee / 100) })}</span>
                       <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
                     </div>
                   </div>
