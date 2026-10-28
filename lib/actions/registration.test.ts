@@ -67,6 +67,7 @@ function stripeStatus(overrides: Partial<{ status: string; canReceivePayments: b
 }
 
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://dartsopen.test");
   vi.mocked(dbGetTournament).mockReset();
   vi.mocked(dbReserveRegistrationSlot).mockReset().mockResolvedValue({ outcome: "RESERVED", registration: { id: "registration-1" } } as never);
   vi.mocked(dbUpdateRegistrationPaymentId).mockReset().mockResolvedValue(undefined as never);
@@ -495,5 +496,40 @@ describe("createRegistration — tournoi dont la date est passée (recette pré-
       createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(redirect).toHaveBeenCalledWith("https://checkout.example/pay_2");
+  });
+});
+
+describe("createRegistration — URL publique absente (audit sécurité P2)", () => {
+  it("échoue clairement sans réserver de place ni créer de paiement vers localhost", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "");
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toMatch(/indisponible/);
+    expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
+    expect(createPaymentCheckout).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("utilise l'URL publique configurée pour les retours de paiement", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(createPaymentCheckout).mockResolvedValue({
+      checkout: { paymentId: "pay_3", checkoutUrl: "https://checkout.example/pay_3", status: "PENDING" },
+    } as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    const args = vi.mocked(createPaymentCheckout).mock.calls[0][0] as { successUrl: string; cancelUrl: string };
+    expect(args.successUrl.startsWith("https://dartsopen.test/t/tournament-1/register/success")).toBe(true);
+    expect(args.cancelUrl).toBe("https://dartsopen.test/t/tournament-1/register?cancelled=1");
   });
 });

@@ -12,6 +12,7 @@ import { billingSourceForTournament, resolveBillingOrganizationSlug } from "@/li
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
+import { requireAppUrl } from "@/lib/appUrl";
 import { headers } from "next/headers";
 import { immediatePaymentKind } from "@/lib/registration/successPayment";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
@@ -188,6 +189,16 @@ export async function createRegistration(
     return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
   }
 
+  // URL de retour du paiement résolue AVANT de réserver une place : une configuration
+  // incomplète échoue tout de suite, sans retour Stripe vers localhost ni place bloquée.
+  let appUrl: string;
+  try {
+    appUrl = requireAppUrl();
+  } catch (err) {
+    console.error("[registration] Configuration incomplète :", err);
+    return { error: "Le paiement en ligne est momentanément indisponible. Contactez l'organisateur." };
+  }
+
   // 2. Capacité/réservation — atomique, avec expiration (DO-AUD-009) : si le checkout Stripe
   // n'est jamais créé ou jamais complété (échec, abandon), cette réservation PENDING cesse
   // d'occuper sa place dès l'expiration, sans nécessiter de nettoyage explicite ni laisser une
@@ -210,7 +221,6 @@ export async function createRegistration(
   if (result.outcome !== "RESERVED") return { error: await reservationRefusal(result) };
   const registration = result.registration;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const amountCents = tournament.entry_fee * tournament.players_per_team;
 
   const { checkout, error } = await createPaymentCheckout({
