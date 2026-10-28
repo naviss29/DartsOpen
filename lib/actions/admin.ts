@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireTournamentManager } from "@/lib/auth/organizationAccess";
 import { dbArbitrateMatch } from "@/lib/db/tournament";
-import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
+import { doAdvanceQuickTournament } from "@/lib/tournament/advance";
 import { publishMatchUpdate } from "@/lib/mercure";
 
 /**

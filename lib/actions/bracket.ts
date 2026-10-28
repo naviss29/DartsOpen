@@ -2,13 +2,14 @@
 
 import { seedBracket } from "@/lib/utils/bracket";
 import { requireTournamentManager } from "@/lib/auth/organizationAccess";
+// Fonction interne hors de ce fichier "use server" : voir lib/tournament/advance.ts.
+import { doAdvanceToNextRound } from "@/lib/tournament/advance";
 import {
   dbBulkCreateMatches,
   bulkCreateMatchesTx,
   dbDeleteBracketMatches,
   withTournamentLock,
   getAdvancingPlayerIds,
-  doAdvanceToNextRoundTx,
 } from "@/lib/db/tournament";
 
 /**
@@ -78,19 +79,4 @@ export async function advanceToNextRound(
   if (!guard.ok) return { error: guard.error };
 
   return doAdvanceToNextRound(tournamentId, currentBracketRound);
-}
-
-/**
- * DO-SPORT-001 (Étape 2/4/5) — décision et écriture sous le verrou tournoi. DO-SCORING-002
- * (Étape 4) — le cœur (décision + création du tour suivant + clôture éventuelle du tournoi)
- * vit désormais dans lib/db/tournament.ts::doAdvanceToNextRoundTx(), tx-first : cette fonction
- * n'est plus qu'un ouvre-verrou. dbRecordThrow() (saisie X01) appelle directement le cœur avec
- * SON PROPRE tx quand un checkout vient de finaliser un match — même conséquence sportive,
- * même frontière transactionnelle que la volée elle-même.
- */
-export async function doAdvanceToNextRound(
-  tournamentId: string,
-  currentBracketRound: number
-): Promise<{ error?: string; finished?: boolean }> {
-  return withTournamentLock(tournamentId, (tx) => doAdvanceToNextRoundTx(tx, tournamentId, currentBracketRound));
 }

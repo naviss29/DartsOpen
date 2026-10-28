@@ -10,8 +10,8 @@ import {
   bulkCreateMatchesTx,
   withTournamentLock,
 } from "@/lib/db/tournament";
-import { doAdvanceToNextRound, generateBracket } from "@/lib/actions/bracket";
-import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
+import { generateBracket } from "@/lib/actions/bracket";
+import { doAdvanceToNextRound, doAdvanceQuickTournament } from "@/lib/tournament/advance";
 
 // DO-SPORT-002 — pour tester generateBracket() (le vrai code de "génération initiale", pas une
 // réimplémentation) sans dépendre du SSO/cookies : seule la frontière d'autorisation est

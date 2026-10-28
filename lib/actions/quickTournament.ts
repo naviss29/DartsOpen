@@ -9,7 +9,6 @@ import {
   dbResetAllLives,
   dbCreateQuickTournamentRounds,
   withTournamentLock,
-  doAdvanceQuickTournamentTx,
   selectRoundId,
 } from "@/lib/db/tournament";
 import { shufflePlayers, pairPlayers, getQuickModeGameFormat } from "@/lib/utils/doubleElimination";
@@ -80,24 +79,4 @@ export async function generateQuickBracket(tournamentId: string): Promise<{ erro
 
   revalidatePath(`/tournaments/${tournamentId}`);
   return {};
-}
-
-// ── Avancement après chaque match ────────────────────────────────────────────
-
-/**
- * Appelé après la finalisation d'un match en mode rapide. DO-SCORING-002 (Étape 4) — le cœur
- * (marquage, décrémentation, calcul, création, promotion, clôture éventuelle du tournoi) vit
- * désormais dans lib/db/tournament.ts::doAdvanceQuickTournamentTx(), tx-first : cette fonction
- * n'est plus qu'un ouvre-verrou, dans le même esprit que doAdvanceToNextRound() (bracket.ts).
- */
-export async function doAdvanceQuickTournament(
-  tournamentId: string,
-  finishedMatchId: string
-): Promise<{ error?: string; finished?: boolean }> {
-  try {
-    return await withTournamentLock(tournamentId, (tx) => doAdvanceQuickTournamentTx(tx, tournamentId, finishedMatchId));
-  } catch (err) {
-    console.error("[doAdvanceQuickTournament]", err);
-    return { error: "Erreur lors de l'avancement du tournoi." };
-  }
 }
