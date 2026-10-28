@@ -14,7 +14,7 @@ describe("DashboardApplicationSwitcher", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Applications" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ouvrir le menu des applications" }));
 
     expect(screen.getByRole("link", { name: /DartsOpen/ }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: /BilletAsso/ })).not.toBeNull();
@@ -31,7 +31,7 @@ describe("DashboardApplicationSwitcher", () => {
         <DashboardApplicationSwitcher organizations={[{ activeProducts: [{ product: "DARTSOPEN" }, { product: "BILLETASSO" }] }]} />
       </I18nProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Aplicaciones" }));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir el menú de aplicaciones" }));
     expect(screen.getByText("Cambiar de aplicación")).not.toBeNull();
     expect(screen.getByText("Panel de control")).not.toBeNull();
     expect(screen.getByText("Organización de torneos de dardos")).not.toBeNull();
