@@ -11,7 +11,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const name = decodeURIComponent(slug);
   return {
-    title: `${name} — DartsOpen`,
+    title: name,
     description: `Profil et statistiques de ${name} sur DartsOpen.`,
   };
 }

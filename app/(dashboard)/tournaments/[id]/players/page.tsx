@@ -15,7 +15,7 @@ import { Card, EmptyState, Pill } from "@naviss29/design-system";
 
 interface Props { params: Promise<{ id: string }> }
 
-export const metadata: Metadata = { title: "Joueurs — DartsOpen" };
+export const metadata: Metadata = { title: "Joueurs" };
 
 type Tournament = {
   id: string;

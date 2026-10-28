@@ -10,7 +10,7 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-export const metadata: Metadata = { title: "Mode TV — DartsOpen" };
+export const metadata: Metadata = { title: "Mode TV" };
 
 type PublicTournament = {
   id: string;

@@ -11,7 +11,7 @@ import { unlinkOrganization } from "@/lib/actions/organization";
 import Button from "@/components/ui/Button";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Paramètres — DartsOpen" };
+export const metadata: Metadata = { title: "Paramètres" };
 
 const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com"); // portail du même environnement
 

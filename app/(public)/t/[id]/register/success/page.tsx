@@ -5,7 +5,7 @@ import { successPaymentMessageKey } from "@/lib/registration/successPayment";
 
 interface Props { params: Promise<{ id: string }>; searchParams: Promise<{ name?: string; paiement?: string }> }
 
-export const metadata: Metadata = { title: "Inscription confirmée — DartsOpen" };
+export const metadata: Metadata = { title: "Inscription confirmée" };
 
 export default async function RegisterSuccessPage({ params, searchParams }: Props) {
   const { id } = await params;

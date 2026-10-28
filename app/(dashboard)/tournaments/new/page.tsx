@@ -9,7 +9,7 @@ import { resolveTournamentCreationTarget } from "@/lib/auth/organizationAccess";
 import { billingSourceForCreation } from "@/lib/organizations/billingOrganization";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Nouveau tournoi — DartsOpen" };
+export const metadata: Metadata = { title: "Nouveau tournoi" };
 
 const BSSITE_URL = process.env.NEXT_PUBLIC_BSSITE_URL ?? bappsAppUrl("https://bapps-studio.com"); // portail du même environnement
 
