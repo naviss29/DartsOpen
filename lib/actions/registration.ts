@@ -16,6 +16,7 @@ import { headers } from "next/headers";
 import { immediatePaymentKind } from "@/lib/registration/successPayment";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 import { getI18n } from "@/lib/i18n/server";
+import { isTournamentDatePast } from "@/lib/tournament/registrationWindow";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-009) — how long a PENDING online-payment reservation
@@ -92,6 +93,13 @@ export async function createRegistration(
   const tournament = await dbGetTournament(tournamentId);
   if (!tournament || tournament.status !== "OPEN") {
     return { error: "Ce tournoi n'accepte plus les inscriptions." };
+  }
+  // Recette pré-lancement : un tournoi resté OPEN après sa date acceptait encore inscriptions et
+  // paiements. Refus côté serveur dès le lendemain de la date (statut et données inchangés),
+  // avant toute réservation de place et tout appel de paiement.
+  if (isTournamentDatePast(tournament.date)) {
+    const { t } = await getI18n();
+    return { error: t("registration.closedPast") };
   }
   // F17 — filtre rapide (message clair sans réserver) ; la décision finale est prise sous le
   // verrou du tournoi dans dbReserveRegistrationSlot (publicRegistration).

@@ -55,7 +55,8 @@ function paidTournament(overrides: Record<string, unknown> = {}) {
     players_per_team: 2,
     max_players: 32,
     name: "Open de fléchettes",
-    date: "2026-06-15",
+    // Date lointaine : le refus « date passée » est testé à part (voir plus bas).
+    date: "2099-06-15",
     location: "Salle des fêtes",
     ...overrides,
   };
@@ -458,5 +459,41 @@ describe("createRegistration — mode d'inscription et taille d'équipe (F17, au
 
     expect(result.error).toMatch(/Trop de joueurs/);
     expect(dbGetTournament).not.toHaveBeenCalled();
+  });
+});
+
+describe("createRegistration — tournoi dont la date est passée (recette pré-lancement)", () => {
+  it("refuse une inscription payante en ligne sans réserver de place ni créer de paiement", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ date: "2020-01-10" }) as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result).toEqual({ error: "Les inscriptions sont terminées pour ce tournoi : sa date est passée." });
+    expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
+    expect(getStripeConnectStatus).not.toHaveBeenCalled();
+    expect(createPaymentCheckout).not.toHaveBeenCalled();
+  });
+
+  it("refuse aussi une inscription gratuite après la date", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament({ entry_fee: 0, date: "2020-01-10" }) as never);
+
+    const result = await createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"]);
+
+    expect(result.error).toBe("Les inscriptions sont terminées pour ce tournoi : sa date est passée.");
+    expect(dbReserveRegistrationSlot).not.toHaveBeenCalled();
+  });
+
+  it("chemin nominal : un tournoi à venir ouvre toujours le paiement en ligne", async () => {
+    vi.mocked(dbGetTournament).mockResolvedValue(paidTournament() as never);
+    vi.mocked(dbGetOrganization).mockResolvedValue({ userId: "user-1", sterOrganizationSlug: "club-a" } as never);
+    vi.mocked(getStripeConnectStatus).mockResolvedValue(stripeStatus() as never);
+    vi.mocked(createPaymentCheckout).mockResolvedValue({
+      checkout: { paymentId: "pay_2", checkoutUrl: "https://checkout.example/pay_2", status: "PENDING" },
+    } as never);
+
+    await expect(
+      createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])
+    ).rejects.toThrow("NEXT_REDIRECT");
+    expect(redirect).toHaveBeenCalledWith("https://checkout.example/pay_2");
   });
 });

@@ -324,6 +324,13 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   SterPlatform, qui reste générique entre modules).
 - `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) inchangés en base.
 
+- **Tournoi dont la date est passée** (recette pré-lancement, 28/10/2026) : `createRegistration()`
+  refuse toute inscription (gratuite ou payante) dès le lendemain de `Tournament.date` à Paris
+  (`lib/tournament/registrationWindow.ts::isTournamentDatePast`, jour J encore ouvert), avant toute
+  réservation de place ou session de paiement — message `registration.closedPast`. La page publique
+  `/t/{id}/register` affiche alors « Inscriptions terminées » sans formulaire. Statut et données
+  du tournoi inchangés (un tournoi oublié en OPEN reste OPEN).
+
 ### Capacité, paiement tardif et remboursement (DARTSOPEN-MONETIZATION-003/004, contre-audit P1/P3/P4)
 
 `dbReserveRegistrationSlot()` (verrou + comptage + insertion atomiques, voir mission
@@ -765,6 +772,22 @@ Jamais d'adresse de production en dur : `bappsAppUrl("https://x.bapps-studio.com
 (`lib/bappsApps.ts`) renvoie `https://x.dev.bapps-studio.com` quand `NEXT_PUBLIC_APP_URL` est une
 adresse de test (même règle que BSsite `lib/catalog/products.ts`). Utilisé par le sélecteur
 d'applications, le repli du portail et les liens croisés Connect ↔ MarketPlace.
+
+## Racine, page introuvable et titres d'onglet (recette pré-lancement, 28/10/2026)
+
+- **Racine `/`** : redirigée par `proxy.ts` (307). Cookie de session (`ster_token` ou
+  `ster_refresh_token`) → `/dashboard` ; sans session → page produit de la vitrine
+  `${NEXT_PUBLIC_BSSITE_URL}/produits/dartsopen` (repli `bappsAppUrl("https://bapps-studio.com")`,
+  donc `dev.bapps-studio.com` en staging). Règle unique : `lib/rootRedirect.ts` ; `app/page.tsx`
+  n'est qu'un filet de sécurité. Les liens profonds (`/dashboard`, `/t/...`) ne changent pas.
+- **Page introuvable** : `app/not-found.tsx` (404 réel, en-tête logo, bouton « Retour à
+  l'accueil » vers `/`, pied de page `components/layout/PublicFooter.tsx` partagé avec
+  `app/(public)/layout.tsx`), textes `notFound.*`.
+- **Titres d'onglet** : le layout racine ajoute déjà « — DartsOpen » (`template`) ; une page ne
+  doit jamais le répéter dans son `title` (sinon « — DartsOpen — DartsOpen »). Titre sans suffixe
+  voulu : `{ absolute: "..." }`.
+- **Montants et pluriels** : `formatCurrency` / `plural` de `getI18n()` (« 5,00 € », « 1 poule »,
+  « 1 pt »), jamais `toFixed(2) + " €"` ni « poules » figé.
 
 ## Garde-fou i18n
 
