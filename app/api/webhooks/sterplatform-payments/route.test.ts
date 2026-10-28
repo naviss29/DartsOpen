@@ -135,6 +135,19 @@ describe("POST /api/webhooks/sterplatform-payments", () => {
     expect(refundPayment).not.toHaveBeenCalled();
   });
 
+  it("échec d'envoi de l'email : le journal ne contient jamais l'adresse en clair (audit P2)", async () => {
+    vi.mocked(sendEmail).mockRejectedValue(new Error("smtp down"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await POST(buildRequest(baseNotification()));
+
+    expect(res.status).toBe(200);
+    const logged = JSON.stringify(errorSpy.mock.calls.map((c) => c.map(String)));
+    expect(logged).toContain("t***@example.com");
+    expect(logged).not.toContain("test@example.com");
+    errorSpy.mockRestore();
+  });
+
   it("rejette une signature invalide sans toucher la base", async () => {
     const req = buildRequest(baseNotification(), { tamperSignature: true });
     const res = await POST(req);
