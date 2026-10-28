@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 import { ssoStartPath } from "@/lib/sso/redirect";
 import { buildSecurityHeaders } from "@/lib/securityHeaders";
+import { rootRedirectTarget } from "@/lib/rootRedirect";
 
 const TOKEN_COOKIE = 'ster_token';
 const REFRESH_COOKIE = 'ster_refresh_token';
@@ -70,6 +71,16 @@ async function handleRequest(request: NextRequest): Promise<NextResponse> {
     const key = `${rule.prefix}:${clientIp(request.headers)}`;
     const result = await checkRateLimit(key, rule);
     if (!result.allowed) return rateLimitResponse(request, result.retryAfterSeconds);
+  }
+
+  // Racine : redirection HTTP réelle (307) décidée ici plutôt que dans app/page.tsx, où le
+  // loading.tsx racine fait partir la réponse en flux (200 + redirection côté navigateur) —
+  // illisible pour les robots et les aperçus de lien. Session → tableau de bord ; sans session →
+  // page produit de la vitrine (lib/rootRedirect.ts). La validité de la session est contrôlée
+  // ensuite sur /dashboard (rafraîchissement ou SSO).
+  if (pathname === '/') {
+    const hasSession = Boolean(request.cookies.get(TOKEN_COOKIE)?.value || request.cookies.get(REFRESH_COOKIE)?.value);
+    return NextResponse.redirect(new URL(rootRedirectTarget(hasSession), request.url));
   }
 
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
