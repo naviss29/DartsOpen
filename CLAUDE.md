@@ -275,6 +275,10 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   **BApps** (`TournamentCreditService`/Billing, webhook plateforme) ; DartsOpen ne fait que
   consommer/lire les crédits (`lib/api/tournamentCredits.ts`). CGU : textes
   `legal.terms.fees.*` / `legal.terms.payment.*` (`lib/i18n/catalogs.ts`).
+  Pages légales (relecture du 28/10/2026, `tests/legal/legalPages.test.tsx`) : tarifs renvoyés vers
+  bapps-studio.com/tarifs, destinataires Stripe/Brevo/Contabo/Cloudflare, aucun « SterPlatform »
+  visible, liens « formulaire de contact » vers https://bapps-studio.com/contact (DartsOpen n'a pas
+  de page /contact) ; paragraphes corrigés passés au catalogue (`legal.privacy.*`, `legal.notice.*`).
 - **Organisation qui encaisse et porte les droits** (`lib/organizations/billingOrganization.ts`,
   L7) — règle unique pour Stripe Connect, abonnement et crédits tournoi : organisation du tournoi
   (`effectiveOrganizationId`), organisation courante retenue par `resolveTournamentCreationTarget()`

@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { LegalLayout } from "@/components/legal/LegalLayout";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Mentions légales — DartsOpen" };
 
-export default function MentionsLegalesPage() {
+export default async function MentionsLegalesPage() {
+  const { t } = await getI18n();
   return (
-    <LegalLayout title="Mentions légales" updatedAt="10/08/2026">
+    <LegalLayout title="Mentions légales" updatedAt="28/10/2026">
       <h2>Éditeur du site</h2>
       <p>
         DartsOpen est développé et édité par <strong className="text-brand-dark">Alan Yvenou</strong>,
@@ -23,7 +25,7 @@ export default function MentionsLegalesPage() {
         Contact RGPD : <a href="mailto:rgpd@bapps-studio.com">rgpd@bapps-studio.com</a>. Contact
         général : <a href="mailto:contact@bapps-studio.com">contact@bapps-studio.com</a> ou via
         le{" "}
-        <a href="/contact">formulaire de contact</a>.
+        <a href="https://bapps-studio.com/contact">formulaire de contact</a>.
       </p>
 
       <h2>Hébergement</h2>
@@ -41,15 +43,16 @@ export default function MentionsLegalesPage() {
 
       <h2>Prestataires techniques</h2>
       <ul>
-        <li>Paiements en ligne : Stripe (Stripe Payments Europe, Limited), intégré via SterPlatform (BApps Studio)</li>
-        <li>Envoi des emails transactionnels : Brevo</li>
-        <li>Authentification et gestion des comptes organisateurs : SterPlatform (service interne)</li>
+        <li>{t("legal.notice.providers.payment")}</li>
+        <li>{t("legal.notice.providers.email")}</li>
+        <li>{t("legal.notice.providers.auth")}</li>
+        <li>{t("legal.notice.providers.cdn")}</li>
       </ul>
 
       <h2>Médiation et litiges</h2>
       <p>
         En cas de litige, l&apos;utilisateur peut adresser une réclamation via le{" "}
-        <a href="/contact">formulaire de contact</a> avant toute action contentieuse.
+        <a href="https://bapps-studio.com/contact">formulaire de contact</a> avant toute action contentieuse.
       </p>
     </LegalLayout>
   );
