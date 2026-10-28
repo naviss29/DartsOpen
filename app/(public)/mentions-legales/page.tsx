@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalLayout } from "@/components/legal/LegalLayout";
 import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Mentions légales — DartsOpen" };
+export const metadata: Metadata = { title: "Mentions légales" };
 
 export default async function MentionsLegalesPage() {
   const { t } = await getI18n();

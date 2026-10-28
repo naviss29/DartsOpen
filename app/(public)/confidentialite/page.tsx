@@ -3,7 +3,7 @@ import { LegalLayout } from "@/components/legal/LegalLayout";
 import { getI18n } from "@/lib/i18n/server";
 import { withSlots } from "@/lib/i18n/withSlots";
 
-export const metadata: Metadata = { title: "Politique de confidentialité — DartsOpen" };
+export const metadata: Metadata = { title: "Politique de confidentialité" };
 
 export default async function ConfidentialitePage() {
   // Paragraphes corrigés le 28/10/2026 passés au catalogue (le reste de la page reste en baseline i18n).

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalLayout } from "@/components/legal/LegalLayout";
 import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Conditions générales d'utilisation — DartsOpen" };
+export const metadata: Metadata = { title: "Conditions générales d'utilisation" };
 
 export default async function CguPage() {
   // La page n'est pas encore entièrement traduite (écarts historiques dans la baseline i18n) :
