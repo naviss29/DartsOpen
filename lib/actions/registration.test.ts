@@ -231,6 +231,8 @@ describe("createRegistration — capacité atomique (DARTSOPEN-MONETIZATION-002,
     } as never);
     await expect(createRegistration("tournament-1", "Team A", "a@example.com", null, ["Alice", "Bob"])).rejects.toThrow("NEXT_REDIRECT");
     expect(vi.mocked(createPaymentCheckout).mock.calls[0][0].successUrl).toContain("&paiement=en-ligne");
+    // La page de retour relit l'état réel de CETTE inscription (le webhook seul confirme).
+    expect(vi.mocked(createPaymentCheckout).mock.calls[0][0].successUrl).toContain("&inscription=registration-1");
   });
 
   it("paiement en ligne : réserve avec le statut PENDING et une expiration future (audit DO-AUD-009 — place réservée pendant le checkout)", async () => {

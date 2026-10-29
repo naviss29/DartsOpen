@@ -229,7 +229,9 @@ export async function createRegistration(
     amountCents,
     currency: "eur",
     platformFeeCents,
-    successUrl: `${appUrl}/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}&paiement=en-ligne`,
+    // `inscription` permet à la page de retour de relire l'état réel (le webhook seul confirme le
+    // paiement, jamais ce retour navigateur) ; elle n'expose que le statut de cette inscription.
+    successUrl: `${appUrl}/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}&paiement=en-ligne&inscription=${registration.id}`,
     cancelUrl: `${appUrl}/t/${tournamentId}/register?cancelled=1`,
     customerEmail: contactEmail,
     metadata: { registration_id: registration.id, tournament_id: tournamentId },
