@@ -330,6 +330,21 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   (transmise en paramètre `platformFeeCents` à l'appel de checkout, jamais calculée côté
   SterPlatform, qui reste générique entre modules).
 - `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) inchangés en base.
+- **Page de retour de paiement** (`app/(public)/t/[id]/register/success/page.tsx`, 29/10/2026) — le
+  retour navigateur depuis Stripe ne prouve jamais un paiement (règle n° 2 de `bapps-payments`). Le
+  lien de retour porte `&inscription=<id>` ; la page relit l'état réel
+  (`lib/db/registrationPaymentStatus.ts`, filtré sur le tournoi de la page, statut seul, UUID exigé)
+  et le traduit par `onlinePaymentState()` (`lib/registration/successPayment.ts`) : `PAID` →
+  « Inscription confirmée » (seul cas où « encaissé », la phrase joueur/équipe et le conseil du jour J
+  s'affichent) ; `PENDING` non expirée → « Paiement en cours de confirmation » + relecture
+  `router.refresh()` toutes les 2 s, 15 fois au plus
+  (`components/tournament/PaymentConfirmationRefresh.tsx`), puis message « vous recevrez un e-mail » ;
+  `PENDING` expirée ou `CANCELLED` → « Paiement non abouti » + lien « Recommencer l'inscription » ;
+  `REFUND_PENDING`/`REFUNDED` → « Inscription non retenue » ; lien sans identifiant (ancien lien) ou
+  base illisible → neutre, jamais « confirmée ». Gratuit / sur place : inchangé (déjà `PAID` avant la
+  redirection). Tests : `page.test.tsx` (avant/après webhook, échec, remboursement, neutre),
+  `lib/registration/successPayment.test.ts`, `PaymentConfirmationRefresh.test.tsx`,
+  `lib/db/registrationPaymentStatus.db.test.ts` (vrai PostgreSQL : PENDING → webhook → PAID).
 
 - **Tournoi dont la date est passée** (recette pré-lancement, 28/10/2026) : `createRegistration()`
   refuse toute inscription (gratuite ou payante) dès le lendemain de `Tournament.date` à Paris
