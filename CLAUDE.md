@@ -801,6 +801,17 @@ d'applications, le repli du portail et les liens croisés Connect ↔ MarketPlac
 - **Montants et pluriels** : `formatCurrency` / `plural` de `getI18n()` (« 5,00 € », « 1 poule »,
   « 1 pt »), jamais `toFixed(2) + " €"` ni « poules » figé.
 
+## Recette du 29/10/2026
+
+- **Signature** : « DartsOpen · Une application BApps Studio » (clé `brand.signature`, FR/EN/ES) dans la
+  barre latérale et le `siteName` OpenGraph — plus de « by BApps Studio » en anglais (demande d'Alan ;
+  la charte §12.4 dit encore « by BApps Studio », à aligner côté BApps-Studio).
+- **Confirmation d'inscription** (`app/(public)/t/[id]/register/success/page.tsx`) : le message suit le
+  tournoi (`lib/registration/successPayment.ts`) — « L'équipe X est bien inscrite » seulement à partir
+  de 2 joueurs par équipe, sinon « Inscription enregistrée pour X » ; conseil « scannez le QR code »
+  seulement en saisie électronique hors mode rapide, sinon « les résultats sont saisis par
+  l'organisation ». Tournoi illisible → formules neutres, aucun conseil.
+
 ## Garde-fou i18n
 
 `npm run guardrail:i18n` (`scripts/check-i18n-visible-copy.mjs`, inclus dans `verify`) échoue sur tout **nouveau** texte visible codé en dur hors catalogue. La traduction du produit n'est pas terminée : les écarts historiques sont listés dans `scripts/i18n-visible-copy.baseline.json` (jamais à agrandir). Après avoir traduit des écrans, relancer avec `--update-baseline` pour réduire la baseline. Règles i18n : skill `bapps-i18n`.
