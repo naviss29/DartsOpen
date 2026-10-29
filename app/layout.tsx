@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
     openGraph: {
       title,
       description,
-      siteName: "DartsOpen — by BApps Studio",
+      siteName: `DartsOpen — ${t("brand.signature")}`,
       locale: openGraphLocales[locale],
       type: "website",
     },

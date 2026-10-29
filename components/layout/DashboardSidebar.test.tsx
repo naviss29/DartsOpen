@@ -24,10 +24,12 @@ describe("DashboardSidebar", () => {
 
   it("DO-BETA-UX-001 — porte la signature de l'écosystème sous forme de lien cliquable vers BSsite (UX-UI-Standards §3bis)", () => {
     render(<DashboardSidebar />);
-    const link = screen.getByRole("link", { name: /by BApps Studio/i });
+    const link = screen.getByRole("link", { name: /Une application BApps Studio/ });
     expect(link.tagName).toBe("A");
     expect(link).toHaveAttribute("href");
     expect(link).toHaveAttribute("target", "_blank");
+    // Recette du 29/10/2026 : signature en français, plus de « by BApps Studio ».
+    expect(link.textContent).not.toMatch(/by BApps Studio/i);
   });
 
 
@@ -71,7 +73,7 @@ describe("BAPPS-UX-UNIFICATION-006-FIX-002 — sidebar réellement sticky sur la
     expect(aside.className).toMatch(/(^|\s)sticky(\s|$)/);
     expect(aside.className).toMatch(/(^|\s)top-0(\s|$)/);
     expect(aside.className).toMatch(/(^|\s)h-dvh(\s|$)/);
-    const signature = screen.getByRole("link", { name: /by BApps Studio/i }).parentElement as HTMLElement;
+    const signature = screen.getByRole("link", { name: /Une application BApps Studio/ }).parentElement as HTMLElement;
     expect(signature.className).toMatch(/(^|\s)sticky(\s|$)/);
     expect(signature.className).toMatch(/(^|\s)bottom-0(\s|$)/);
   });

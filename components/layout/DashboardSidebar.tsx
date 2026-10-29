@@ -127,7 +127,7 @@ export default function DashboardSidebar() {
           rel="noreferrer"
           className="flex items-center justify-center gap-1.5 text-center text-xs text-white/70 transition-colors hover:text-white"
         >
-          DartsOpen · <span className="font-medium">by BApps Studio</span>
+          DartsOpen · <span className="font-medium">{t("brand.signature")}</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 shrink-0" aria-hidden="true">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
             <path d="M15 3h6v6" />
