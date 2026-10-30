@@ -9,7 +9,7 @@ interface Props {
   searchParams: Promise<{ board?: string }>;
 }
 
-export const metadata: Metadata = { title: "Saisie du score — DartsOpen" };
+export const metadata: Metadata = { title: "Saisie du score" };
 
 type SterMatch = {
   id: string;

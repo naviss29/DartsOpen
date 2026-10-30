@@ -10,8 +10,7 @@ import {
   dbCancelLastThrow,
 } from "@/lib/db/tournament";
 import type { CheckoutDart } from "@/lib/utils/x01";
-import { doAdvanceToNextRound } from "@/lib/actions/bracket";
-import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
+import { doAdvanceToNextRound, doAdvanceQuickTournament } from "@/lib/tournament/advance";
 import { publishMatchUpdate } from "@/lib/mercure";
 import { getUser } from "@/lib/api/auth";
 import { loadMatchSetChain, resolveAuthorizedSide, isValidMatchPlayer } from "@/lib/actions/scoreAuthorization";

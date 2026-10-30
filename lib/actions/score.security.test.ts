@@ -42,8 +42,7 @@ vi.mock("@/lib/db/tournament", () => ({
   dbDisputeResult: vi.fn(),
   dbMarkWinnerDirect: vi.fn(),
 }));
-vi.mock("@/lib/actions/bracket", () => ({ doAdvanceToNextRound: vi.fn() }));
-vi.mock("@/lib/actions/quickTournament", () => ({ doAdvanceQuickTournament: vi.fn() }));
+vi.mock("@/lib/tournament/advance", () => ({ doAdvanceToNextRound: vi.fn(), doAdvanceQuickTournament: vi.fn() }));
 vi.mock("@/lib/mercure", () => ({ publishMatchUpdate: vi.fn() }));
 
 const { proposeWinner, confirmWinner, disputeResult, markWinnerDirect } = await import("./score");
@@ -241,7 +240,7 @@ describe("confirmWinner — SEC-001", () => {
       matchFinished: true,
       match: { id: "match-1", tournamentId: "tournament-1", bracketRound: 1, quickMode: false },
     } as never);
-    const { doAdvanceToNextRound } = await import("@/lib/actions/bracket");
+    const { doAdvanceToNextRound } = await import("@/lib/tournament/advance");
     vi.mocked(doAdvanceToNextRound).mockResolvedValue(undefined as never);
     const { publishMatchUpdate } = await import("@/lib/mercure");
     vi.mocked(publishMatchUpdate).mockResolvedValue(undefined as never);

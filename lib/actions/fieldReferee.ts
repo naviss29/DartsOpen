@@ -5,6 +5,7 @@ import { dbListMatches } from "@/lib/db/tournament";
 import { createRefereeGrant } from "@/lib/actions/fieldAccess";
 import { parseBoardNumber } from "@/lib/utils/fieldBoard";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
+import { requireAppUrl } from "@/lib/appUrl";
 
 /**
  * DO-FIELD-ACCESS-002 — seul point d'entrée qui peut faire naître un accès arbitre : protégé
@@ -39,9 +40,17 @@ export async function generateRefereeAccess(
   const activeMatch = matches.find((m) => m.board_number === boardNumber && m.status === "IN_PROGRESS");
   if (!activeMatch) return { error: "Aucun match en cours sur cette cible." };
 
+  // Avant de délivrer l'accès : jamais un QR arbitre vers localhost si la variable manque.
+  let baseUrl: string;
+  try {
+    baseUrl = requireAppUrl();
+  } catch (err) {
+    console.error("[generateRefereeAccess] Configuration incomplète :", err);
+    return { error: "Accès arbitre indisponible : adresse publique de DartsOpen non configurée." };
+  }
+
   const proof = await createRefereeGrant(tournamentId, activeMatch.id);
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const url = `${baseUrl}/t/${tournamentId}/field/referee?proof=${proof}`;
   const qrDataUrl = await generateQRCodeDataURL(url);
 

@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { RegisterTeamForm } from "@/components/tournament/RegisterTeamForm";
 import { dbGetTournamentPublic, dbCountOccupiedSlots } from "@/lib/db/tournament";
 import type { Metadata } from "next";
+import { getI18n } from "@/lib/i18n/server";
+import { isTournamentDatePast } from "@/lib/tournament/registrationWindow";
 
 interface Props { params: Promise<{ id: string }>; searchParams: Promise<{ cancelled?: string }> }
 
@@ -10,7 +12,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const tournament = await dbGetTournamentPublic(id);
   if (!tournament || tournament.status !== "OPEN") {
-    return { title: "DartsOpen", robots: { index: false, follow: false } };
+    return { title: { absolute: "DartsOpen" }, robots: { index: false, follow: false } };
   }
   return publicMetadata(
     tournament.name,
@@ -42,6 +44,10 @@ export default async function RegisterPage({ params, searchParams }: Props) {
 
   const count = await dbCountOccupiedSlots(id).catch(() => 0);
   const isFull = count * tournament.players_per_team >= tournament.max_players;
+  // Même règle que createRegistration() : après la date, plus de formulaire ni de paiement
+  // (le serveur refuse de toute façon ; la page ne doit pas proposer un bouton voué à l'échec).
+  const isPast = isTournamentDatePast(tournament.date);
+  const { t, formatCurrency } = await getI18n();
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
@@ -68,7 +74,12 @@ export default async function RegisterPage({ params, searchParams }: Props) {
           </div>
         )}
 
-        {tournament.registration_mode === "ONSITE" ? (
+        {isPast ? (
+          <div className="rounded-xl bg-surface border border-border-muted p-8 text-center space-y-2">
+            <p className="font-semibold text-brand-dark">{t("register.closed.title")}</p>
+            <p className="text-brand-text-secondary text-sm">{t("register.closed.body")}</p>
+          </div>
+        ) : tournament.registration_mode === "ONSITE" ? (
           <div className="rounded-xl bg-surface border border-border-muted p-8 text-center space-y-3">
             <p className="text-3xl">📍</p>
             <p className="font-semibold text-brand-dark">Inscriptions sur place uniquement</p>
@@ -93,9 +104,9 @@ export default async function RegisterPage({ params, searchParams }: Props) {
               <h2 className="text-h2 text-brand-dark">Inscription de votre équipe</h2>
               {tournament.entry_fee > 0 && (
                 <p className="text-brand-turquoise font-medium mt-1">
-                  {(tournament.entry_fee / 100).toFixed(2)} € / joueur &nbsp;·&nbsp;{" "}
+                  {t("tournament.feePerPlayer", { amount: formatCurrency(tournament.entry_fee / 100) })}{" · "}
                   <span className="font-bold">
-                    {((tournament.entry_fee * tournament.players_per_team) / 100).toFixed(2)} € / équipe
+                    {t("tournament.feePerTeam", { amount: formatCurrency((tournament.entry_fee * tournament.players_per_team) / 100) })}
                   </span>
                   {tournament.payment_mode !== "ONLINE" && (
                     <span className="block text-sm font-normal text-brand-text-secondary mt-0.5">

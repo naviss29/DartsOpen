@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useRef } from "react";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { ApplicationSwitcher } from "@naviss29/design-system";
 import { bappsAppUrl } from "@/lib/bappsApps";
@@ -23,6 +24,18 @@ export default function DashboardApplicationSwitcher({
   organizations: OrganizationProductsSummary[] | null;
 }) {
   const { t } = useI18n();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const openMenuLabel = t("appSwitcher.openMenu");
+
+  // Sous 640 px, le déclencheur du design-system (0.8.2) n'affiche que l'icône : son libellé
+  // « Applications » est masqué (`hidden sm:inline`), le bouton n'a donc aucun nom accessible
+  // pour un lecteur d'écran. Le composant n'expose pas de prop pour cela : on pose l'aria-label
+  // sur le bouton rendu (même libellé qu'EventManager), en attendant une prop dédiée dans le DS.
+  useEffect(() => {
+    const trigger = wrapperRef.current?.querySelector<HTMLButtonElement>("button[aria-controls]");
+    trigger?.setAttribute("aria-label", openMenuLabel);
+  }, [openMenuLabel]);
+
   const activeProductKeys = new Set(
     (organizations ?? []).flatMap((organization) =>
       organization.activeProducts.map((activation) => activation.product),
@@ -53,13 +66,15 @@ export default function DashboardApplicationSwitcher({
   ];
 
   return (
-    <ApplicationSwitcher
-      applications={applications}
-      label={t("appSwitcher.label")}
-      panelTitle={t("appSwitcher.title")}
-      allApplicationsLabel={t("appSwitcher.all")}
-      allApplicationsHref={`${PORTAL_URL}/dashboard/produits`}
-      className="bapps-application-switcher shrink-0"
-    />
+    <div ref={wrapperRef} className="contents">
+      <ApplicationSwitcher
+        applications={applications}
+        label={t("appSwitcher.label")}
+        panelTitle={t("appSwitcher.title")}
+        allApplicationsLabel={t("appSwitcher.all")}
+        allApplicationsHref={`${PORTAL_URL}/dashboard/produits`}
+        className="bapps-application-switcher shrink-0"
+      />
+    </div>
   );
 }

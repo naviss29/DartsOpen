@@ -10,6 +10,7 @@ import { ReadOnlyNotice } from "@/components/tournament/ReadOnlyNotice";
 import { getOnlinePaymentUiState } from "@/lib/payments/onlinePaymentGuard";
 import { getTournamentSizeUiState } from "@/lib/entitlements/tournamentSizeGuard";
 import { billingSourceForTournament } from "@/lib/organizations/billingOrganization";
+import { getI18n } from "@/lib/i18n/server";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Alert, Card, Pill } from "@naviss29/design-system";
@@ -45,7 +46,7 @@ type Tournament = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const { tournament } = await requireTournamentReader(id);
-  return { title: `${tournament.name} — DartsOpen` };
+  return { title: tournament.name };
 }
 
 export default async function TournamentDetailPage({ params }: Props) {
@@ -59,6 +60,7 @@ export default async function TournamentDetailPage({ params }: Props) {
     organization_slug: string | null;
   };
   const canManage = access.canManage;
+  const { formatCurrency } = await getI18n();
 
   // États paiement/crédits : utiles au seul formulaire d'édition (gestionnaire). Un MEMBER ne
   // déclenche donc aucun appel SterPlatform de facturation qu'il n'a pas le droit de lire.
@@ -152,7 +154,7 @@ export default async function TournamentDetailPage({ params }: Props) {
           { label: "Joueurs / équipe", value: tournament.players_per_team },
           { label: "Poules", value: tournament.nb_pools },
           { label: "Cibles", value: tournament.nb_boards },
-          { label: "Inscription", value: `${(tournament.entry_fee / 100).toFixed(2)} €` },
+          { label: "Inscription", value: formatCurrency(tournament.entry_fee / 100) },
         ].map((item) => (
           <Card key={item.label} className="text-center">
             <p className="text-2xl font-bold text-brand-dark">{item.value}</p>

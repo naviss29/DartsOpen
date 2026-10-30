@@ -67,6 +67,8 @@ function setActiveDevice(jar: Map<string, string>) {
 const createdTournamentIds: string[] = [];
 
 beforeAll(() => {
+  // Lien du QR arbitre construit depuis l'URL publique, obligatoire (lib/appUrl.ts).
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://dartsopen.test");
   asOrganizer();
 });
 

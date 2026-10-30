@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { LegalLayout } from "@/components/legal/LegalLayout";
+import { getI18n } from "@/lib/i18n/server";
+import { withSlots } from "@/lib/i18n/withSlots";
 
-export const metadata: Metadata = { title: "Politique de confidentialité — DartsOpen" };
+export const metadata: Metadata = { title: "Politique de confidentialité" };
 
-export default function ConfidentialitePage() {
+export default async function ConfidentialitePage() {
+  // Paragraphes corrigés le 28/10/2026 passés au catalogue (le reste de la page reste en baseline i18n).
+  const { t } = await getI18n();
   return (
-    <LegalLayout title="Politique de confidentialité" updatedAt="10/08/2026">
+    <LegalLayout title="Politique de confidentialité" updatedAt="28/10/2026">
       <p>
         Cette politique décrit les données personnelles traitées par DartsOpen dans le cadre de
         la gestion de tournois de fléchettes, conformément au Règlement Général sur la
@@ -14,15 +18,16 @@ export default function ConfidentialitePage() {
 
       <h2>Responsable du traitement</h2>
       <p>
-        BApps Studio, éditrice de DartsOpen. Voir les{" "}
-        <a href="/mentions-legales">mentions légales</a> pour les coordonnées complètes.
+        {withSlots(t("legal.privacy.controller"), {
+          link: <a href="/mentions-legales">{t("legal.privacy.legalNoticeLink")}</a>,
+        })}
       </p>
 
       <h2>Données collectées</h2>
       <ul>
         <li>Organisateurs : nom, email, mot de passe (haché), historique des tournois créés</li>
         <li>Joueurs inscrits : pseudo, email, téléphone (selon le tournoi), pseudos des coéquipiers</li>
-        <li>Paiements : traités par Stripe via SterPlatform (BApps Studio) — DartsOpen ne stocke aucune donnée bancaire</li>
+        <li>{t("legal.privacy.payments")}</li>
         <li>Cookies techniques d&apos;authentification (voir ci-dessous)</li>
       </ul>
 
@@ -62,12 +67,7 @@ export default function ConfidentialitePage() {
       </p>
 
       <h2>Destinataires</h2>
-      <p>
-        Les données ne sont transmises qu&apos;aux prestataires techniques nécessaires au
-        fonctionnement du service : SterPlatform (paiements via Stripe Connect, authentification),
-        Brevo (emails transactionnels). Aucune
-        donnée n&apos;est vendue ni cédée à des tiers à des fins commerciales.
-      </p>
+      <p>{t("legal.privacy.recipients")}</p>
 
       <h2>Cookies</h2>
       <p>
@@ -84,13 +84,13 @@ export default function ConfidentialitePage() {
         d&apos;opposition — y compris pour vos données rendues publiques (pseudo, résultats).
         Ces droits sont exercés par l&apos;organisateur du tournoi concerné, ou par BApps Studio
         si l&apos;organisateur n&apos;est plus joignable. Pour les exercer, utilisez le{" "}
-        <a href="/contact">formulaire de contact</a> ou écrivez à{" "}
+        <a href="https://bapps-studio.com/contact">formulaire de contact</a> ou écrivez à{" "}
         <a href="mailto:rgpd@bapps-studio.com">rgpd@bapps-studio.com</a>. Un effacement demandé
         après le début d&apos;un tournoi conserve vos résultats sous un identifiant anonyme,
         pour ne jamais corrompre le classement des autres participants.
       </p>
 
-      <h2>Délégué à la protection des données</h2>
+      <h2>{t("legal.privacy.dataContact.title")}</h2>
       <p>Contact RGPD : <a href="mailto:rgpd@bapps-studio.com">rgpd@bapps-studio.com</a>.</p>
     </LegalLayout>
   );

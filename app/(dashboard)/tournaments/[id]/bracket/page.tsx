@@ -1,3 +1,4 @@
+import { getI18n } from "@/lib/i18n/server";
 import { redirect } from "next/navigation";
 import { generateBracket, advanceToNextRound } from "@/lib/actions/bracket";
 import { generateQuickBracket } from "@/lib/actions/quickTournament";
@@ -15,7 +16,7 @@ import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }> }
 
-export const metadata: Metadata = { title: "Phases finales — DartsOpen" };
+export const metadata: Metadata = { title: "Phases finales" };
 
 type Tournament = {
   id: string;
@@ -43,6 +44,7 @@ type BracketMatch = {
 
 export default async function BracketPage({ params }: Props) {
   const { id } = await params;
+  const { t: translate, plural } = await getI18n();
 
   const access = await requireTournamentReader(id);
   const tournament = access.tournament as Tournament;
@@ -154,7 +156,7 @@ export default async function BracketPage({ params }: Props) {
             <>
               <h1 className="text-2xl font-bold text-brand-dark">Phases finales</h1>
               <p className="text-sm text-brand-text-secondary mt-1">
-                {tournament.nb_pools} poules · {tournament.advancement_per_pool} qualifié(s)/poule
+                {plural(tournament.nb_pools, { one: translate("tournament.pools.one"), other: translate("tournament.pools.other") })} · {tournament.advancement_per_pool} qualifié(s)/poule
                 · {tournament.nb_pools * tournament.advancement_per_pool} participants
               </p>
             </>

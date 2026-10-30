@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }> }
 
-export const metadata: Metadata = { title: "Vue Live — DartsOpen" };
+export const metadata: Metadata = { title: "Vue Live" };
 
 type SterMatch = {
   id: string;

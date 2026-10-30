@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { dbCreateFieldIncident, dbResolveOtherIncident } from "@/lib/db/fieldIncident";
 import { dbDeclareForfeit } from "@/lib/db/tournament";
 import { authorizeScoring, type ScoringAuthorization } from "@/lib/actions/fieldAccess";
-import { doAdvanceToNextRound } from "@/lib/actions/bracket";
-import { doAdvanceQuickTournament } from "@/lib/actions/quickTournament";
+import { doAdvanceToNextRound, doAdvanceQuickTournament } from "@/lib/tournament/advance";
 import { publishMatchUpdate } from "@/lib/mercure";
 import type { FieldIncidentType, FieldIncidentReporterRole } from "@/lib/generated/prisma/client";
 

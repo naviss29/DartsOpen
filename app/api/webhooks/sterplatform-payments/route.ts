@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/api/sterplatform";
 import { refundPayment } from "@/lib/api/sterplatformInternal";
 import { syncRegistrationRefund, type RefundSyncResult } from "@/lib/payments/refundSync";
 import { NextResponse } from "next/server";
+import { maskEmail } from "@/lib/logging/maskEmail";
 
 const SECRET = process.env.STER_PAYMENTS_CALLBACK_SECRET ?? "";
 // Fenêtre de tolérance identique à la pratique Stripe elle-même (que ce mécanisme imite,
@@ -192,7 +193,7 @@ export async function POST(req: Request) {
         date: reg.tournament_date,
         lieu: reg.tournament_location,
         joueurs: reg.player_names.join(', '),
-      }).catch((err) => console.error('[webhook] Erreur envoi email confirmation:', reg.player_email, err));
+      }).catch((err) => console.error('[webhook] Erreur envoi email confirmation:', maskEmail(reg.player_email), err));
     }
   }
 

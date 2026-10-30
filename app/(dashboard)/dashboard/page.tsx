@@ -9,7 +9,7 @@ import { Alert, Card, EmptyState, PageHeader, Pill } from "@naviss29/design-syst
 import Button from "@/components/ui/Button";
 import StatusBadge from "@/components/ui/StatusBadge";
 
-export const metadata: Metadata = { title: "Tableau de bord — DartsOpen" };
+export const metadata: Metadata = { title: "Tableau de bord" };
 
 type Tournament = {
   id: string;
@@ -34,8 +34,13 @@ export default async function DashboardPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
-  const { t: translate } = await getI18n();
+  const { t: translate, plural, formatCurrency } = await getI18n();
   const readOnlyLabel = translate("orgAccess.readOnly");
+  // Format français des montants (« 5,00 € ») et pluriel correct (« 1 poule ») — recette pré-lancement.
+  const labels: RowLabels = {
+    pools: (count) => plural(count, { one: translate("tournament.pools.one"), other: translate("tournament.pools.other") }),
+    feePerPlayer: (cents) => translate("tournament.feePerPlayer", { amount: formatCurrency(cents / 100) }),
+  };
 
   // ADR-0021 / L6 — périmètre = organisation courante (tout rôle) + tournois hérités créés.
   const current = await getCurrentOrganization();
@@ -59,10 +64,10 @@ export default async function DashboardPage() {
   // visuel de statut (UX-UI-Standards.md §3 "Badges/Status"), jamais une teinte inventée par
   // écran (ancien "emerald-100"/"slate-50" propres à cette page).
   const stats = [
-    { label: "Total", value: myTournaments.length, color: "bg-surface-secondary text-text-strong" },
-    { label: "Ouvertes", value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-accent/10 text-accent" },
-    { label: "En cours", value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-success-subtle-strong text-success" },
-    { label: "Terminés", value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-surface-secondary text-text-strong" },
+    { label: translate("dashboard.stats.total"), value: myTournaments.length, color: "bg-surface-secondary text-text-strong" },
+    { label: translate("dashboard.stats.open"), value: myTournaments.filter(t => t.status === "OPEN").length, color: "bg-accent/10 text-accent" },
+    { label: translate("dashboard.stats.inProgress"), value: myTournaments.filter(t => t.status === "IN_PROGRESS").length, color: "bg-success-subtle-strong text-success" },
+    { label: translate("dashboard.stats.finished"), value: myTournaments.filter(t => t.status === "FINISHED").length, color: "bg-surface-secondary text-text-strong" },
   ];
 
   // Trier : OPEN en premier, puis IN_PROGRESS, puis FINISHED, puis DRAFT (les miens)
@@ -110,12 +115,12 @@ export default async function DashboardPage() {
               return isClickable ? (
                 <Link key={t.id} href={href} className="block">
                   <Card className="min-w-0 overflow-hidden transition-all hover:border-brand-turquoise/40 hover:shadow-sm">
-                    <TournamentRow t={t} readOnlyLabel={readOnlyLabel} />
+                    <TournamentRow t={t} readOnlyLabel={readOnlyLabel} labels={labels} />
                   </Card>
                 </Link>
               ) : (
                 <Card key={t.id} className="opacity-60">
-                  <TournamentRow t={t} readOnlyLabel={readOnlyLabel} />
+                  <TournamentRow t={t} readOnlyLabel={readOnlyLabel} labels={labels} />
                 </Card>
               );
             })}
@@ -126,7 +131,9 @@ export default async function DashboardPage() {
   );
 }
 
-function TournamentRow({ t, readOnlyLabel }: { t: Tournament; readOnlyLabel: string }) {
+type RowLabels = { pools: (count: number) => string; feePerPlayer: (cents: number) => string };
+
+function TournamentRow({ t, readOnlyLabel, labels }: { t: Tournament; readOnlyLabel: string; labels: RowLabels }) {
   return (
     <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0">
@@ -144,9 +151,9 @@ function TournamentRow({ t, readOnlyLabel }: { t: Tournament; readOnlyLabel: str
         </p>
         <div className="mt-2 flex flex-wrap gap-3 text-xs text-brand-text-secondary">
           <span>👤 {t.players_paid * t.players_per_team}/{t.max_players} joueurs</span>
-          <span>🔵 {t.nb_pools} poules</span>
+          <span>🔵 {labels.pools(t.nb_pools)}</span>
           <span>🎯 {t.nb_boards} cibles</span>
-          <span>💶 {(t.entry_fee / 100).toFixed(2)} €/j</span>
+          <span>💶 {labels.feePerPlayer(t.entry_fee)}</span>
           <span>{t.registration_mode === "ONLINE" ? "🌐 En ligne" : "🏠 Sur place"}</span>
         </div>
       </div>

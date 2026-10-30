@@ -56,6 +56,7 @@ const ORGANIZER_ID = "user-field-referee";
 const ORGANIZER = { id: ORGANIZER_ID, email: "organisateur@example.com", roles: [], isVerified: true };
 
 beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://dartsopen.test");
   cookieJar.clear();
   vi.mocked(getUser).mockReset().mockResolvedValue(ORGANIZER as never);
 });

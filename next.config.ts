@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Audit sécurité P2 : ne pas annoncer « X-Powered-By: Next.js » (empreinte de la pile
+  // offerte gratuitement à un attaquant qui cherche une version vulnérable).
+  poweredByHeader: false,
 
   // Turbopack est le bundler par défaut en Next.js 16 — on déclare la config vide
   // pour signaler que c'est intentionnel (évite l'erreur de build).

@@ -12,10 +12,12 @@ import { billingSourceForTournament, resolveBillingOrganizationSlug } from "@/li
 import { sendEmail } from "@/lib/api/sterplatform";
 import { createPaymentCheckout, getStripeConnectStatus } from "@/lib/api/sterplatformInternal";
 import { redirect } from "next/navigation";
+import { requireAppUrl } from "@/lib/appUrl";
 import { headers } from "next/headers";
 import { immediatePaymentKind } from "@/lib/registration/successPayment";
 import { checkRateLimit, clientIp } from "@/lib/rateLimit";
 import { getI18n } from "@/lib/i18n/server";
+import { isTournamentDatePast } from "@/lib/tournament/registrationWindow";
 
 /**
  * DARTSOPEN-MONETIZATION-002 (audit DO-AUD-009) — how long a PENDING online-payment reservation
@@ -92,6 +94,13 @@ export async function createRegistration(
   const tournament = await dbGetTournament(tournamentId);
   if (!tournament || tournament.status !== "OPEN") {
     return { error: "Ce tournoi n'accepte plus les inscriptions." };
+  }
+  // Recette pré-lancement : un tournoi resté OPEN après sa date acceptait encore inscriptions et
+  // paiements. Refus côté serveur dès le lendemain de la date (statut et données inchangés),
+  // avant toute réservation de place et tout appel de paiement.
+  if (isTournamentDatePast(tournament.date)) {
+    const { t } = await getI18n();
+    return { error: t("registration.closedPast") };
   }
   // F17 — filtre rapide (message clair sans réserver) ; la décision finale est prise sous le
   // verrou du tournoi dans dbReserveRegistrationSlot (publicRegistration).
@@ -180,6 +189,16 @@ export async function createRegistration(
     return { error: "Les paiements en ligne ne sont pas disponibles pour ce tournoi actuellement. Contactez l'organisateur." };
   }
 
+  // URL de retour du paiement résolue AVANT de réserver une place : une configuration
+  // incomplète échoue tout de suite, sans retour Stripe vers localhost ni place bloquée.
+  let appUrl: string;
+  try {
+    appUrl = requireAppUrl();
+  } catch (err) {
+    console.error("[registration] Configuration incomplète :", err);
+    return { error: "Le paiement en ligne est momentanément indisponible. Contactez l'organisateur." };
+  }
+
   // 2. Capacité/réservation — atomique, avec expiration (DO-AUD-009) : si le checkout Stripe
   // n'est jamais créé ou jamais complété (échec, abandon), cette réservation PENDING cesse
   // d'occuper sa place dès l'expiration, sans nécessiter de nettoyage explicite ni laisser une
@@ -202,7 +221,6 @@ export async function createRegistration(
   if (result.outcome !== "RESERVED") return { error: await reservationRefusal(result) };
   const registration = result.registration;
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const amountCents = tournament.entry_fee * tournament.players_per_team;
 
   const { checkout, error } = await createPaymentCheckout({
@@ -211,7 +229,9 @@ export async function createRegistration(
     amountCents,
     currency: "eur",
     platformFeeCents,
-    successUrl: `${appUrl}/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}&paiement=en-ligne`,
+    // `inscription` permet à la page de retour de relire l'état réel (le webhook seul confirme le
+    // paiement, jamais ce retour navigateur) ; elle n'expose que le statut de cette inscription.
+    successUrl: `${appUrl}/t/${tournamentId}/register/success?name=${encodeURIComponent(teamName)}&paiement=en-ligne&inscription=${registration.id}`,
     cancelUrl: `${appUrl}/t/${tournamentId}/register?cancelled=1`,
     customerEmail: contactEmail,
     metadata: { registration_id: registration.id, tournament_id: tournamentId },

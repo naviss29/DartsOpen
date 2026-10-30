@@ -118,3 +118,29 @@ describe("proxy — rafraîchissement silencieux de session (audit pré-recette 
     expect(overriddenCookieHeader).toContain("ster_token=new-access");
   });
 });
+
+describe("proxy — racine « / » (recette pré-lancement)", () => {
+  it("visiteur sans session : redirection 307 vers la page produit de la vitrine", async () => {
+    const response = await proxy(request("/"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://bapps-studio.com/produits/dartsopen");
+    // Les en-têtes de sécurité restent posés sur cette redirection.
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  it("utilisateur avec session : redirection vers son tableau de bord", async () => {
+    const req = request("/");
+    req.cookies.set("ster_refresh_token", "refresh");
+
+    const response = await proxy(req);
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://dartsopen.bapps-studio.com/dashboard");
+  });
+
+  it("ne touche pas aux liens profonds publics", async () => {
+    const response = await proxy(request("/classement"));
+    expect(response.headers.get("location")).toBeNull();
+  });
+});

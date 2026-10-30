@@ -67,7 +67,10 @@ respectifs pour le détail du protocole côté SterPlatform.
   unique, 10 min — voir `lib/sso/transaction.ts`), puis redirige vers SterPlatform
   `GET /api/auth/sso/authorize`. Le paramètre `?next=` (chemin relatif exact demandé, validé
   contre l'open redirect — `lib/sso/redirect.ts`) est conservé dans cette même transaction
-  pour revenir sur la page d'origine après connexion.
+  pour revenir sur la page d'origine après connexion. Depuis le 28/10/2026 (logique
+  MarketPlace) : antislash, caractères de contrôle et espaces en bordure refusés, sur la valeur
+  brute et décodée (`/\evil.com` était résolu en `https://evil.com`), et le callback re-filtre
+  `tx.next` avant de rediriger.
 - **`app/api/auth/sso/callback/route.ts`** — reçoit `?code=&state=` de SterPlatform, vérifie
   le `state` local, échange le code contre une session via `POST /api/auth/sso/exchange`
   (secret client serveur `STER_SSO_CLIENT_SECRET`, jamais `NEXT_PUBLIC_`), pose les cookies de
@@ -140,7 +143,10 @@ enregistré (idempotence, emails, purge) mais ne donne plus de droits, sauf repl
   `tournamentOps.ts`, `fieldReferee.ts` (**accès arbitre : OWNER/ADMIN, D7**), voie organisateur du
   score. Inchangés : saisie de score publique (`proposeWinner`/`confirmWinner`/`disputeResult`),
   sessions terrain joueur/arbitre, inscription publique (`createRegistration`). Helpers internes
-  `doAdvanceToNextRound`/`doAdvanceQuickTournament` toujours protégés par leurs appelants.
+  `doAdvanceToNextRound`/`doAdvanceQuickTournament` toujours protégés par leurs appelants — et
+  hébergés dans `lib/tournament/advance.ts`, **jamais** dans un fichier `"use server"` (tout export
+  d'un tel fichier est une Server Action appelable depuis le navigateur ; audit P2 du 28/10/2026,
+  garde-fou `lib/tournament/advance.guardrail.test.ts`).
 - **Pages** `(dashboard)/tournaments/[id]/**` : lecture pour tout rôle ; `canManage` masque les
   boutons de gestion (statut, édition, manches, joueurs, poules, bracket — y compris la génération
   automatique à l'affichage —, arbitrage, accès arbitre, scoring, incidents) et affiche
@@ -246,7 +252,7 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
 
 ## Garde-fous contre les états cassés et les pertes de données
 
-- **Clôture automatique** : en mode standard, `doAdvanceToNextRound` (`lib/actions/bracket.ts`) passe le tournoi en `FINISHED` dès que le dernier match du bracket est joué (`bracketMatches.length === 1`), sans action manuelle de l'organisateur — miroir exact du comportement déjà en place en mode rapide (`doAdvanceQuickTournament`). Le classement (`lib/db/ranking.ts`, filtré sur `status: "FINISHED"`) est donc alimenté automatiquement. La transition manuelle *"Clôturer le tournoi"* (`TournamentStatusButton`) reste disponible en secours et exige désormais une confirmation explicite (case à cocher) car elle coupe immédiatement la saisie des scores en cours.
+- **Clôture automatique** : en mode standard, `doAdvanceToNextRound` (`lib/tournament/advance.ts`) passe le tournoi en `FINISHED` dès que le dernier match du bracket est joué (`bracketMatches.length === 1`), sans action manuelle de l'organisateur — miroir exact du comportement déjà en place en mode rapide (`doAdvanceQuickTournament`). Le classement (`lib/db/ranking.ts`, filtré sur `status: "FINISHED"`) est donc alimenté automatiquement. La transition manuelle *"Clôturer le tournoi"* (`TournamentStatusButton`) reste disponible en secours et exige désormais une confirmation explicite (case à cocher) car elle coupe immédiatement la saisie des scores en cours.
 
 - **Manche obligatoire avant ouverture** : `dbUpdateTournamentStatus` refuse la transition vers `OPEN` si le tournoi n'est pas en mode rapide et n'a aucune manche (`rounds.length === 0`) — sans manche, aucun `MatchSet` n'est créé et un match ne peut jamais passer en `FINISHED`. Le mode rapide est exempté : ses manches (501/Cricket/701) sont générées automatiquement par `generateQuickBracket`. En complément, `deleteRound` refuse toute suppression de manche hors statut `DRAFT`, pour garantir qu'un tournoi qui a passé la porte `OPEN` ne peut plus revenir à 0 manche.
 - **Arbitrage destructeur** : en mode standard, corriger un match de bracket dont le vainqueur change supprime les matchs des tours suivants déjà générés (`dbArbitrateMatch`). `ArbitrateMatchModal` calcule ce risque côté client (`laterMatchesCount`, transmis par `BracketView`) et bloque le bouton de validation tant qu'une case à cocher explicite n'a pas été confirmée. Les matchs de poule (`bracket_round` null) et le mode rapide (jamais destructeur) ne sont pas concernés.
@@ -272,6 +278,10 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   **BApps** (`TournamentCreditService`/Billing, webhook plateforme) ; DartsOpen ne fait que
   consommer/lire les crédits (`lib/api/tournamentCredits.ts`). CGU : textes
   `legal.terms.fees.*` / `legal.terms.payment.*` (`lib/i18n/catalogs.ts`).
+  Pages légales (relecture du 28/10/2026, `tests/legal/legalPages.test.tsx`) : tarifs renvoyés vers
+  bapps-studio.com/tarifs, destinataires Stripe/Brevo/Contabo/Cloudflare, aucun « SterPlatform »
+  visible, liens « formulaire de contact » vers https://bapps-studio.com/contact (DartsOpen n'a pas
+  de page /contact) ; paragraphes corrigés passés au catalogue (`legal.privacy.*`, `legal.notice.*`).
 - **Organisation qui encaisse et porte les droits** (`lib/organizations/billingOrganization.ts`,
   L7) — règle unique pour Stripe Connect, abonnement et crédits tournoi : organisation du tournoi
   (`effectiveOrganizationId`), organisation courante retenue par `resolveTournamentCreationTarget()`
@@ -303,6 +313,13 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   quand Stripe n'est pas opérationnel). Ne s'applique qu'à `registration_mode = ONLINE` avec
   `entry_fee > 0` — un tournoi ONLINE gratuit ou un tournoi ONSITE (quel que soit son
   `entry_fee`, jamais transmis à Stripe) ne nécessite aucun Stripe.
+- **Espace personnel** (décision d'Alan du 30/10/2026) : un particulier peut utiliser DartsOpen
+  depuis son espace personnel, une Organization `PERSONAL` de SterPlatform (sans SIREN, il en est
+  OWNER). Rien de spécifique ici : l'espace est une organisation comme une autre pour la création
+  de tournoi et les droits ; SterPlatform renvoie toujours `NO_ACCOUNT` / `canReceivePayments =
+  false` pour un espace personnel (Stripe Connect y est refusé), donc ce garde-fou bloque le
+  paiement en ligne sans code supplémentaire — tests « espace personnel » de
+  `lib/payments/onlinePaymentGuard.test.ts`. Ne jamais ajouter de contournement local.
 - **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) : reçoit les notifications de paiement signées par SterPlatform
   (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`). Sur
   `payment.succeeded`, appelle `dbConfirmPendingPayment()` (jamais un `UPDATE` aveugle — voir
@@ -320,6 +337,28 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   (transmise en paramètre `platformFeeCents` à l'appel de checkout, jamais calculée côté
   SterPlatform, qui reste générique entre modules).
 - `Tournament.entryFee` et `registration_mode` (ONLINE/ONSITE) inchangés en base.
+- **Page de retour de paiement** (`app/(public)/t/[id]/register/success/page.tsx`, 29/10/2026) — le
+  retour navigateur depuis Stripe ne prouve jamais un paiement (règle n° 2 de `bapps-payments`). Le
+  lien de retour porte `&inscription=<id>` ; la page relit l'état réel
+  (`lib/db/registrationPaymentStatus.ts`, filtré sur le tournoi de la page, statut seul, UUID exigé)
+  et le traduit par `onlinePaymentState()` (`lib/registration/successPayment.ts`) : `PAID` →
+  « Inscription confirmée » (seul cas où « encaissé », la phrase joueur/équipe et le conseil du jour J
+  s'affichent) ; `PENDING` non expirée → « Paiement en cours de confirmation » + relecture
+  `router.refresh()` toutes les 2 s, 15 fois au plus
+  (`components/tournament/PaymentConfirmationRefresh.tsx`), puis message « vous recevrez un e-mail » ;
+  `PENDING` expirée ou `CANCELLED` → « Paiement non abouti » + lien « Recommencer l'inscription » ;
+  `REFUND_PENDING`/`REFUNDED` → « Inscription non retenue » ; lien sans identifiant (ancien lien) ou
+  base illisible → neutre, jamais « confirmée ». Gratuit / sur place : inchangé (déjà `PAID` avant la
+  redirection). Tests : `page.test.tsx` (avant/après webhook, échec, remboursement, neutre),
+  `lib/registration/successPayment.test.ts`, `PaymentConfirmationRefresh.test.tsx`,
+  `lib/db/registrationPaymentStatus.db.test.ts` (vrai PostgreSQL : PENDING → webhook → PAID).
+
+- **Tournoi dont la date est passée** (recette pré-lancement, 28/10/2026) : `createRegistration()`
+  refuse toute inscription (gratuite ou payante) dès le lendemain de `Tournament.date` à Paris
+  (`lib/tournament/registrationWindow.ts::isTournamentDatePast`, jour J encore ouvert), avant toute
+  réservation de place ou session de paiement — message `registration.closedPast`. La page publique
+  `/t/{id}/register` affiche alors « Inscriptions terminées » sans formulaire. Statut et données
+  du tournoi inchangés (un tournoi oublié en OPEN reste OPEN).
 
 ### Capacité, paiement tardif et remboursement (DARTSOPEN-MONETIZATION-003/004, contre-audit P1/P3/P4)
 
@@ -637,7 +676,10 @@ mélange) reste à faire si une logique financière venait un jour à dépendre 
 - `DATABASE_URL` — PostgreSQL
 - `NEXT_PUBLIC_API_URL` — URL SterPlatform
 - `NEXT_PUBLIC_APP_URL` — URL publique de DartsOpen (utilisée pour construire `redirect_uri`
-  côté SSO, jamais `request.url` — voir "Authentification (SSO central)")
+  côté SSO, jamais `request.url` — voir "Authentification (SSO central)"). **Aucun repli
+  localhost** pour un lien remis à quelqu'un (QR de cible, QR arbitre, retours de paiement) :
+  `requireAppUrl()` (`lib/appUrl.ts`) échoue clairement si elle manque (inscription en ligne
+  refusée avant toute réservation, accès arbitre refusé, page Poules en erreur) — audit P2.
 - `STER_ORG_SLUG` / `NEXT_PUBLIC_STER_ORG_SLUG` — slug org dans SterPlatform (`dartsopen`)
 - `STER_SSO_CLIENT_SECRET` — secret client SSO, voir "Authentification (SSO central)"
 - `STER_API_TOKEN` — jeton serveur-à-serveur (`X-App-Token`) partagé avec SterPlatform :
@@ -684,6 +726,8 @@ MERCURE_JWT_SECRET=dartsopen-mercure-dev-secret
 - `console.error` pour les erreurs inattendues (DB)
 - `console.warn` pour les best-effort (email, opérations non-bloquantes)
 - Toujours passer l'objet `err` en dernier argument pour avoir la stack trace
+- Jamais d'adresse e-mail en clair dans un log : `maskEmail()` (`lib/logging/maskEmail.ts`,
+  `a***@domaine`)
 
 ## Mode tournoi rapide
 
@@ -723,7 +767,7 @@ réécrits) — `resolveChampions` (`lib/db/ranking.ts`) sait encore lire les de
 
 ### Fichiers clés
 - `lib/utils/doubleElimination.ts` — fonctions pures (format, pairing, shuffle)
-- `lib/actions/quickTournament.ts` — `generateQuickBracket` + `doAdvanceQuickTournament`
+- `lib/actions/quickTournament.ts` — `generateQuickBracket` ; `doAdvanceQuickTournament` est dans `lib/tournament/advance.ts` (hors Server Actions)
 - `lib/actions/admin.ts` — `arbitrateMatch` : seul point d'entrée pour désigner un vainqueur en mode rapide (la page de saisie de score publique est désactivée dans ce mode)
 - `lib/actions/player.ts` — `addPlayer` : email optionnel (vide `""` si absent), email de confirmation sauté si pas d'email
 - `lib/db/tournament.ts` — `dbDecrementLives`, `dbGetQuickTournamentState`, `dbGetActiveQuickBracketMatches`, `dbPromoteUnassignedMatches`, `dbCreateQuickTournamentRounds`, `doAdvanceQuickTournamentTx` (le bassin unique)
@@ -753,12 +797,42 @@ Décision d'Alan : tant que EN/ES ne sont pas finalisés, `LANGUAGE_CHOICE_ENABL
 explicitement à `getI18n(locale)` reste servie. Réactiver = passer à `true`. Les tests du mécanisme
 multilingue réactivent le réglage par `vi.mock` ; `lib/i18n/languageChoice.test.ts` garde le blocage.
 
+Vocabulaire : le jargon des joueurs est conservé en français (« bracket », « Vue Live »), décision
+d'Alan du 28/10/2026 — ne pas le « franciser » lors d'une relecture.
+
 ## Liens vers les autres applications BApps (03/10/2026)
 
 Jamais d'adresse de production en dur : `bappsAppUrl("https://x.bapps-studio.com")`
 (`lib/bappsApps.ts`) renvoie `https://x.dev.bapps-studio.com` quand `NEXT_PUBLIC_APP_URL` est une
 adresse de test (même règle que BSsite `lib/catalog/products.ts`). Utilisé par le sélecteur
 d'applications, le repli du portail et les liens croisés Connect ↔ MarketPlace.
+
+## Racine, page introuvable et titres d'onglet (recette pré-lancement, 28/10/2026)
+
+- **Racine `/`** : redirigée par `proxy.ts` (307). Cookie de session (`ster_token` ou
+  `ster_refresh_token`) → `/dashboard` ; sans session → page produit de la vitrine
+  `${NEXT_PUBLIC_BSSITE_URL}/produits/dartsopen` (repli `bappsAppUrl("https://bapps-studio.com")`,
+  donc `dev.bapps-studio.com` en staging). Règle unique : `lib/rootRedirect.ts` ; `app/page.tsx`
+  n'est qu'un filet de sécurité. Les liens profonds (`/dashboard`, `/t/...`) ne changent pas.
+- **Page introuvable** : `app/not-found.tsx` (404 réel, en-tête logo, bouton « Retour à
+  l'accueil » vers `/`, pied de page `components/layout/PublicFooter.tsx` partagé avec
+  `app/(public)/layout.tsx`), textes `notFound.*`.
+- **Titres d'onglet** : le layout racine ajoute déjà « — DartsOpen » (`template`) ; une page ne
+  doit jamais le répéter dans son `title` (sinon « — DartsOpen — DartsOpen »). Titre sans suffixe
+  voulu : `{ absolute: "..." }`.
+- **Montants et pluriels** : `formatCurrency` / `plural` de `getI18n()` (« 5,00 € », « 1 poule »,
+  « 1 pt »), jamais `toFixed(2) + " €"` ni « poules » figé.
+
+## Recette du 29/10/2026
+
+- **Signature** : « DartsOpen · Une application BApps Studio » (clé `brand.signature`, FR/EN/ES) dans la
+  barre latérale et le `siteName` OpenGraph — plus de « by BApps Studio » en anglais (demande d'Alan ;
+  la charte §12.4 dit encore « by BApps Studio », à aligner côté BApps-Studio).
+- **Confirmation d'inscription** (`app/(public)/t/[id]/register/success/page.tsx`) : le message suit le
+  tournoi (`lib/registration/successPayment.ts`) — « L'équipe X est bien inscrite » seulement à partir
+  de 2 joueurs par équipe, sinon « Inscription enregistrée pour X » ; conseil « scannez le QR code »
+  seulement en saisie électronique hors mode rapide, sinon « les résultats sont saisis par
+  l'organisation ». Tournoi illisible → formules neutres, aucun conseil.
 
 ## Garde-fou i18n
 

@@ -1,5 +1,7 @@
+import { getI18n } from "@/lib/i18n/server";
 import { GeneratePoolsButton } from "@/components/tournament/GeneratePoolsButton";
 import { generateQRCodeDataURL } from "@/lib/utils/qrcode";
+import { requireAppUrl } from "@/lib/appUrl";
 import { PrintButton } from "@/components/tournament/PrintButton";
 import { ArbitrateMatchButton } from "@/components/tournament/ArbitrateMatchModal";
 import { RefereeAccessButton } from "@/components/tournament/RefereeAccessButton";
@@ -14,7 +16,7 @@ import type { Metadata } from "next";
 
 interface Props { params: Promise<{ id: string }> }
 
-export const metadata: Metadata = { title: "Poules — DartsOpen" };
+export const metadata: Metadata = { title: "Poules" };
 
 type Tournament = {
   id: string;
@@ -43,6 +45,7 @@ type Pool = {
 
 export default async function PoolsPage({ params }: Props) {
   const { id } = await params;
+  const { t: translate, plural } = await getI18n();
 
   const access = await requireTournamentReader(id);
   const tournament = access.tournament as Tournament;
@@ -60,8 +63,10 @@ export default async function PoolsPage({ params }: Props) {
   const effectivePools = Math.min(tournament.nb_pools, Math.floor(registrationCount / 2));
   const canGenerate = canManage && ["OPEN", "IN_PROGRESS"].includes(tournament.status) && registrationCount >= 2 && tournament.nb_pools > 1;
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const showQRCodes = ["OPEN", "IN_PROGRESS", "FINISHED"].includes(tournament.status);
+  // Ces QR codes sont imprimés et collés sur les cibles : sans URL publique configurée, la page
+  // échoue (erreur explicite dans les journaux) plutôt que d'imprimer des liens vers localhost.
+  const baseUrl = showQRCodes ? requireAppUrl() : "";
   const boardQRCodes = showQRCodes
     ? await Promise.all(
         Array.from({ length: tournament.nb_boards }, (_, i) => i + 1).map(async (board) => ({
@@ -110,7 +115,7 @@ export default async function PoolsPage({ params }: Props) {
         <div>
           <h1 className="text-2xl font-bold text-brand-dark">Poules & Matchs</h1>
           <p className="text-sm text-brand-text-secondary mt-1">
-            {tournament.nb_pools} poules · {tournament.nb_boards} cibles · {totalPlayers} joueurs
+            {plural(tournament.nb_pools, { one: translate("tournament.pools.one"), other: translate("tournament.pools.other") })} · {tournament.nb_boards} cibles · {totalPlayers} joueurs
           </p>
         </div>
 

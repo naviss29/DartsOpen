@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalLayout } from "@/components/legal/LegalLayout";
 import { getI18n } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Conditions générales d'utilisation — DartsOpen" };
+export const metadata: Metadata = { title: "Conditions générales d'utilisation" };
 
 export default async function CguPage() {
   // La page n'est pas encore entièrement traduite (écarts historiques dans la baseline i18n) :
@@ -10,7 +10,7 @@ export default async function CguPage() {
   // remboursement » est traduite en entier pour ne pas mêler deux langues dans un même paragraphe.
   const { t } = await getI18n();
   return (
-    <LegalLayout title="Conditions générales d'utilisation" updatedAt="01/10/2026">
+    <LegalLayout title="Conditions générales d'utilisation" updatedAt="28/10/2026">
       <h2>Objet</h2>
       <p>
         Les présentes conditions régissent l&apos;utilisation de DartsOpen, plateforme de
@@ -64,12 +64,7 @@ export default async function CguPage() {
       </p>
 
       <h2>Responsabilités</h2>
-      <p>
-        DartsOpen met à disposition un outil technique de gestion de tournois. L&apos;
-        organisation effective de l&apos;événement (respect des règles sportives, sécurité sur
-        site, litiges entre joueurs) relève de la seule responsabilité de l&apos;association
-        organisatrice.
-      </p>
+      <p>{t("legal.terms.liability.organizer")}</p>
       <p>
         DartsOpen s&apos;efforce d&apos;assurer la disponibilité du service mais ne garantit pas
         une disponibilité continue et ne saurait être tenu responsable des interruptions liées
@@ -93,7 +88,7 @@ export default async function CguPage() {
       <p>
         Les présentes conditions sont soumises au droit français. Tout litige relève des
         juridictions compétentes, à défaut de résolution amiable via le{" "}
-        <a href="/contact">formulaire de contact</a>.
+        <a href="https://bapps-studio.com/contact">formulaire de contact</a>.
       </p>
     </LegalLayout>
   );

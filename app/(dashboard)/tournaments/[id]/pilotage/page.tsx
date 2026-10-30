@@ -43,7 +43,7 @@ type Tournament = {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const { tournament } = await requireTournamentReader(id);
-  return { title: `Pilotage — ${tournament.name} — DartsOpen` };
+  return { title: `Pilotage — ${tournament.name}` };
 }
 
 const NEXT_STATUS: Record<string, string> = { DRAFT: "OPEN", OPEN: "IN_PROGRESS", IN_PROGRESS: "FINISHED" };
