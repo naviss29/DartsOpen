@@ -313,6 +313,13 @@ lequel sa session a été émise — jamais sur un autre match, jamais un droit 
   quand Stripe n'est pas opérationnel). Ne s'applique qu'à `registration_mode = ONLINE` avec
   `entry_fee > 0` — un tournoi ONLINE gratuit ou un tournoi ONSITE (quel que soit son
   `entry_fee`, jamais transmis à Stripe) ne nécessite aucun Stripe.
+- **Espace personnel** (décision d'Alan du 30/10/2026) : un particulier peut utiliser DartsOpen
+  depuis son espace personnel, une Organization `PERSONAL` de SterPlatform (sans SIREN, il en est
+  OWNER). Rien de spécifique ici : l'espace est une organisation comme une autre pour la création
+  de tournoi et les droits ; SterPlatform renvoie toujours `NO_ACCOUNT` / `canReceivePayments =
+  false` pour un espace personnel (Stripe Connect y est refusé), donc ce garde-fou bloque le
+  paiement en ligne sans code supplémentaire — tests « espace personnel » de
+  `lib/payments/onlinePaymentGuard.test.ts`. Ne jamais ajouter de contournement local.
 - **Webhook entrant** (`app/api/webhooks/sterplatform-payments/route.ts`) : reçoit les notifications de paiement signées par SterPlatform
   (`X-SterPlatform-Signature`, HMAC-SHA256 avec `STER_PAYMENTS_CALLBACK_SECRET`). Sur
   `payment.succeeded`, appelle `dbConfirmPendingPayment()` (jamais un `UPDATE` aveugle — voir

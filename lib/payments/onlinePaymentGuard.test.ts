@@ -219,3 +219,34 @@ describe("ADR-0021 / L7 — organisation du tournoi, plus la liaison locale du c
     error.mockRestore();
   });
 });
+
+// Espace personnel (décision d'Alan du 30/10/2026) : une Organization de type PERSONAL côté
+// SterPlatform, qui ne peut jamais encaisser. DartsOpen n'a rien à savoir de ce type : SterPlatform
+// renvoie toujours NO_ACCOUNT / canReceivePayments=false pour un espace personnel, et ce seul
+// signal suffit à refuser le paiement en ligne — le tournoi lui-même reste possible.
+describe("espace personnel (Organization PERSONAL de SterPlatform)", () => {
+  const PERSONAL_SPACE = { kind: "ORGANIZATION", organizationId: "perso-uuid-1", organizationSlug: "espace-perso-0a1b2c3d" } as const;
+  const personalSpaceAuthorization = paymentAuthorization({ status: "NO_ACCOUNT", canReceivePayments: false });
+
+  beforeEach(() => {
+    vi.mocked(getMyMemberships).mockResolvedValue({
+      status: "OK",
+      stale: false,
+      memberships: [{ id: "perso-uuid-1", slug: "espace-perso-0a1b2c3d", name: "marie@example.com", role: "OWNER" }],
+    });
+    vi.mocked(getPaymentAuthorization).mockResolvedValue(personalSpaceAuthorization as never);
+  });
+
+  it("refuse le paiement en ligne d'un tournoi d'espace personnel", async () => {
+    const result = await isOnlinePaymentAllowed(PERSONAL_SPACE);
+
+    expect(result).toEqual({ allowed: false, reason: "STRIPE_NOT_OPERATIONAL" });
+    expect(getPaymentAuthorization).toHaveBeenCalledWith("espace-perso-0a1b2c3d");
+  });
+
+  it("affiche l'état « non opérationnel » (déterminé), jamais indéterminé", async () => {
+    const result = await getOnlinePaymentUiState(PERSONAL_SPACE);
+
+    expect(result).toEqual({ status: "NOT_OPERATIONAL", canReceivePayments: false, organizationSlug: "espace-perso-0a1b2c3d" });
+  });
+});
